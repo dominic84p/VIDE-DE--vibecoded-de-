@@ -20,6 +20,66 @@ pub enum Entry {
     /// "= 42": Enter copies the answer.
     Calc(String),
     Power(PowerAction),
+    /// "Search the web" for the query.
+    Web(String),
+}
+
+/// The search pane's tabs, as in Windows 10.
+pub const FILTERS: [&str; 5] = ["All", "Apps", "Documents", "Settings", "Web"];
+
+/// Windows' search layout: the top hit under "Best match", then the rest by kind,
+/// limited to one kind when a tab other than All is picked.
+pub fn arrange(entries: Vec<Entry>, filter: usize) -> Vec<Entry> {
+    let keep = |e: &Entry| match filter {
+        1 => matches!(e, Entry::App(_)),
+        2 => matches!(e, Entry::File(p) if !p.is_dir()),
+        3 => matches!(e, Entry::Setting(..)),
+        4 => matches!(e, Entry::Web(_)),
+        _ => true,
+    };
+    let mut groups: Vec<(String, Vec<Entry>)> = Vec::new();
+    for e in entries {
+        match e {
+            Entry::Header(h) => groups.push((h, Vec::new())),
+            e if keep(&e) => match groups.last_mut() {
+                Some(g) => g.1.push(e),
+                None => groups.push((String::new(), vec![e])),
+            },
+            _ => {}
+        }
+    }
+    let mut out = Vec::new();
+    // Web results are the best match only when nothing else matched.
+    let best = groups.iter().position(|g| !g.1.is_empty() && g.0 != "Search the web").or_else(|| groups.iter().position(|g| !g.1.is_empty()));
+    if let Some(g) = best {
+        out.push(Entry::Header("Best match".into()));
+        out.push(groups[g].1.remove(0));
+    }
+    for (h, items) in groups {
+        if items.is_empty() {
+            continue;
+        }
+        let h = if h == "Files and folders" && filter == 2 { "Documents".into() } else { h };
+        out.push(Entry::Header(h));
+        out.extend(items);
+    }
+    out
+}
+
+/// "Top apps" when the search pane opens empty: the most launched, else pinned.
+pub fn top_apps(apps: &[App], pins: &Pins) -> Vec<Entry> {
+    let mut used: Vec<(usize, u32)> = pins.launches.iter().filter_map(|(id, &n)| apps.iter().position(|a| a.id == *id).map(|i| (i, n))).collect();
+    used.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+    let mut out: Vec<usize> = used.into_iter().map(|(i, _)| i).collect();
+    for id in &pins.start {
+        if let Some(i) = apps.iter().position(|a| a.id == *id)
+            && !out.contains(&i)
+        {
+            out.push(i);
+        }
+    }
+    out.truncate(8);
+    out.into_iter().map(Entry::App).collect()
 }
 
 impl Entry {
@@ -170,6 +230,8 @@ pub fn results(query: &str, apps: &[App], hide_kde: bool, pins: &Pins, files: &F
         out.push(Entry::Header("Files and folders".into()));
         out.extend(files.into_iter().map(Entry::File));
     }
+    out.push(Entry::Header("Search the web".into()));
+    out.push(Entry::Web(q.to_string()));
     out
 }
 

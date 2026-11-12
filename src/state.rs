@@ -107,6 +107,17 @@ pub struct Start {
     pub menu: Option<StartMenu>,
     /// What the list shows for `query` (see search.rs).
     pub results: Vec<crate::search::Entry>,
+    /// Opened from the taskbar search box: the search pane even before typing.
+    pub search_mode: bool,
+    /// The search pane's tab (index into search::FILTERS).
+    pub filter: usize,
+}
+
+impl Start {
+    /// Typing in Start, or opening search, turns it into Windows' search pane.
+    pub fn searching(&self) -> bool {
+        self.search_mode || !self.query.is_empty()
+    }
 }
 
 pub struct State {
@@ -524,8 +535,12 @@ impl State {
     /// Recompute the start menu's list. Hidden KDE apps are only left out here; they
     /// still launch from anywhere else (Mod+Enter, taskbar, menus).
     pub fn refresh_start(&mut self) {
-        self.start.results =
-            crate::search::results(&self.start.query, &self.apps, self.config.hide_kde_apps, &self.pins, &self.file_index);
+        self.start.results = if self.start.query.trim().is_empty() && self.start.search_mode {
+            crate::search::top_apps(&self.apps, &self.pins)
+        } else {
+            let r = crate::search::results(&self.start.query, &self.apps, self.config.hide_kde_apps, &self.pins, &self.file_index);
+            if self.start.searching() { crate::search::arrange(r, self.start.filter) } else { r }
+        };
         self.start.selected = self.start.results.iter().position(|e| e.selectable()).unwrap_or(0);
         self.start.scroll = 0;
     }
@@ -556,6 +571,8 @@ impl State {
         }
         self.start.query.clear();
         self.start.power_open = false;
+        self.start.search_mode = false;
+        self.start.filter = 0;
         self.refresh_start();
         self.needs_redraw = true;
     }

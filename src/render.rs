@@ -182,6 +182,10 @@ pub fn elements_with(renderer: &mut GlesRenderer, state: &mut State, cursor: boo
             scroll: state.start.scroll,
             hover,
             power_open: state.start.power_open,
+            searching: state.start.searching(),
+            filter: state.start.filter,
+            kinds: state.start.results.iter().map(|e| state.result_kind(e)).collect(),
+            preview: if state.start.searching() && !state.start.query.trim().is_empty() { state.start_preview() } else { None },
         };
         if state.start.menu.as_ref().is_none_or(|m| m.key != key) {
             state.start.menu = Some(ui::draw_start_menu(state.font.as_ref(), &mut state.icons, key));
@@ -211,6 +215,7 @@ pub fn elements_with(renderer: &mut GlesRenderer, state: &mut State, cursor: boo
             current_workspace: state.wm.current_workspace,
             taskview_open: state.desktops.open,
             tray_apps: state.sni_items.iter().map(|i| (i.id.clone(), tray_fingerprint(i))).collect(),
+            search_text: (state.start.open && state.start.searching()).then(|| state.start.query.clone()),
         };
         if state.taskbar.as_ref().is_none_or(|t| t.key != key) {
             let tray_icons = tray_icons(state);

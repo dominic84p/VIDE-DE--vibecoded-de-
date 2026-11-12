@@ -124,8 +124,61 @@ impl State {
                     };
                     StartRow::Item(label.into(), icon.into(), "Command".into())
                 }
+                Entry::Web(q) => StartRow::Item(format!("{q} - See web results"), "internet-web-browser".into(), String::new()),
             })
             .collect()
+    }
+
+    /// What kind of thing a result is, for the search pane ("App", "File folder"...).
+    pub fn result_kind(&self, e: &Entry) -> String {
+        match e {
+            Entry::Header(_) => String::new(),
+            Entry::App(_) => "App".into(),
+            Entry::Setting(..) => "System settings".into(),
+            Entry::File(p) if p.is_dir() => "File folder".into(),
+            Entry::File(p) => match p.extension().map(|x| x.to_string_lossy().to_lowercase()) {
+                Some(x) if x == "txt" => "Text Document".into(),
+                Some(x) => format!("{} File", x.to_uppercase()),
+                None => "File".into(),
+            },
+            Entry::Calc(_) => "Calculator".into(),
+            Entry::Power(_) => "Command".into(),
+            Entry::Web(_) => "See web results".into(),
+        }
+    }
+
+    /// The search pane's right side for the highlighted result: what it is and
+    /// what you can do with it.
+    pub fn start_preview(&self) -> Option<crate::ui::Preview> {
+        let e = self.start.results.get(self.start.selected)?;
+        let rows = self.start_rows();
+        let crate::ui::StartRow::Item(name, icon, detail) = rows.get(self.start.selected)?.clone() else { return None };
+        let a = |id: u8, label: &str, icon: &str| (id, label.to_string(), icon.to_string());
+        let open = a(0, "Open", "document-open");
+        let actions = match e {
+            Entry::Header(_) => return None,
+            Entry::App(i) => {
+                let id = &self.apps[*i].id;
+                vec![
+                    open,
+                    a(2, if self.pins.start.contains(id) { "Unpin from Start" } else { "Pin to Start" }, "window-pin"),
+                    a(3, if self.pins.taskbar.contains(id) { "Unpin from taskbar" } else { "Pin to taskbar" }, "window-pin"),
+                ]
+            }
+            Entry::File(_) => vec![open, a(1, "Open file location", "folder-open"), a(4, "Copy full path", "edit-copy")],
+            Entry::Calc(_) => vec![a(0, "Copy", "edit-copy")],
+            Entry::Web(_) => vec![a(0, "Open results in browser", "internet-web-browser")],
+            Entry::Setting(..) | Entry::Power(_) => vec![open],
+        };
+        let location = match e {
+            Entry::File(_) => format!("Location: {detail}"),
+            _ => String::new(),
+        };
+        let name = match e {
+            Entry::Web(q) => q.clone(),
+            _ => name,
+        };
+        Some(crate::ui::Preview { name, icon, kind: self.result_kind(e), location, actions })
     }
 
     /// Taskbar buttons: pinned apps first (with their windows grouped under them),

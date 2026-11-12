@@ -569,6 +569,10 @@ impl State {
                 );
             }
             Entry::Power(a) => return self.power(a),
+            Entry::Web(q) => {
+                let q: String = q.chars().map(|c| if c.is_ascii_alphanumeric() { c.to_string() } else if c == ' ' { "+".into() } else { format!("%{:02X}", c as u32 & 0xff) }).collect();
+                self.spawn(&format!("xdg-open 'https://www.bing.com/search?q={q}'"));
+            }
         }
         self.toggle_start();
     }
@@ -611,7 +615,40 @@ impl State {
 
     pub fn start_menu_rect(&self) -> Rectangle<i32, Logical> {
         let h = (self.output_size.h - TASKBAR_H).min(620);
-        Rectangle::new((0, self.output_size.h - TASKBAR_H - h).into(), (MENU_W, h).into())
+        let w = if self.start.searching() { ui::SEARCH_PANEL_W.min(self.output_size.w) } else { MENU_W };
+        Rectangle::new((0, self.output_size.h - TASKBAR_H - h).into(), (w, h).into())
+    }
+
+    /// A click on an action in the search pane's preview.
+    fn start_action(&mut self, id: u8) {
+        use crate::search::Entry;
+        let i = self.start.selected;
+        let Some(entry) = self.start.results.get(i).cloned() else { return };
+        match (id, entry) {
+            (0, _) => self.activate_start_entry(i),
+            (1, Entry::File(p)) => {
+                let dir = p.parent().unwrap_or(std::path::Path::new("/")).to_string_lossy().replace('\'', "'\\''");
+                let fe = own_app("file-exploder").unwrap_or_else(|| "xdg-open".into());
+                self.spawn(&format!("{fe} '{dir}'"));
+                self.toggle_start();
+            }
+            (2, Entry::App(a)) => {
+                let id = self.apps[a].id.clone();
+                self.pins.toggle_start(&id);
+            }
+            (3, Entry::App(a)) => {
+                let id = self.apps[a].id.clone();
+                self.pins.toggle_taskbar(&id);
+                self.taskbar = None;
+            }
+            (4, Entry::File(p)) => {
+                let mimes = ["text/plain;charset=utf-8", "text/plain", "UTF8_STRING"].map(String::from).to_vec();
+                let bytes = p.to_string_lossy().into_owned().into_bytes();
+                smithay::wayland::selection::data_device::set_data_device_selection(&self.dh, &self.seat, mimes, std::sync::Arc::new(bytes));
+            }
+            _ => {}
+        }
+        self.needs_redraw = true;
     }
 
     fn taskbar_visible(&self) -> bool {
@@ -910,6 +947,11 @@ impl State {
                 } else if left {
                     match hit {
                         StartHit::Item(i) => self.activate_start_entry(i),
+                        StartHit::Filter(f) => {
+                            self.start.filter = f;
+                            self.refresh_start();
+                        }
+                        StartHit::Action(a) => self.start_action(a),
                         StartHit::Power => self.start.power_open = !self.start.power_open,
                         StartHit::PowerAction(a) => self.power(a),
                         StartHit::Nothing => self.start.power_open = false,
@@ -923,6 +965,8 @@ impl State {
                         TaskbarHit::Search => {
                             if !self.start.open {
                                 self.toggle_start();
+                                self.start.search_mode = true;
+                                self.refresh_start();
                             }
                         }
                         TaskbarHit::Button(i) => self.press_task_button(i, pos.x),

@@ -140,7 +140,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if std::env::var_os("VIBE_DEBUG_DESKTOPS").is_some() {
         state.toggle_desktops();
     }
-    // "network", "network-key" or "action-center": open that panel a moment in, once the radios are read.
+    // "network", "network-key", "search" or "action-center": open that panel a moment in, once the radios are read.
     if let Ok(which) = std::env::var("VIBE_DEBUG_OPEN") {
         event_loop.handle().insert_source(Timer::from_duration(Duration::from_secs(3)), move |_, _, state| {
             match which.as_str() {
@@ -151,6 +151,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     state.tray.expanded = state.tray.net.networks.get(1).map(|n| n.ssid.clone());
                     state.tray.password = Some("hunter2".into());
                     state.tray.password_error = true;
+                }
+                "search" => {
+                    state.toggle_start();
+                    state.start.search_mode = true;
+                    state.refresh_start();
                 }
                 _ => state.toggle_action_center(),
             }

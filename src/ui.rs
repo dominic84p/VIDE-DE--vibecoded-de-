@@ -104,6 +104,8 @@ pub struct TaskbarKey {
     pub taskview_open: bool,
     /// App tray icons: (tray id, something that changes when the icon does).
     pub tray_apps: Vec<(String, String)>,
+    /// The query while the search pane is open.
+    pub search_text: Option<String>,
 }
 
 pub struct Taskbar {
@@ -139,12 +141,28 @@ pub fn draw_taskbar(
     }
     hits.push((rect(0, 0, START_W, TASKBAR_H), TaskbarHit::Start));
 
-    // Search box (opens the start menu, which has the real search).
+    // Search box. While the search pane is open it turns white and shows the query.
     let sx = START_W;
-    c.rect(sx, 0, SEARCH_W, TASKBAR_H, if hovered(&TaskbarHit::Search) { hex(0x474747) } else { SEARCH_BG });
-    magnifier(&mut c, sx as f32 + 22.0, TASKBAR_H as f32 / 2.0, WHITE, SEARCH_BG);
-    if let Some(f) = font {
-        c.text(f, 13.0, sx + 42, 0, TASKBAR_H, TEXT_DIM, "Type here to search");
+    match &key.search_text {
+        Some(q) => {
+            c.rect(sx, 0, SEARCH_W, TASKBAR_H, WHITE);
+            magnifier(&mut c, sx as f32 + 22.0, TASKBAR_H as f32 / 2.0, hex(0x000000), WHITE);
+            if let Some(f) = font {
+                let t = if q.is_empty() { String::new() } else { ellipsize(f, 13.0, q, SEARCH_W - 60) };
+                let tw = if t.is_empty() { 0 } else { c.text(f, 13.0, sx + 42, 0, TASKBAR_H, hex(0x000000), &t) };
+                c.rect(sx + 43 + tw, 11, 1, TASKBAR_H - 22, hex(0x000000));
+                if q.is_empty() {
+                    c.text(f, 13.0, sx + 48, 0, TASKBAR_H, hex(0x767676), "Type here to search");
+                }
+            }
+        }
+        None => {
+            c.rect(sx, 0, SEARCH_W, TASKBAR_H, if hovered(&TaskbarHit::Search) { hex(0x474747) } else { SEARCH_BG });
+            magnifier(&mut c, sx as f32 + 22.0, TASKBAR_H as f32 / 2.0, WHITE, SEARCH_BG);
+            if let Some(f) = font {
+                c.text(f, 13.0, sx + 42, 0, TASKBAR_H, TEXT_DIM, "Type here to search");
+            }
+        }
     }
     hits.push((rect(sx, 0, SEARCH_W, TASKBAR_H), TaskbarHit::Search));
 
@@ -372,6 +390,10 @@ pub fn draw_titlebar(font: Option<&Font>, icons: &mut Icons, key: &TitleKey) -> 
 pub enum StartHit {
     /// Index into the filtered list.
     Item(usize),
+    /// A search pane tab (index into search::FILTERS).
+    Filter(usize),
+    /// An action in the search pane's preview, by id (see State::start_preview).
+    Action(u8),
     Power,
     PowerAction(PowerAction),
     Nothing,
@@ -413,7 +435,28 @@ pub struct StartKey {
     pub hover: Option<StartHit>,
     /// The power button's Sign out / Restart / Shut down list is showing.
     pub power_open: bool,
+    /// Windows' search pane instead of the app list.
+    pub searching: bool,
+    pub filter: usize,
+    /// Per item, what kind of thing it is ("App"...), for the search pane.
+    pub kinds: Vec<String>,
+    pub preview: Option<Preview>,
 }
+
+/// The search pane's right side: the highlighted result, big, and its actions.
+#[derive(Clone, PartialEq, Debug)]
+pub struct Preview {
+    pub name: String,
+    pub icon: String,
+    pub kind: String,
+    pub location: String,
+    /// (action id, label, icon name)
+    pub actions: Vec<(u8, String, String)>,
+}
+
+/// The search pane, wider than Start since it has a preview column.
+pub const SEARCH_PANEL_W: i32 = 760;
+const RESULTS_W: i32 = 360;
 
 pub struct StartMenu {
     pub key: StartKey,
@@ -426,6 +469,9 @@ pub fn start_menu_rows(height: i32) -> usize {
 }
 
 pub fn draw_start_menu(font: Option<&Font>, icons: &mut Icons, key: StartKey) -> StartMenu {
+    if key.searching {
+        return draw_search(font, icons, key);
+    }
     let h = key.height;
     let mut c = Canvas::new(MENU_W, h);
     let mut hits = vec![(rect(0, 0, MENU_W, h), StartHit::Nothing)];
@@ -515,6 +561,159 @@ pub fn draw_start_menu(font: Option<&Font>, icons: &mut Icons, key: StartKey) ->
     // Later entries win in hit tests, so reverse: specific rects before the background.
     hits.reverse();
     StartMenu { key, buffer: c.into_buffer(), hits }
+}
+
+// ---------------------------------------------------------------- search pane
+
+/// Windows 10's search pane: tabs across the top, results on the left with the top
+/// one under "Best match", and the highlighted result previewed on the right.
+fn draw_search(font: Option<&Font>, icons: &mut Icons, key: StartKey) -> StartMenu {
+    let (w, h) = (SEARCH_PANEL_W, key.height);
+    let mut c = Canvas::new(w, h);
+    let mut hits = vec![(rect(0, 0, w, h), StartHit::Nothing)];
+    c.rect(0, 0, w, h, MENU_RAIL);
+    let Some(f) = font else { return StartMenu { key, buffer: c.into_buffer(), hits } };
+
+    // Tabs.
+    let mut x = 20;
+    for (i, label) in crate::search::FILTERS.iter().enumerate() {
+        let tw = measure(f, 13.0, label);
+        let hit = StartHit::Filter(i);
+        let active = key.filter == i;
+        let col = if active || key.hover.as_ref() == Some(&hit) { WHITE } else { TEXT_DIM };
+        c.text(f, 13.0, x, 8, 34, col, label);
+        if active {
+            c.rect(x, 42, tw, 3, ACCENT);
+        }
+        hits.push((rect(x - 8, 4, tw + 16, 42), hit));
+        x += tw + 28;
+    }
+    c.rect(0, 47, w, 1, hex(0x3a3a3a));
+
+    // Empty query: "Top apps", as tiles.
+    if key.query.trim().is_empty() {
+        c.text(f, 15.0, 24, 64, 26, WHITE, "Top apps");
+        let (tw, th) = (166, 104);
+        for (i, item) in key.items.iter().enumerate() {
+            let StartRow::Item(name, icon, _) = item else { continue };
+            let (tx, ty) = (24 + (i as i32 % 4) * (tw + 8), 100 + (i as i32 / 4) * (th + 8));
+            if ty + th > h {
+                break;
+            }
+            let hit = StartHit::Item(i);
+            c.rect(tx, ty, tw, th, if key.hover.as_ref() == Some(&hit) { hex(0x3d3d3d) } else { hex(0x2b2b2b) });
+            match icons.get(icon, 32).or_else(|| app_icon(icons, icon, 32)) {
+                Some(ic) => c.icon(&ic, tx + (tw - 32) / 2, ty + 20),
+                None => c.round_rect(tx + (tw - 32) / 2, ty + 20, 32, 32, 4, ACCENT),
+            }
+            let n = ellipsize(f, 12.0, name, tw - 16);
+            c.text(f, 12.0, tx + (tw - measure(f, 12.0, &n)) / 2, ty + 64, 24, WHITE, &n);
+            hits.push((rect(tx, ty, tw, th), hit));
+        }
+        if key.items.is_empty() {
+            c.text(f, 13.0, 24, 100, 24, TEXT_DIM, "Apps you open will show up here.");
+        }
+        hits.reverse();
+        return StartMenu { key, buffer: c.into_buffer(), hits };
+    }
+
+    // Results.
+    c.rect(0, 48, RESULTS_W, h - 48, MENU_BG);
+    let mut y = 56;
+    let mut best = false;
+    for (i, item) in key.items.iter().enumerate().skip(key.scroll) {
+        if y >= h {
+            break;
+        }
+        match item {
+            StartRow::Header(t) => {
+                best = t == "Best match";
+                c.text(f, 14.0, 20, y + 4, 26, WHITE, t);
+                y += 32;
+            }
+            StartRow::Item(name, icon, detail) => {
+                let rh = if best { 72 } else { 40 };
+                let hit = StartHit::Item(i);
+                if i == key.selected {
+                    c.rect(0, y, RESULTS_W, rh, TASK_ACTIVE);
+                } else if key.hover.as_ref() == Some(&hit) {
+                    c.rect(0, y, RESULTS_W, rh, TASK_HOVER);
+                }
+                let size = if best { 40 } else { 24 };
+                let ix = 20;
+                match icons.get(icon, size as u32).or_else(|| app_icon(icons, icon, size as u32)) {
+                    Some(ic) => c.icon(&ic, ix, y + (rh - size) / 2),
+                    None => c.round_rect(ix, y + (rh - size) / 2, size, size, 4, ACCENT),
+                }
+                let tx = ix + size + 14;
+                let tw = RESULTS_W - tx - 12;
+                let sub = if best { key.kinds.get(i).cloned().unwrap_or_default() } else { detail.clone() };
+                if sub.is_empty() {
+                    c.text(f, if best { 15.0 } else { 13.0 }, tx, y, rh, WHITE, &ellipsize(f, 13.0, name, tw));
+                } else {
+                    let top = if best { y + 14 } else { y + 2 };
+                    c.text(f, if best { 15.0 } else { 13.0 }, tx, top, 20, WHITE, &ellipsize(f, 14.0, name, tw));
+                    c.text(f, 12.0, tx, top + 20, 18, TEXT_DIM, &ellipsize(f, 12.0, &sub, tw));
+                }
+                hits.push((rect(0, y, RESULTS_W, rh), hit));
+                best = false;
+                y += rh;
+            }
+        }
+    }
+    if key.items.is_empty() {
+        c.text(f, 13.0, 20, 60, 24, TEXT_DIM, "No results found");
+    }
+
+    // Preview.
+    let px = RESULTS_W;
+    let pw = w - px;
+    c.rect(px, 48, pw, h - 48, MENU_BG);
+    c.rect(px, 48, 1, h - 48, hex(0x3a3a3a));
+    if let Some(p) = &key.preview {
+        let cx = px + pw / 2;
+        match icons.get(&p.icon, 64).or_else(|| app_icon(icons, &p.icon, 64)) {
+            Some(ic) => c.icon(&ic, cx - 32, 76),
+            None => c.round_rect(cx - 32, 76, 64, 64, 8, ACCENT),
+        }
+        let name = ellipsize(f, 20.0, &p.name, pw - 48);
+        c.text(f, 20.0, cx - measure(f, 20.0, &name) / 2, 152, 30, WHITE, &name);
+        c.text(f, 13.0, cx - measure(f, 13.0, &p.kind) / 2, 184, 22, TEXT_DIM, &p.kind);
+        let mut ay = 214;
+        if !p.location.is_empty() {
+            let l = ellipsize(f, 12.0, &p.location, pw - 48);
+            c.text(f, 12.0, cx - measure(f, 12.0, &l) / 2, 206, 20, TEXT_DIM, &l);
+            ay += 18;
+        }
+        c.rect(px + 24, ay, pw - 48, 1, hex(0x3a3a3a));
+        ay += 10;
+        for (id, label, icon) in &p.actions {
+            let hit = StartHit::Action(*id);
+            if key.hover.as_ref() == Some(&hit) {
+                c.rect(px + 16, ay, pw - 32, 36, TASK_HOVER);
+            }
+            action_glyph(&mut c, icon, (px + 40) as f32, (ay + 18) as f32);
+            c.text(f, 13.0, px + 60, ay, 36, WHITE, label);
+            hits.push((rect(px + 16, ay, pw - 32, 36), hit));
+            ay += 36;
+        }
+    }
+
+    hits.reverse();
+    StartMenu { key, buffer: c.into_buffer(), hits }
+}
+
+/// White line icons for the preview's actions, like Windows' MDL2 glyphs.
+fn action_glyph(c: &mut Canvas, icon: &str, x: f32, y: f32) {
+    const S: &str = r##"fill="none" stroke="#fff" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round""##;
+    let body = match icon {
+        "document-open" => format!(r##"<path d="M8 4H3.5v12.5H16V12M11 3.5h5.5V9M16.5 3.5L9 11" {S}/>"##),
+        "folder-open" => format!(r##"<path d="M2.5 5.5h5l1.5 1.5h8.5v9h-15z" {S}/>"##),
+        "window-pin" => format!(r##"<path d="M12 2.5l5.5 5.5-2.5 1-3 3 .5 3.5-2 1-7.5-7.5 1-2 3.5.5 3-3zM7 13l-4.5 4.5" {S}/>"##),
+        "edit-copy" => format!(r##"<path d="M6.5 6.5h10v10h-10zM3.5 13.5v-10h10" {S}/>"##),
+        _ => format!(r##"<circle cx="10" cy="10" r="7" {S}/><path d="M3 10h14M10 3c2.5 2 2.5 12 0 14M10 3c-2.5 2-2.5 12 0 14" {S}/>"##),
+    };
+    crate::tray::glyph(c, body, x, y, 16);
 }
 
 // ---------------------------------------------------------------- wallpaper

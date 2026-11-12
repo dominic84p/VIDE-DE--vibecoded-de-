@@ -634,6 +634,27 @@ impl State {
         self.open_menu(at, items);
     }
 
+    fn window_for_tray(&self, id: &str) -> Option<smithay::reexports::wayland_server::protocol::wl_surface::WlSurface> {
+        let norm = |s: &str| s.chars().filter(|c| c.is_alphanumeric()).flat_map(char::to_lowercase).collect::<String>();
+        let item = self.sni_items.iter().find(|i| i.id == id)?;
+        let needles: Vec<String> = [item.title.as_str(), item.icon_name.as_str(), id.split('/').next().unwrap_or(id)]
+            .into_iter()
+            .filter(|s| !s.is_empty() && !s.starts_with(':'))
+            .map(norm)
+            .filter(|s| s.len() >= 3)
+            .collect();
+        self.wm
+            .windows
+            .iter()
+            .rev()
+            .find(|w| {
+                let app = norm(&w.app_id());
+                let title = norm(&w.title());
+                needles.iter().any(|n| app == *n || title == *n || (!app.is_empty() && (app.contains(n) || n.contains(&app))))
+            })
+            .map(|w| w.surface().clone())
+    }
+
     fn rail_click(&mut self, r: ui::RailItem, at: Point<i32, Logical>) {
         use ui::RailItem;
         let home = std::env::var("HOME").unwrap_or_default();
@@ -1033,6 +1054,9 @@ impl State {
                         TaskbarHit::Clock => self.toggle_action_center(),
                         TaskbarHit::TrayApp(id) => {
                             self.tray_menu_x = pos.x as i32;
+                            if let Some(surface) = self.window_for_tray(&id) {
+                                self.focus(Some(surface), SERIAL_COUNTER.next_serial());
+                            }
                             if let Some(tx) = &self.sni_tx {
                                 let _ = tx.send(crate::sni::Cmd::Activate { id, x: pos.x as i32, y: pos.y as i32 });
                             }

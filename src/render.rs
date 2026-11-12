@@ -312,22 +312,39 @@ fn tray_icons(state: &mut State) -> Vec<Option<std::rc::Rc<crate::icons::Icon>>>
     for item in &state.sni_items {
         let fp = tray_fingerprint(item);
         if !state.tray_icon_cache.contains_key(&fp) {
-            let icon = match &item.pixmap {
-                Some((w, h, px)) => Some(std::rc::Rc::new(crate::icons::from_rgba(*w, *h, px.clone(), TRAY_ICON))),
+            let raw_icon = match &item.pixmap {
+                Some((w, h, px)) => Some(crate::icons::from_rgba(*w, *h, px.clone(), 48)),
                 None => {
                     let in_app_dir = (!item.theme_path.is_empty())
                         .then(|| {
                             ["png", "svg"].iter().find_map(|ext| {
-                                state.tray_theme.get(&format!("{}/{}.{ext}", item.theme_path, item.icon_name), TRAY_ICON)
+                                state.tray_theme.get(&format!("{}/{}.{ext}", item.theme_path, item.icon_name), 48)
                             })
                         })
                         .flatten();
-                    in_app_dir.or_else(|| state.tray_theme.get(&item.icon_name, TRAY_ICON))
+                    in_app_dir
+                        .or_else(|| state.tray_theme.get(&item.icon_name, 48))
+                        .map(|rc| crate::icons::from_rgba(rc.w, rc.h, rc.rgba.clone(), 48))
                 }
             };
-            let icon = icon.map(|i| match lighten_dark_glyph(&i) {
-                Some(light) => std::rc::Rc::new(light),
-                None => i,
+            // Share the tray icon with the window/taskbar icon cache as a custom fallback,
+            // so apps launched from a terminal without a .desktop file still show an icon.
+            if let Some(ref ic) = raw_icon {
+                let copy = |i: &crate::icons::Icon| crate::icons::Icon { w: i.w, h: i.h, rgba: i.rgba.clone() };
+                let sni_id = item.id.split('/').next().unwrap_or(&item.id);
+                if !sni_id.is_empty() && !sni_id.starts_with(':') {
+                    state.icons.set_custom(sni_id, copy(ic));
+                }
+                if !item.title.is_empty() {
+                    state.icons.set_custom(&item.title, copy(ic));
+                }
+                if !item.icon_name.is_empty() {
+                    state.icons.set_custom(&item.icon_name, copy(ic));
+                }
+            }
+            let icon = raw_icon.map(|ic| {
+                let scaled = crate::icons::from_rgba(ic.w, ic.h, ic.rgba, TRAY_ICON);
+                std::rc::Rc::new(lighten_dark_glyph(&scaled).unwrap_or(scaled))
             });
             state.tray_icon_cache.insert(fp.clone(), icon);
         }

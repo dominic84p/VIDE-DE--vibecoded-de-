@@ -1,0 +1,12 @@
+[package]
+name = "file-exploder"
+version = "0.1.0"
+edition = "2024"
+description = "File Exploder: VIDE-DE's file manager. Like File Explorer, but it might go off."
+
+[dependencies]
+eframe = "0.37"
+egui_extras = { version = "0.37", features = ["image", "svg", "file"] }
+image = { version = "0.25", default-features = false, features = ["png"] }
+mime_guess = "2"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }

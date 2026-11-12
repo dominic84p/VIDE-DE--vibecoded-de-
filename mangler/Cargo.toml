@@ -1,0 +1,10 @@
+[package]
+name = "task-mangler"
+version = "0.1.0"
+edition = "2024"
+description = "Task Mangler: VIDE-DE's task manager. Like Task Manager, but it mangles."
+
+[dependencies]
+eframe = "0.37"
+egui_extras = { version = "0.37", features = ["image", "svg", "file"] }
+sysinfo = "0.40.3"

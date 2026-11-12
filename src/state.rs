@@ -448,7 +448,8 @@ impl State {
     pub fn launch(&self, app: &App) {
         tracing::info!("launching {} ({})", app.name, app.exec);
         if app.terminal {
-            self.spawn(&format!("{} -e {}", crate::input::TERMINAL, app.exec));
+            // Konsole-style `-e`; PowerSlop runs whatever $SHELL it's given, so pass the app as one.
+            self.spawn(&format!("konsole -e {}", app.exec));
         } else {
             self.spawn(&app.exec);
         }

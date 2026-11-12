@@ -37,7 +37,9 @@ taskbar, start menu and titlebars are all our own code.
 - **Keyring**: starts KWallet's Secret Service so browsers and Electron apps can save logins
 - **Our own apps**, installed into the start menu automatically:
   - **Settings** (`vide-settings`): mouse acceleration and speed, hide KDE apps from Start search
-  - **Terminaitor** (`terminaitor`): the terminal, Windows Terminal style with tabs. It'll be back.
+  - **PowerSlop** (`powerslop`): the terminal. Like PowerShell, but vibecoded (blue, banner, `PS>` prompt, tabs)
+  - **File Exploder** (`file-exploder`): the file manager, like File Explorer. Win+E
+  - **Task Mangler** (`task-mangler`): processes and performance, like Task Manager. Ctrl+Shift+Esc
   - **About VIDE-DE** (`vide-about`): your system info via fastfetch
 - **End process** in window right-click menus, for apps that won't close
 - **Smooth**: damage-tracked rendering, paced to vsync
@@ -60,6 +62,8 @@ eats Super).
 | Mod+1…9, 0 | Switch to desktop 1–10 |
 | Mod+Shift+1…9, 0 | Move window to desktop 1–10 |
 | Mod+Ctrl+←/→ | Previous / next desktop |
+| Mod+E | File Exploder |
+| Ctrl+Shift+Esc | Task Mangler |
 | Alt+F4 | Close window |
 | Alt+Space (TTY) | Window menu |
 | PrtSc | Screenshot (saved to ~/Pictures/Screenshots + clipboard) |

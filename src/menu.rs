@@ -222,7 +222,7 @@ impl State {
 
     pub fn open_desktop_menu(&mut self, at: Point<i32, Logical>) {
         let items = vec![
-            ("Open terminal".into(), Action::Spawn(crate::input::TERMINAL.into())),
+            ("Open terminal".into(), Action::Spawn(crate::input::terminal())),
             ("Take screenshot".into(), Action::Screenshot),
             (String::new(), Action::Separator),
             ("About VIDE-DE".into(), Action::About),

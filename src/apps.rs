@@ -141,7 +141,9 @@ pub fn icon_for_app_id(apps: &[App], app_id: &str) -> String {
 const BUILTIN: &[(&str, &str, &str, &str, &str, &str)] = &[
     ("vide-about", "vide-about", "About VIDE-DE", "System information for the vibecoded desktop", "vide-de", "System;"),
     ("vide-settings", "vide-settings", "Settings", "Mouse, Start menu and other VIDE-DE options", "preferences-system", "Settings;System;"),
-    ("terminaitor", "terminaitor", "Terminaitor", "The terminal. It'll be back.", "utilities-terminal", "System;TerminalEmulator;"),
+    ("powerslop", "powerslop", "PowerSlop", "Like PowerShell, but vibecoded", "utilities-terminal", "System;TerminalEmulator;"),
+    ("task-mangler", "task-mangler", "Task Mangler", "See what's running. Like Task Manager, but it mangles", "utilities-system-monitor", "System;Monitor;"),
+    ("file-exploder", "file-exploder", "File Exploder", "Your files. Like File Explorer, but it might go off", "system-file-manager", "System;FileManager;"),
 ];
 
 /// Install the built-ins that exist next to our binary. Marked OnlyShowIn=VIDE-DE so

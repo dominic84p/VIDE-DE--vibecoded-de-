@@ -1,8 +1,8 @@
 [package]
-name = "terminaitor"
+name = "powerslop"
 version = "0.1.0"
 edition = "2024"
-description = "Terminaitor: VIDE-DE's terminal. It'll be back."
+description = "PowerSlop: the VIDE-DE shell window. Like PowerShell, but vibecoded."
 
 [dependencies]
 egui_term = "0.1.0"

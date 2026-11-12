@@ -31,9 +31,10 @@ the WM in `src/wm.rs` is deliberately our own.
 - `menu.rs`: right-click menus. `tray.rs`: volume/brightness. `screenshot.rs`: PrtSc and snip.
 - `sni.rs`: app tray icons. We are the StatusNotifierWatcher + host, on a D-Bus thread
   talking to the main loop over channels. `desktops.rs`: Task View panel.
-- `about/`, `settings/`, `terminal/`: our own apps (`vide-about`, `vide-settings`,
-  `terminaitor`), separate egui programs. `apps::install_builtin` registers them as
-  .desktop entries on startup. Terminaitor uses egui 0.31 (egui_term's version).
+- `about/`, `settings/`, `powerslop/`, `exploder/`, `mangler/`: our own apps
+  (`vide-about`, `vide-settings`, `powerslop`, `file-exploder`, `task-mangler`), separate egui programs. `apps::install_builtin` registers them as
+  .desktop entries on startup. PowerSlop uses egui 0.31 (egui_term's version).
+  Our apps are Windows puns styled like their Windows originals.
 - `config/`: `vide-config`, the settings file shared by the compositor and Settings
   (`~/.config/vide-de/settings.conf`, polled once a second).
 

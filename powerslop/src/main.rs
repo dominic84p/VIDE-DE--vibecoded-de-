@@ -1,28 +1,30 @@
-//! Terminaitor: VIDE-DE's terminal. It'll be back.
+//! PowerSlop: VIDE-DE's shell window. Like PowerShell, but vibecoded.
 //!
-//! Windows Terminal look: tab strip on top, Campbell colours. The terminal itself is
-//! alacritty's emulator (through egui_term), so TUI apps, colours and scrollback work.
-//! Ctrl+Shift+T new tab, Ctrl+Shift+W close tab; a tab closes when its shell exits.
+//! Classic PowerShell look: the deep blue background, a startup banner and a
+//! `PS path>` prompt. The terminal itself is alacritty's emulator (through egui_term),
+//! so TUI apps, colours and scrollback work. Tabs: Ctrl+Shift+T new, Ctrl+Shift+W close.
 
 use std::sync::mpsc::{self, Receiver, Sender};
 
 use eframe::egui::{self, Color32, FontId, Key, Modifiers, RichText};
 use egui_term::{BackendSettings, ColorPalette, FontSettings, PtyEvent, TerminalBackend, TerminalFont, TerminalTheme, TerminalView};
 
-const BAR: Color32 = Color32::from_rgb(0x20, 0x20, 0x20);
-const TAB_ACTIVE: Color32 = Color32::from_rgb(0x0c, 0x0c, 0x0c);
+/// PowerShell's signature blue.
+const PS_BLUE: Color32 = Color32::from_rgb(0x01, 0x24, 0x56);
+const BAR: Color32 = Color32::from_rgb(0x00, 0x1a, 0x40);
+const TAB_ACTIVE: Color32 = PS_BLUE;
 const DIM: Color32 = Color32::from_rgb(0xa0, 0xa0, 0xa0);
 
 fn main() -> eframe::Result {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_title("Terminaitor")
-            .with_app_id("terminaitor")
+            .with_title("PowerSlop")
+            .with_app_id("powerslop")
             .with_inner_size([900.0, 560.0])
             .with_min_inner_size([360.0, 200.0]),
         ..Default::default()
     };
-    eframe::run_native("Terminaitor", options, Box::new(|cc| Ok(Box::new(App::new(&cc.egui_ctx)))))
+    eframe::run_native("PowerSlop", options, Box::new(|cc| Ok(Box::new(App::new(&cc.egui_ctx)))))
 }
 
 struct Tab {
@@ -40,12 +42,12 @@ struct App {
     error: Option<String>,
 }
 
-/// Windows Terminal's default "Campbell" scheme.
+/// Campbell colours on PowerShell's blue, like the classic PowerShell console.
 fn campbell() -> TerminalTheme {
     let c = |s: &str| s.to_string();
     TerminalTheme::new(Box::new(ColorPalette {
-        foreground: c("#cccccc"),
-        background: c("#0c0c0c"),
+        foreground: c("#eeedf0"),
+        background: c("#012456"),
         black: c("#0c0c0c"),
         red: c("#c50f1f"),
         green: c("#13a10e"),
@@ -66,6 +68,32 @@ fn campbell() -> TerminalTheme {
     }))
 }
 
+/// Print the banner, then start the user's shell; bash also gets a `PS path>` prompt
+/// on top of the user's own bashrc.
+fn launcher(shell: &str) -> String {
+    let banner = "PowerSlop\\nCopyright (C) Nobody. No humans were involved.\\n\\n\
+                  Install the latest PowerSlop for new features and improvements! Just ask an AI.\\n\\n";
+    let rc = rc_file();
+    if shell.ends_with("bash") && rc.is_some() {
+        format!("printf '{banner}'; exec '{shell}' --rcfile '{}' -i", rc.unwrap())
+    } else {
+        format!("printf '{banner}'; exec '{shell}'")
+    }
+}
+
+/// A bashrc that loads the user's own, then sets the PowerShell-style prompt.
+fn rc_file() -> Option<String> {
+    let dir = std::env::var("XDG_CONFIG_HOME")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::path::PathBuf::from(std::env::var("HOME").unwrap_or_default()).join(".config"))
+        .join("vide-de");
+    std::fs::create_dir_all(&dir).ok()?;
+    let path = dir.join("powerslop.bashrc");
+    let rc = "[ -f ~/.bashrc ] && . ~/.bashrc\nPS1='PS \\w> '\n";
+    std::fs::write(&path, rc).ok()?;
+    Some(path.to_string_lossy().into_owned())
+}
+
 impl App {
     fn new(ctx: &egui::Context) -> Self {
         let (events_tx, events_rx) = mpsc::channel();
@@ -78,10 +106,10 @@ impl App {
         let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".into());
         let id = self.next_id;
         self.next_id += 1;
-        let settings = BackendSettings { shell: shell.clone(), ..Default::default() };
+        let settings = BackendSettings { shell: "/bin/sh".into(), args: vec!["-c".into(), launcher(&shell)], ..Default::default() };
         match TerminalBackend::new(id, ctx.clone(), self.events_tx.clone(), settings) {
             Ok(backend) => {
-                let title = shell.rsplit('/').next().unwrap_or("shell").to_string();
+                let title = "PowerSlop".to_string();
                 self.tabs.push(Tab { id, backend, title });
                 self.active = self.tabs.len() - 1;
             }
@@ -124,7 +152,8 @@ impl eframe::App for App {
             return;
         }
         if let Some(t) = self.tabs.get(self.active) {
-            ctx.send_viewport_cmd(egui::ViewportCommand::Title(format!("{} - Terminaitor", t.title)));
+            let title = if t.title == "PowerSlop" { t.title.clone() } else { format!("{} - PowerSlop", t.title) };
+            ctx.send_viewport_cmd(egui::ViewportCommand::Title(title));
         }
 
         egui::TopBottomPanel::top("tabs").frame(egui::Frame::new().fill(BAR).inner_margin(egui::Margin::symmetric(6, 4))).show(ctx, |ui| {

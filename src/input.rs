@@ -37,10 +37,21 @@ const BTN_LEFT: u32 = 0x110;
 const BTN_RIGHT: u32 = 0x111;
 const DOUBLE_CLICK: Duration = Duration::from_millis(400);
 
-pub const TERMINAL: &str = "konsole";
+/// Our own app binaries live next to the compositor's.
+pub fn own_app(name: &str) -> Option<String> {
+    let p = std::env::current_exe().ok()?.parent()?.join(name);
+    p.exists().then(|| format!("'{}'", p.display()))
+}
+
+/// PowerSlop if it's built, else Konsole.
+pub fn terminal() -> String {
+    own_app("powerslop").unwrap_or_else(|| "konsole".into())
+}
 
 enum Action {
-    Spawn(&'static str),
+    Terminal,
+    Files,
+    TaskManager,
     Close,
     Cycle,
     Maximize,
@@ -93,6 +104,9 @@ fn bind(super_mod: bool, mods: &ModifiersState, sym: Keysym) -> Option<Action> {
         _ => {}
     }
     // Windows-style keys that don't use our modifier.
+    if mods.ctrl && mods.shift && sym == Keysym::Escape {
+        return Some(Action::TaskManager);
+    }
     if mods.alt && !mods.ctrl && sym == Keysym::F4 {
         return Some(Action::Close);
     }
@@ -109,7 +123,8 @@ fn bind(super_mod: bool, mods: &ModifiersState, sym: Keysym) -> Option<Action> {
         return None;
     }
     match sym {
-        Keysym::Return => Some(Action::Spawn(TERMINAL)),
+        Keysym::Return => Some(Action::Terminal),
+        Keysym::e if !mods.shift => Some(Action::Files),
         Keysym::q => Some(Action::Close),
         Keysym::Tab => Some(Action::Cycle),
         Keysym::Up => Some(Action::Maximize),
@@ -343,7 +358,9 @@ impl State {
     fn run(&mut self, action: Action) {
         let focused = self.focused().filter(|s| self.wm.find(s).is_some());
         match action {
-            Action::Spawn(cmd) => self.spawn(cmd),
+            Action::Terminal => self.spawn(&terminal()),
+            Action::TaskManager => self.spawn(&own_app("task-mangler").unwrap_or_else(|| "plasma-systemmonitor".into())),
+            Action::Files => self.spawn(&own_app("file-exploder").unwrap_or_else(|| "dolphin".into())),
             Action::Close => {
                 if let Some(w) = focused.and_then(|s| self.wm.find(&s)) {
                     w.close();

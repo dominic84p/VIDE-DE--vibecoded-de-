@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=VIDE-DE
+Comment=Vibecoded Desktop Environment
+Exec=/usr/bin/vide-session
+TryExec=/usr/bin/vibe-comp
+Type=Application
+DesktopNames=VIDE
+Keywords=wayland;compositor;desktop;

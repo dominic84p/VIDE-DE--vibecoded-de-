@@ -1,0 +1,24 @@
+#!/bin/sh
+# VIDE-DE Wayland session startup script.
+# Launched by SDDM, GDM, greetd, or run directly from a TTY.
+
+export XDG_CURRENT_DESKTOP=VIDE
+export XDG_SESSION_DESKTOP=VIDE
+export XDG_SESSION_TYPE=wayland
+
+# Standard toolkit wayland backends
+export QT_QPA_PLATFORM="wayland;xcb"
+export GDK_BACKEND="wayland,x11"
+export MOZ_ENABLE_WAYLAND=1
+export ELECTRON_OZONE_PLATFORM_HINT="wayland"
+
+# Ensure ~/.local/bin and standard paths are in PATH
+export PATH="$HOME/.local/bin:$PATH:/usr/local/bin:/usr/bin"
+
+LOG="$HOME/vibe.log"
+
+if [ -z "$DBUS_SESSION_BUS_ADDRESS" ]; then
+    exec dbus-run-session -- vibe-comp --tty 2> "$LOG"
+else
+    exec vibe-comp --tty 2> "$LOG"
+fi

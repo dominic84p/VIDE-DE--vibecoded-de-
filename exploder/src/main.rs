@@ -329,7 +329,24 @@ fn describe(path: &Path, is_dir: bool) -> (String, String) {
         Some(e) => format!("{e} File"),
         None => "File".into(),
     };
-    let icon = mime.map(|m| m.essence_str().replace('/', "-")).unwrap_or_else(|| "text-x-generic".into());
+    // A small fixed set of icons, like Explorer. One texture per distinct icon, and on
+    // NVIDIA each costs far more GPU memory than its pixels, so per-MIME icons made
+    // memory grow with every new file type browsed.
+    let ext_l = ext.as_deref().unwrap_or("").to_lowercase();
+    let top = mime.as_ref().map(|m| m.type_().as_str().to_string()).unwrap_or_default();
+    let icon = match (top.as_str(), ext_l.as_str()) {
+        ("image", _) => "image-x-generic",
+        ("video", _) => "video-x-generic",
+        ("audio", _) => "audio-x-generic",
+        (_, "pdf") => "application-pdf",
+        (_, "zip" | "tar" | "gz" | "xz" | "zst" | "7z" | "rar" | "bz2") => "package-x-generic",
+        (_, "sh" | "bash" | "zsh" | "fish") => "application-x-shellscript",
+        (_, "appimage" | "exe" | "bin" | "run") => "application-x-executable",
+        (_, "rs" | "c" | "h" | "cpp" | "py" | "js" | "ts" | "go" | "java" | "html" | "css" | "json" | "toml" | "yaml" | "yml") => "text-x-script",
+        ("text", _) => "text-x-generic",
+        _ => "text-x-generic",
+    }
+    .to_string();
     (kind, icon)
 }
 

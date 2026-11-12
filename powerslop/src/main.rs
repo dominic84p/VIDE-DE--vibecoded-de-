@@ -7,7 +7,7 @@
 use std::sync::mpsc::{self, Receiver, Sender};
 
 use eframe::egui::{self, Color32, FontId, Key, Modifiers, RichText};
-use egui_term::{BackendSettings, ColorPalette, FontSettings, PtyEvent, TerminalBackend, TerminalFont, TerminalTheme, TerminalView};
+use egui_term::{BackendCommand, BackendSettings, ColorPalette, FontSettings, PtyEvent, TerminalBackend, TerminalFont, TerminalTheme, TerminalView};
 
 /// PowerShell's signature blue.
 const PS_BLUE: Color32 = Color32::from_rgb(0x01, 0x24, 0x56);
@@ -117,6 +117,29 @@ impl App {
         }
     }
 
+    /// Selected text to the clipboard.
+    fn copy(&mut self, ctx: &egui::Context) {
+        if let Some(tab) = self.tabs.get(self.active) {
+            let text = tab.backend.selectable_content();
+            if !text.is_empty() {
+                ctx.copy_text(text);
+            }
+        }
+    }
+
+    /// Clipboard text typed into the shell. egui can't read the clipboard on demand,
+    /// so ask wl-paste.
+    fn paste(&mut self) {
+        let Some(tab) = self.tabs.get_mut(self.active) else { return };
+        match std::process::Command::new("wl-paste").args(["--no-newline", "--type", "text"]).output() {
+            Ok(out) if out.status.success() && !out.stdout.is_empty() => {
+                tab.backend.process_command(BackendCommand::Write(out.stdout));
+            }
+            Ok(_) => {}
+            Err(e) => self.error = Some(format!("Paste needs wl-paste (wl-clipboard): {e}")),
+        }
+    }
+
     fn close_tab(&mut self, i: usize, ctx: &egui::Context) {
         if i < self.tabs.len() {
             self.tabs.remove(i);
@@ -148,6 +171,12 @@ impl eframe::App for App {
         if shortcut(Key::W) {
             self.close_tab(self.active, ctx);
         }
+        if shortcut(Key::C) {
+            self.copy(ctx);
+        }
+        if shortcut(Key::V) {
+            self.paste();
+        }
         if self.tabs.is_empty() {
             return;
         }
@@ -178,6 +207,18 @@ impl eframe::App for App {
                 if let Some(i) = close {
                     self.close_tab(i, ctx);
                 }
+                // Copy / Paste, on the right like a toolbar.
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    let btn = |ui: &mut egui::Ui, label: &str, tip: &str| {
+                        ui.add(egui::Button::new(RichText::new(label).color(Color32::WHITE)).fill(PS_BLUE).corner_radius(4.0)).on_hover_text(tip).clicked()
+                    };
+                    if btn(ui, "Paste", "Paste (Ctrl+Shift+V)") {
+                        self.paste();
+                    }
+                    if btn(ui, "Copy", "Copy selection (Ctrl+Shift+C)") {
+                        self.copy(ctx);
+                    }
+                });
             });
         });
 

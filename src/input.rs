@@ -68,6 +68,8 @@ enum Action {
     CloseMenu,
     CancelSnip,
     CloseDesktops,
+    ToggleActionCenter,
+    CloseActionCenter,
     Volume(f32),
     Mute,
     Brightness(f32),
@@ -144,6 +146,7 @@ fn bind(super_mod: bool, mods: &ModifiersState, sym: Keysym) -> Option<Action> {
         Keysym::Right if !mods.ctrl => Some(Action::Snap { right: true }),
         Keysym::f => Some(Action::Fullscreen),
         Keysym::space => Some(Action::StartMenu),
+        Keysym::a | Keysym::n => Some(Action::ToggleActionCenter),
         Keysym::e if mods.shift => Some(Action::Quit),
         // Workspace switching: Mod+1-9,0 (0 = workspace 10)
         // Mod+Shift+1-9,0 to move focused window to workspace (must come first)
@@ -194,6 +197,8 @@ enum Target {
     Menu(Option<usize>),
     /// Over the Task View panel, maybe on a desktop tile.
     Desktops(Option<usize>),
+    /// Over the Action Center (notifications).
+    ActionCenter(crate::notifications::ActionCenterHit),
     Start(StartHit),
     Taskbar(TaskbarHit),
     Window(Hit),
@@ -359,6 +364,9 @@ impl State {
             if state.snip.is_some() && modified == Keysym::Escape {
                 return FilterResult::Intercept(if pressed { Action::CancelSnip } else { Action::CloseMenu });
             }
+            if state.action_center.open && pressed && modified == Keysym::Escape {
+                return FilterResult::Intercept(Action::CloseActionCenter);
+            }
             if state.desktops.open && pressed && modified == Keysym::Escape {
                 return FilterResult::Intercept(Action::CloseDesktops);
             }
@@ -438,6 +446,8 @@ impl State {
             Action::CloseMenu => self.close_menu(),
             Action::CancelSnip => self.cancel_snip(),
             Action::CloseDesktops => self.close_desktops(),
+            Action::ToggleActionCenter => self.toggle_action_center(),
+            Action::CloseActionCenter => self.close_action_center(),
             Action::Volume(d) => self.set_volume(self.tray.volume + d),
             Action::Mute => self.toggle_mute(),
             Action::Brightness(d) => self.set_brightness(self.tray.brightness + d),
@@ -593,6 +603,19 @@ impl State {
         if self.desktops.open && self.desktops_rect().to_f64().contains(pos) {
             return Target::Desktops(self.desktop_at(pos));
         }
+        if self.action_center.open {
+            let r = self.action_center_rect();
+            if r.to_f64().contains(pos) {
+                let local = (pos - r.loc.to_f64()).to_i32_round();
+                let hit = self
+                    .action_center
+                    .panel
+                    .as_ref()
+                    .and_then(|p| p.hits.iter().find(|(hr, _)| hr.contains(local)).map(|(_, h)| h.clone()))
+                    .unwrap_or(crate::notifications::ActionCenterHit::Nothing);
+                return Target::ActionCenter(hit);
+            }
+        }
         for x in self.x11_overrides.iter().rev() {
             if let Some(s) = x.wl_surface() {
                 if let Some((hit, o)) = under_from_surface_tree(&s, pos, x.geometry().loc, WindowSurfaceType::ALL) {
@@ -672,8 +695,16 @@ impl State {
                 Target::Desktops(d) => d,
                 _ => None,
             };
+            let ac_hover = match &target {
+                Target::ActionCenter(h) => h.clone(),
+                _ => crate::notifications::ActionCenterHit::Nothing,
+            };
+            if self.action_center.hover != ac_hover {
+                self.action_center.hover = ac_hover;
+                self.action_center.panel = None;
+            }
             self.hover = match target {
-                Target::Menu(_) | Target::Desktops(_) => Hover::None,
+                Target::Menu(_) | Target::Desktops(_) | Target::ActionCenter(_) => Hover::None,
                 Target::Start(h) => Hover::Start(h),
                 Target::Taskbar(h) => Hover::Taskbar(h),
                 Target::Window(Hit::Client(s, origin)) => {
@@ -783,7 +814,12 @@ impl State {
                 }
                 return;
             }
-            if !matches!(target, Target::Taskbar(TaskbarHit::Volume | TaskbarHit::Brightness)) {
+            if !matches!(
+                target,
+                Target::Taskbar(
+                    TaskbarHit::Volume | TaskbarHit::Brightness | TaskbarHit::Network | TaskbarHit::Bluetooth
+                )
+            ) {
                 self.close_flyout();
             }
         }
@@ -799,6 +835,19 @@ impl State {
             }
             if !matches!(target, Target::Taskbar(TaskbarHit::TaskView)) {
                 self.close_desktops();
+            }
+        }
+
+        // Action Center: clicks inside interact with notifications; clicks outside close it.
+        if self.action_center.open {
+            if let Target::ActionCenter(hit) = &target {
+                if left {
+                    self.action_center_click(hit.clone());
+                }
+                return;
+            }
+            if !matches!(target, Target::Taskbar(TaskbarHit::Clock)) {
+                self.close_action_center();
             }
         }
 
@@ -852,6 +901,9 @@ impl State {
                         TaskbarHit::ShowDesktop => self.show_desktop(),
                         TaskbarHit::Volume => self.toggle_flyout(crate::tray::Flyout::Volume),
                         TaskbarHit::Brightness => self.toggle_flyout(crate::tray::Flyout::Brightness),
+                        TaskbarHit::Network => self.toggle_flyout(crate::tray::Flyout::Network),
+                        TaskbarHit::Bluetooth => self.toggle_flyout(crate::tray::Flyout::Bluetooth),
+                        TaskbarHit::Clock => self.toggle_action_center(),
                         TaskbarHit::TrayApp(id) => {
                             self.tray_menu_x = pos.x as i32;
                             if let Some(tx) = &self.sni_tx {
@@ -930,7 +982,7 @@ impl State {
                 }
                 forward(self);
             }
-            Target::Menu(_) | Target::Desktops(_) => {}
+            Target::Menu(_) | Target::Desktops(_) | Target::ActionCenter(_) => {}
         }
     }
 

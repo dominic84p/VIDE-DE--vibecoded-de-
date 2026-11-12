@@ -8,6 +8,7 @@ mod input;
 mod ipc;
 mod layers;
 mod menu;
+mod notifications;
 mod pins;
 mod render;
 mod screenshot;
@@ -114,6 +115,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     })?;
     state.x11_icon_tx = Some(icon_tx);
+
+    // Notifications: real org.freedesktop.Notifications service + Action Center.
+    let (notif_tx, notif_rx) = smithay::reexports::calloop::channel::channel::<notifications::NotifEvent>();
+    event_loop.handle().insert_source(notif_rx, |event, _, state| {
+        if let smithay::reexports::calloop::channel::Event::Msg(ev) = event {
+            state.handle_notif_event(ev);
+        }
+    })?;
+    state.notif_tx = Some(notifications::start(notif_tx));
 
     // Testing aids: open the start menu or Task View at launch, and/or have the
     // compositor screenshot itself after a few seconds (lands in ~/Pictures/Screenshots).

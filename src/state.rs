@@ -73,6 +73,7 @@ use crate::{
     cursor::Cursors,
     icons::Icons,
     focus::FocusTarget,
+    notifications::{ActionCenter, NotifSender},
     ui::{StartHit, StartMenu, TaskbarHit, Taskbar, TitleButton, TASKBAR_H},
     wm::{Flag, WinKind, Wm},
 };
@@ -174,6 +175,8 @@ pub struct State {
     pub desktops: crate::desktops::Desktops,
     /// Full-screen black at partial alpha: our software brightness.
     pub dim: smithay::backend::renderer::element::solid::SolidColorBuffer,
+    /// Full-screen warm veil for Settings → Display → Night light.
+    pub night: smithay::backend::renderer::element::solid::SolidColorBuffer,
     /// A screenshot to take on the next frame: `Some(None)` = whole screen, else a region.
     pub screenshot_requested: Option<Option<Rectangle<i32, Logical>>>,
     /// Win+Shift+S region selection in progress.
@@ -181,6 +184,8 @@ pub struct State {
     pub wallpaper: Option<(Size<i32, Logical>, MemoryRenderBuffer)>,
     pub hover: Hover,
     pub clock: (String, String),
+    pub action_center: ActionCenter,
+    pub notif_tx: Option<NotifSender>,
     /// For double-click-to-maximize on titlebars.
     pub last_title_click: Option<(WlSurface, Instant)>,
     /// Super pressed with nothing else yet: releasing it opens the start menu.
@@ -270,11 +275,14 @@ impl State {
             tray_theme: crate::icons::Icons::dark(),
             desktops: Default::default(),
             dim: Default::default(),
+            night: Default::default(),
             screenshot_requested: None,
             snip: None,
             wallpaper: None,
             hover: Hover::None,
             clock: clock_now(),
+            action_center: ActionCenter::default(),
+            notif_tx: None,
             last_title_click: None,
             super_tap: false,
             wm: Wm::default(),

@@ -132,6 +132,12 @@ pub fn elements_with(renderer: &mut GlesRenderer, state: &mut State, cursor: boo
         out.extend(image(renderer, &buf, desktops_at, Kind::Unspecified));
     }
 
+    // Action Center (notifications).
+    let action_center_at = state.action_center_rect().loc;
+    if let Some(buf) = state.action_center_picture() {
+        out.extend(image(renderer, &buf, action_center_at, Kind::Unspecified));
+    }
+
     // Tray flyout (volume/brightness slider), above the taskbar.
     let flyout_at = state.flyout_rect().loc;
     if let Some(buf) = state.flyout_picture().cloned() {
@@ -200,6 +206,8 @@ pub fn elements_with(renderer: &mut GlesRenderer, state: &mut State, cursor: boo
             },
             start_open: state.start.open,
             volume: ((state.tray.volume * 100.0).round() as u32, state.tray.muted),
+            wifi_on: state.tray.wifi_on,
+            bt_on: state.tray.bt_on,
             flyout: state.tray.flyout,
             current_workspace: state.wm.current_workspace,
             taskview_open: state.desktops.open,
@@ -266,6 +274,14 @@ pub fn elements_with(renderer: &mut GlesRenderer, state: &mut State, cursor: boo
     }
     let (_, wp) = state.wallpaper.as_ref().unwrap();
     out.extend(image(renderer, wp, (0, 0).into(), Kind::Unspecified));
+
+    // Night light: a warm veil over the whole picture, cursor included, like the
+    // monitor's own colour temperature (which desktop panels usually don't have).
+    if state.config.night_light && state.config.night_light_strength > 0.0 {
+        let alpha = (state.config.night_light_strength as f32 * 0.32).clamp(0.0, 0.4);
+        state.night.update(state.output_size, Color32F::new(1.0, 0.72, 0.42, alpha));
+        out.push(Elem::Solid(SolidColorRenderElement::from_buffer(&state.night, (0, 0), 1.0, 1.0, Kind::Unspecified)));
+    }
 
     out
 }

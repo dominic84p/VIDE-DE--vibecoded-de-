@@ -246,12 +246,24 @@ impl eframe::App for App {
                 ui.colored_label(Color32::LIGHT_RED, e);
             }
             let Some(tab) = self.tabs.get_mut(self.active) else { return };
+            
+            // Handle mouse wheel scrolling for scrollback BEFORE creating the view
+            let rect = ui.available_rect_before_wrap();
+            if ui.input(|i| i.pointer.hover_pos().is_some_and(|p| rect.contains(p))) {
+                let scroll_delta = ui.input(|i| i.raw_scroll_delta.y);
+                if scroll_delta != 0.0 {
+                    let lines = (scroll_delta / 12.0).round() as i32;
+                    tab.backend.process_command(BackendCommand::Scroll(lines));
+                }
+            }
+            
             let font = TerminalFont::new(FontSettings { font_type: FontId::monospace(14.0) });
             let view = TerminalView::new(ui, &mut tab.backend)
                 .set_focus(true)
                 .set_theme(campbell())
                 .set_font(font)
                 .set_size(ui.available_size());
+            
             ui.add(view);
         });
     }

@@ -63,6 +63,10 @@ pub enum TaskbarHit {
     Search,
     Volume,
     Brightness,
+    Network,
+    Bluetooth,
+    /// The clock: opens the Action Center (notifications).
+    Clock,
     /// An app's tray icon, by its tray id.
     TrayApp(String),
     /// A taskbar button, by index into `TaskbarKey::items`.
@@ -94,6 +98,9 @@ pub struct TaskbarKey {
     pub start_open: bool,
     /// Volume percent and mute, for the tray icon.
     pub volume: (u32, bool),
+    /// Radio state, so the network and Bluetooth glyphs show on/off.
+    pub wifi_on: bool,
+    pub bt_on: bool,
     pub flyout: Option<crate::tray::Flyout>,
     pub current_workspace: usize,
     pub taskview_open: bool,
@@ -164,11 +171,11 @@ pub fn draw_taskbar(
 
     // Window buttons.
     let right_edge = w - CLOCK_W - SHOW_DESKTOP_W;
-    let apps_x = right_edge - TRAY_W * 2 - TRAY_W * key.tray_apps.len() as i32;
-    let tray_x = apps_x;
+    const TRAY_ITEMS: i32 = 4;
+    let apps_x = right_edge - TRAY_W * TRAY_ITEMS - TRAY_W * key.tray_apps.len() as i32;
     let mut x = TASK_BUTTONS_X;
     for (i, item) in key.items.iter().enumerate() {
-        if x + TASK_W > tray_x {
+        if x + TASK_W > apps_x {
             break;
         }
         let hit = TaskbarHit::Button(i);
@@ -215,9 +222,11 @@ pub fn draw_taskbar(
     }
     let tray_x = apps_x + TRAY_W * key.tray_apps.len() as i32;
 
-    // Tray: brightness, then volume, just left of the clock.
-    use crate::tray::{speaker, sun, Flyout};
+    // Tray: network, Bluetooth, brightness, volume, just left of the clock.
+    use crate::tray::{bluetooth, speaker, sun, wifi, Flyout};
     for (i, (hit, open)) in [
+        (TaskbarHit::Network, key.flyout == Some(Flyout::Network)),
+        (TaskbarHit::Bluetooth, key.flyout == Some(Flyout::Bluetooth)),
         (TaskbarHit::Brightness, key.flyout == Some(Flyout::Brightness)),
         (TaskbarHit::Volume, key.flyout == Some(Flyout::Volume)),
     ]
@@ -233,12 +242,17 @@ pub fn draw_taskbar(
         let (cx, cy) = (bx as f32 + TRAY_W as f32 / 2.0, TASKBAR_H as f32 / 2.0);
         match hit {
             TaskbarHit::Volume => speaker(&mut c, cx - 5.0, cy, key.volume.1, key.volume.0 as f32 / 100.0, WHITE),
-            _ => sun(&mut c, cx, cy, WHITE),
+            TaskbarHit::Brightness => sun(&mut c, cx, cy, WHITE),
+            TaskbarHit::Network => wifi(&mut c, cx, cy, key.wifi_on),
+            _ => bluetooth(&mut c, cx, cy, key.bt_on),
         }
         hits.push((rect(bx, 0, TRAY_W, TASKBAR_H), hit));
     }
 
-    // Clock.
+    // Clock: clicking it opens the Action Center.
+    if hovered(&TaskbarHit::Clock) {
+        c.rect(right_edge, 0, CLOCK_W, TASKBAR_H, TASK_HOVER);
+    }
     if let Some(f) = font {
         let cx = right_edge + CLOCK_W / 2;
         let tw = measure(f, 12.0, &key.time);
@@ -246,6 +260,7 @@ pub fn draw_taskbar(
         let dw = measure(f, 12.0, &key.date);
         c.text(f, 12.0, cx - dw / 2, TASKBAR_H / 2 - 3, TASKBAR_H / 2, WHITE, &key.date);
     }
+    hits.push((rect(right_edge, 0, CLOCK_W, TASKBAR_H), TaskbarHit::Clock));
 
     // Show-desktop sliver at the far right.
     let dx = w - SHOW_DESKTOP_W;

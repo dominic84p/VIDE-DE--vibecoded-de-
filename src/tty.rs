@@ -39,6 +39,13 @@ use smithay::{
     wayland::drm_syncobj::{supports_syncobj_eventfd, DrmSyncobjState},
 };
 
+/// Parse "1920x1080@144" (the @HZ part optional) into (width, height, Hz-or-0).
+fn parse_mode(s: &str) -> Option<(u16, u16, i32)> {
+    let (res, hz) = s.split_once('@').unwrap_or((s, ""));
+    let (w, h) = res.split_once('x')?;
+    Some((w.trim().parse().ok()?, h.trim().parse().ok()?, hz.trim().parse().unwrap_or(0)))
+}
+
 /// Acceleration profile and speed from our settings. KDE normally does this; without
 /// it libinput's default adaptive curve makes high-DPI mice fly off.
 fn apply_mouse(d: &mut InputDevice, c: &vide_config::Config) {
@@ -119,11 +126,17 @@ pub fn run(event_loop: &mut EventLoop<'static, State>, state: &mut State) -> Res
         .filter_map(|c| fd.get_connector(*c, false).ok())
         .find(|c| c.state() == connector::State::Connected && !c.modes().is_empty())
         .ok_or("no connected monitor")?;
-    let mode = conn
-        .modes()
-        .iter()
-        .find(|m| m.mode_type().contains(ModeTypeFlags::PREFERRED))
+    // Settings → Display can pin a WIDTHxHEIGHT@HZ mode; otherwise use the monitor's preferred one.
+    let wanted = parse_mode(&state.config.display_mode);
+    let mode = wanted
+        .and_then(|(w, h, hz)| {
+            conn.modes()
+                .iter()
+                .find(|m| m.size() == (w, h) && (hz == 0 || (m.vrefresh() as i32 - hz).abs() <= 2))
+                .or_else(|| conn.modes().iter().find(|m| m.size() == (w, h)))
+        })
         .copied()
+        .or_else(|| conn.modes().iter().find(|m| m.mode_type().contains(ModeTypeFlags::PREFERRED)).copied())
         .unwrap_or(conn.modes()[0]);
     let crtc = conn
         .encoders()
@@ -146,11 +159,12 @@ pub fn run(event_loop: &mut EventLoop<'static, State>, state: &mut State) -> Res
         },
     );
     let wl_mode = WlMode::from(mode);
-    output.change_current_state(Some(wl_mode), None, None, Some((0, 0).into()));
+    let scale = (state.config.display_scale.clamp(0.5, 3.0).round() as i32).max(1);
+    output.change_current_state(Some(wl_mode), None, Some(smithay::output::Scale::Integer(scale)), Some((0, 0).into()));
     output.set_preferred(wl_mode);
     let _global = output.create_global::<State>(&state.dh);
     crate::layers::set_output(state, &output);
-    state.output_size = wl_mode.size.to_logical(1);
+    state.output_size = wl_mode.size.to_logical(scale);
     state.pointer_loc = (state.output_size.w as f64 / 2.0, state.output_size.h as f64 / 2.0).into();
 
     let drm_output = manager

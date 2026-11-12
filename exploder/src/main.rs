@@ -1,8 +1,11 @@
 //! File Exploder: VIDE-DE's file manager, modelled on Windows 10 File Explorer.
 //! Light theme, navigation pane, breadcrumb address bar, details view, status bar.
 //!
-//! Double-click opens (folders here, files with xdg-open). F2 rename, Delete to
-//! trash, Ctrl+C/X/V, Ctrl+Shift+N new folder, Alt+Left/Right/Up, Backspace, F5.
+//! Double-click opens (folders here, files with xdg-open). Programs and scripts run,
+//! like .exe and .bat files do in Explorer: scripts in a PowerSlop window so their
+//! output can be read, programs and AppImages directly, .desktop launchers via gio.
+//! F2 rename, Delete to trash, Ctrl+C/X/V, Ctrl+Shift+N new folder,
+//! Alt+Left/Right/Up, Backspace, F5.
 
 use std::{
     path::{Path, PathBuf},
@@ -35,6 +38,8 @@ fn main() -> eframe::Result {
         options,
         Box::new(move |cc| {
             egui_extras::install_image_loaders(&cc.egui_ctx);
+            // A file manager, not a document: dragging over names shouldn't highlight text.
+            cc.egui_ctx.all_styles_mut(|s| s.interaction.selectable_labels = false);
             Ok(Box::new(Exploder::new(start)))
         }),
     )
@@ -183,8 +188,35 @@ impl Exploder {
         let Some(e) = self.entries.get(i).cloned() else { return };
         if e.is_dir {
             self.go(e.path);
-        } else if let Err(err) = std::process::Command::new("xdg-open").arg(&e.path).spawn() {
+            return;
+        }
+        let res = match runnable(&e.path) {
+            Some(Run::Script(interp)) => run_in_terminal(&e.path, interp),
+            Some(Run::Program) => run_program(&e.path),
+            Some(Run::Launcher) => spawn(std::process::Command::new("gio").arg("launch").arg(&e.path)),
+            None => spawn(std::process::Command::new("xdg-open").arg(&e.path)),
+        };
+        if let Err(err) = res {
             self.status = Some(format!("Couldn't open {}: {err}", e.name));
+        }
+    }
+
+    /// Open with the default app even if it's runnable, e.g. to edit a script.
+    fn open_default(&mut self, i: usize) {
+        let Some(e) = self.entries.get(i).cloned() else { return };
+        if let Err(err) = spawn(std::process::Command::new("xdg-open").arg(&e.path)) {
+            self.status = Some(format!("Couldn't open {}: {err}", e.name));
+        }
+    }
+
+    fn run_in_powerslop(&mut self, i: usize) {
+        let Some(e) = self.entries.get(i).cloned() else { return };
+        let interp = match runnable(&e.path) {
+            Some(Run::Script(interp)) => interp,
+            _ => None,
+        };
+        if let Err(err) = run_in_terminal(&e.path, interp) {
+            self.status = Some(format!("Couldn't run {}: {err}", e.name));
         }
     }
 
@@ -655,9 +687,25 @@ impl eframe::App for Exploder {
                         context = Some(i);
                     }
                     resp.context_menu(|ui| {
-                        if ui.button("Open").clicked() {
+                        let run = if e.is_dir { None } else { runnable(&e.path) };
+                        if ui.button(if run.is_some() { "Run" } else { "Open" }).clicked() {
                             open = Some(i);
                             ui.close();
+                        }
+                        match run {
+                            Some(Run::Script(_)) => {
+                                if ui.button("Edit").clicked() {
+                                    self.open_default(i);
+                                    ui.close();
+                                }
+                            }
+                            Some(Run::Program) => {
+                                if ui.button("Run in PowerSlop").clicked() {
+                                    self.run_in_powerslop(i);
+                                    ui.close();
+                                }
+                            }
+                            _ => {}
                         }
                         ui.separator();
                         if ui.button("Cut").clicked() {
@@ -728,14 +776,114 @@ impl eframe::App for Exploder {
     }
 }
 
+fn powerslop() -> Option<PathBuf> {
+    let ours = std::env::current_exe().ok().and_then(|p| Some(p.parent()?.join("powerslop"))).filter(|p| p.exists());
+    ours.or_else(|| {
+        std::env::var_os("PATH")?.to_str()?.split(':').map(|d| Path::new(d).join("powerslop")).find(|p| p.exists())
+    })
+}
+
 /// Open our terminal in `dir` (PowerSlop next to us, else the user's).
 fn spawn_terminal(dir: &Path) {
-    let ours = std::env::current_exe().ok().and_then(|p| Some(p.parent()?.join("powerslop"))).filter(|p| p.exists());
-    let mut cmd = match ours {
+    let mut cmd = match powerslop() {
         Some(p) => std::process::Command::new(p),
         None => std::process::Command::new("konsole"),
     };
-    let _ = cmd.current_dir(dir).spawn();
+    let _ = spawn(cmd.current_dir(dir));
+}
+
+/// How double-click should run a file, if it's something runnable.
+#[derive(Clone, Copy, PartialEq)]
+enum Run {
+    /// A script, shown in a console. The interpreter is set when the file isn't
+    /// executable, since Explorer doesn't make you chmod a .bat first.
+    Script(Option<&'static str>),
+    /// A native program or AppImage.
+    Program,
+    /// A .desktop launcher.
+    Launcher,
+}
+
+fn runnable(path: &Path) -> Option<Run> {
+    use std::{io::Read, os::unix::fs::PermissionsExt};
+    let md = std::fs::metadata(path).ok()?;
+    if !md.is_file() {
+        return None;
+    }
+    let exec = md.permissions().mode() & 0o111 != 0;
+    let ext = path.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
+    if ext == "desktop" {
+        return Some(Run::Launcher);
+    }
+    let mut head = [0u8; 4];
+    let n = std::fs::File::open(path).and_then(|mut f| f.read(&mut head)).unwrap_or(0);
+    let head = &head[..n];
+    if head == b"\x7fELF" || ext == "appimage" {
+        return Some(Run::Program);
+    }
+    let shebang = head.starts_with(b"#!");
+    let by_ext = match ext.as_str() {
+        "sh" | "bash" => Some("bash"),
+        "zsh" => Some("zsh"),
+        "fish" => Some("fish"),
+        "py" => Some("python3"),
+        "pl" => Some("perl"),
+        "rb" => Some("ruby"),
+        "js" | "mjs" if shebang => Some("node"),
+        "run" => Some("sh"),
+        _ => None,
+    };
+    match (exec, shebang, by_ext) {
+        (true, true, _) => Some(Run::Script(None)),
+        // Not executable: the kernel won't read the shebang, so name the interpreter.
+        (false, true, i) => Some(Run::Script(Some(i.unwrap_or("sh")))),
+        (_, false, Some(i)) => Some(Run::Script(Some(i))),
+        _ => None,
+    }
+}
+
+fn run_in_terminal(path: &Path, interp: Option<&str>) -> std::io::Result<()> {
+    let dir = path.parent().unwrap_or(Path::new("/"));
+    let target = path.to_string_lossy().into_owned();
+    let argv: Vec<String> = match interp {
+        Some(i) => vec![i.to_string(), target],
+        None => vec![target],
+    };
+    let mut cmd = match powerslop() {
+        Some(p) => {
+            let mut c = std::process::Command::new(p);
+            c.arg("-e");
+            c
+        }
+        None => {
+            let mut c = std::process::Command::new("konsole");
+            c.args(["--hold", "-e"]);
+            c
+        }
+    };
+    spawn(cmd.args(argv).current_dir(dir))
+}
+
+fn run_program(path: &Path) -> std::io::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    let mut perm = std::fs::metadata(path)?.permissions();
+    if perm.mode() & 0o100 == 0 {
+        // Downloaded AppImages and binaries arrive without +x; double-click means "run it".
+        perm.set_mode(perm.mode() | 0o111);
+        std::fs::set_permissions(path, perm)?;
+    }
+    spawn(std::process::Command::new(path).current_dir(path.parent().unwrap_or(Path::new("/"))))
+}
+
+/// Start a child in its own process group and reap it on a thread, so finished apps
+/// don't linger as zombies while we're open.
+fn spawn(cmd: &mut std::process::Command) -> std::io::Result<()> {
+    use std::os::unix::process::CommandExt;
+    let mut child = cmd.process_group(0).stdin(std::process::Stdio::null()).spawn()?;
+    std::thread::spawn(move || {
+        let _ = child.wait();
+    });
+    Ok(())
 }
 
 fn shellexpand(s: &str) -> String {

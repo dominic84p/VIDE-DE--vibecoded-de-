@@ -3,6 +3,10 @@
 //! Classic PowerShell look: the deep blue background, a startup banner and a
 //! `PS path>` prompt. The terminal itself is alacritty's emulator (through egui_term),
 //! so TUI apps, colours and scrollback work. Tabs: Ctrl+Shift+T new, Ctrl+Shift+W close.
+//!
+//! `powerslop -e PROGRAM [ARGS...]` runs a program in the first tab instead of a shell
+//! (File Exploder uses it for scripts), and waits for Enter once it exits so the output
+//! can be read, like a Windows console window.
 
 use std::sync::mpsc::{self, Receiver, Sender};
 
@@ -24,7 +28,12 @@ fn main() -> eframe::Result {
             .with_min_inner_size([360.0, 200.0]),
         ..Default::default()
     };
-    eframe::run_native("PowerSlop", options, Box::new(|cc| Ok(Box::new(App::new(&cc.egui_ctx)))))
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let run = match args.first().map(String::as_str) {
+        Some("-e") if args.len() > 1 => Some(args[1..].to_vec()),
+        _ => None,
+    };
+    eframe::run_native("PowerSlop", options, Box::new(move |cc| Ok(Box::new(App::new(&cc.egui_ctx, run)))))
 }
 
 struct Tab {
@@ -95,18 +104,28 @@ fn rc_file() -> Option<String> {
 }
 
 impl App {
-    fn new(ctx: &egui::Context) -> Self {
+    fn new(ctx: &egui::Context, run: Option<Vec<String>>) -> Self {
         let (events_tx, events_rx) = mpsc::channel();
         let mut app = Self { tabs: Vec::new(), active: 0, next_id: 0, events_tx, events_rx, error: None };
-        app.new_tab(ctx);
+        app.new_tab(ctx, run);
         app
     }
 
-    fn new_tab(&mut self, ctx: &egui::Context) {
+    fn new_tab(&mut self, ctx: &egui::Context, run: Option<Vec<String>>) {
         let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".into());
         let id = self.next_id;
         self.next_id += 1;
-        let settings = BackendSettings { shell: "/bin/sh".into(), args: vec!["-c".into(), launcher(&shell)], ..Default::default() };
+        let args = match run {
+            // The program and its arguments go in as "$@", so no quoting is needed.
+            Some(cmd) => {
+                let script = "\"$@\"; s=$?; printf '\\n[Exited with code %s. Press Enter to close.]' \"$s\"; read _";
+                let mut a = vec!["-c".to_string(), script.to_string(), "powerslop".to_string()];
+                a.extend(cmd);
+                a
+            }
+            None => vec!["-c".into(), launcher(&shell)],
+        };
+        let settings = BackendSettings { shell: "/bin/sh".into(), args, ..Default::default() };
         match TerminalBackend::new(id, ctx.clone(), self.events_tx.clone(), settings) {
             Ok(backend) => {
                 let title = "PowerSlop".to_string();
@@ -166,7 +185,7 @@ impl eframe::App for App {
 
         let shortcut = |k| ctx.input_mut(|i| i.consume_key(Modifiers::CTRL | Modifiers::SHIFT, k));
         if shortcut(Key::T) {
-            self.new_tab(ctx);
+            self.new_tab(ctx, None);
         }
         if shortcut(Key::W) {
             self.close_tab(self.active, ctx);
@@ -202,7 +221,7 @@ impl eframe::App for App {
                     });
                 }
                 if ui.add(egui::Button::new(RichText::new("+").size(16.0).color(DIM)).frame(false)).on_hover_text("New tab (Ctrl+Shift+T)").clicked() {
-                    self.new_tab(ctx);
+                    self.new_tab(ctx, None);
                 }
                 if let Some(i) = close {
                     self.close_tab(i, ctx);

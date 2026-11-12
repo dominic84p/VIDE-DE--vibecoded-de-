@@ -33,6 +33,8 @@ use smithay::{
     utils::DeviceFd,
 };
 
+use smithay::wayland::drm_syncobj::{supports_syncobj_eventfd, DrmSyncobjState};
+
 use crate::{
     render::{self, Elem},
     state::State,
@@ -55,7 +57,9 @@ struct Tty {
 pub fn run(event_loop: &mut EventLoop<'static, State>, state: &mut State) -> Result<(), Box<dyn std::error::Error>> {
     state.tty = true;
 
-    let (mut session, session_notifier) = LibSeatSession::new()?;
+    let (mut session, session_notifier) = LibSeatSession::new().map_err(|e| {
+        format!("couldn't take the seat ({e}). Is VIDE-DE or another desktop already running on this VT?")
+    })?;
     let seat = session.seat();
 
     // GPU
@@ -76,6 +80,12 @@ pub fn run(event_loop: &mut EventLoop<'static, State>, state: &mut State) -> Res
         .ok()
         .and_then(|n| n.node_with_type(NodeType::Render).and_then(|r| r.ok()).or(Some(n)));
     state.init_dmabuf(&renderer, render_node);
+    if supports_syncobj_eventfd(&fd) {
+        state.syncobj_state = Some(DrmSyncobjState::new::<State>(&state.dh, fd.clone()));
+        tracing::info!("explicit sync (linux-drm-syncobj) enabled");
+    } else {
+        tracing::warn!("no syncobj eventfd support; NVIDIA clients may flicker");
+    }
 
     let mut manager: Manager = DrmOutputManager::new(
         drm,
@@ -215,8 +225,9 @@ pub fn run(event_loop: &mut EventLoop<'static, State>, state: &mut State) -> Res
             state.needs_redraw = false;
             let t = &mut *t;
             let elements = render::elements(&mut t.renderer, state);
-            // Composite everything, cursor included. Hardware cursor/overlay planes are flaky on NVIDIA.
-            let flags = FrameFlags::ALLOW_PRIMARY_PLANE_SCANOUT;
+            // Composite everything, cursor included. Hardware cursor/overlay planes are flaky on
+            // NVIDIA, and direct scanout of client buffers skips our explicit-sync wait.
+            let flags = FrameFlags::empty();
             match t.output.render_frame(&mut t.renderer, &elements, render::CLEAR, flags) {
                 Ok(res) if !res.is_empty => match t.output.queue_frame(()) {
                     Ok(()) => t.frame_pending = true,

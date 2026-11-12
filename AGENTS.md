@@ -64,9 +64,13 @@ the WM in `src/wm.rs` is deliberately our own.
 
 ## Gotchas we already hit
 
-- **NVIDIA:** hardware cursor and overlay planes are unreliable, so `tty.rs`
-  renders with `FrameFlags::ALLOW_PRIMARY_PLANE_SCANOUT` only. Don't switch
-  back to `DEFAULT`.
+- **NVIDIA:** hardware cursor and overlay planes are unreliable, and direct
+  scanout of client buffers skips our sync wait, so `tty.rs` renders with
+  `FrameFlags::empty()` (always composite). Don't switch back to `DEFAULT`.
+- **NVIDIA needs explicit sync** once clients share GPU buffers (dmabuf):
+  without `linux-drm-syncobj` we show frames before the GPU finished them
+  (flicker, duplicated/stale frames, black rectangles). The pre-commit hook in
+  `State::new_surface` blocks each commit on its acquire point.
 - **Xwayland's client** carries `XWaylandClientData`, not our `ClientState`;
   `client_compositor_state` must check for both.
 - **X11 windows only enter the WM once mapped *and* associated with a

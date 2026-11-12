@@ -56,7 +56,12 @@ use smithay::{
         drm::DrmNode,
         renderer::{gles::GlesRenderer, ImportDma},
     },
-    delegate_dmabuf,
+    delegate_dmabuf, delegate_drm_syncobj,
+    reexports::calloop::LoopHandle,
+    wayland::{
+        compositor::{add_blocker, add_pre_commit_hook, with_states},
+        drm_syncobj::{DrmSyncobjCachedState, DrmSyncobjHandler, DrmSyncobjState},
+    },
     wayland::dmabuf::{DmabufFeedbackBuilder, DmabufGlobal, DmabufHandler, DmabufState, ImportNotifier},
 };
 
@@ -111,6 +116,10 @@ pub struct State {
     pub _output_manager_state: OutputManagerState,
     pub popups: PopupManager,
     pub dmabuf_state: DmabufState,
+    /// Explicit sync (linux-drm-syncobj). NVIDIA needs it: without it we can show a
+    /// client's frame before its GPU finished drawing it (flicker, stale frames, black boxes).
+    pub syncobj_state: Option<DrmSyncobjState>,
+    pub loop_handle: LoopHandle<'static, State>,
     /// What the renderer can import; checked when clients hand us GPU buffers.
     pub dmabuf_formats: Option<FormatSet>,
 
@@ -170,7 +179,7 @@ pub struct State {
 }
 
 impl State {
-    pub fn new(dh: DisplayHandle, socket_name: String) -> Self {
+    pub fn new(dh: DisplayHandle, loop_handle: LoopHandle<'static, State>, socket_name: String) -> Self {
         let mut seat_state = SeatState::new();
         let mut seat = seat_state.new_wl_seat(&dh, "seat0");
         let keyboard = seat.add_keyboard(Default::default(), 300, 30).unwrap();
@@ -186,6 +195,8 @@ impl State {
             _output_manager_state: OutputManagerState::new_with_xdg_output::<Self>(&dh),
             popups: PopupManager::default(),
             dmabuf_state: DmabufState::new(),
+            syncobj_state: None,
+            loop_handle,
             dmabuf_formats: None,
             seat_state,
             seat,
@@ -427,7 +438,33 @@ impl State {
     }
 }
 
+impl DrmSyncobjHandler for State {
+    fn drm_syncobj_state(&mut self) -> Option<&mut DrmSyncobjState> {
+        self.syncobj_state.as_mut()
+    }
+}
+
 impl CompositorHandler for State {
+    fn new_surface(&mut self, surface: &WlSurface) {
+        // Hold each commit back until the client's GPU work on it is done (its acquire point).
+        add_pre_commit_hook::<Self, _>(surface, |state, _dh, surface| {
+            let acquire = with_states(surface, |s| {
+                s.cached_state.get::<DrmSyncobjCachedState>().pending().acquire_point.clone()
+            });
+            let Some(acquire) = acquire else { return };
+            let Ok((blocker, source)) = acquire.generate_blocker() else { return };
+            let Some(client) = surface.client() else { return };
+            let res = state.loop_handle.insert_source(source, move |_, _, state| {
+                let dh = state.dh.clone();
+                state.client_compositor_state(&client).blocker_cleared(state, &dh);
+                Ok(())
+            });
+            if res.is_ok() {
+                add_blocker(surface, blocker);
+            }
+        });
+    }
+
     fn compositor_state(&mut self) -> &mut CompositorState {
         &mut self.compositor_state
     }
@@ -710,3 +747,4 @@ delegate_data_device!(State);
 delegate_primary_selection!(State);
 delegate_output!(State);
 delegate_dmabuf!(State);
+delegate_drm_syncobj!(State);

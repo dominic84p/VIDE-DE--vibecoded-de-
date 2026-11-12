@@ -40,7 +40,9 @@ done
 install -Dm755 "$ROOT/scripts/vide-session" /usr/local/bin/vide-session
 install -Dm644 "$ROOT/scripts/vide-de.desktop" /usr/share/wayland-sessions/vide-de.desktop
 install -Dm644 "$ROOT/scripts/vide.portal" /usr/share/xdg-desktop-portal/portals/vide.portal
-install -Dm644 "$ROOT/scripts/VIDE-portals.conf" /usr/share/xdg-desktop-portal/VIDE-portals.conf
+rm -f /usr/share/xdg-desktop-portal/VIDE-portals.conf
+install -Dm644 "$ROOT/scripts/VIDE-portals.conf" /usr/share/xdg-desktop-portal/vide-portals.conf
+install -Dm644 "$ROOT/scripts/VIDE-portals.conf" /usr/share/xdg-desktop-portal/vide-de-portals.conf
 install -Dm644 "$ROOT/scripts/org.freedesktop.impl.portal.desktop.vide.service" /usr/share/dbus-1/services/org.freedesktop.impl.portal.desktop.vide.service
 
 # Hook up KWallet PAM auto-unlock for SDDM if not already configured.

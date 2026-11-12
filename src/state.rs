@@ -503,10 +503,12 @@ impl State {
             "for a in /usr/lib/polkit-kde-authentication-agent-1 /usr/libexec/polkit-kde-authentication-agent-1 \
              /usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1; do [ -x \"$a\" ] && exec \"$a\"; done",
         );
-        // Start our screenshare / screenshot portal backend if available.
+        // Start our screenshare / screenshot portal backend and reload xdg-desktop-portal
+        // so it picks up vide-portals.conf on the current D-Bus/Wayland environment.
         if let Some(portal) = crate::input::own_app("vide-portal") {
             self.spawn(&portal);
         }
+        self.spawn("systemctl --user try-restart xdg-desktop-portal 2>/dev/null || true");
         // The desktop (wallpaper + icons) is its own program on the background layer;
         // without it we fall back to drawing a wallpaper ourselves.
         if let Some(desktop) = crate::input::own_app("vide-desktop") {

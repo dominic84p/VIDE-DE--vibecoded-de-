@@ -119,7 +119,7 @@ void *pw_cast_start(uint32_t width, uint32_t height, uint32_t fps) {
         SPA_TYPE_OBJECT_Format, SPA_PARAM_EnumFormat,
         SPA_FORMAT_mediaType, SPA_POD_Id(SPA_MEDIA_TYPE_video),
         SPA_FORMAT_mediaSubtype, SPA_POD_Id(SPA_MEDIA_SUBTYPE_raw),
-        SPA_FORMAT_VIDEO_format, SPA_POD_Id(SPA_VIDEO_FORMAT_RGBA),
+        SPA_FORMAT_VIDEO_format, SPA_POD_Id(SPA_VIDEO_FORMAT_BGRx),
         SPA_FORMAT_VIDEO_size, SPA_POD_Rectangle(&def_size),
         SPA_FORMAT_VIDEO_framerate, SPA_POD_Fraction(&def_fps)
     );
@@ -159,7 +159,13 @@ void pw_cast_push_rgba(void *p, const uint8_t *rgba, uint32_t w, uint32_t h) {
     size_t n = (size_t)w * h * 4;
     pthread_mutex_lock(&ctx->mu);
     if (n == ctx->frame_bytes && ctx->frame) {
-        memcpy(ctx->frame, rgba, n);
+        // Convert RGBA -> BGRx for PipeWire/OBS/Chromium compatibility.
+        for (size_t i = 0; i + 3 < n; i += 4) {
+            ctx->frame[i + 0] = rgba[i + 2];
+            ctx->frame[i + 1] = rgba[i + 1];
+            ctx->frame[i + 2] = rgba[i + 0];
+            ctx->frame[i + 3] = 0xff;
+        }
     }
     pthread_mutex_unlock(&ctx->mu);
     pw_thread_loop_lock(ctx->loop);

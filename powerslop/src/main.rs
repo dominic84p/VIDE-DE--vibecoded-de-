@@ -356,6 +356,54 @@ impl App {
     }
 }
 
+/// Forward keyboard events to the PTY when PowerSlop has window focus but the
+/// mouse pointer is outside `term_rect` (working around egui_term's `contains_pointer` gate).
+fn forward_unhovered_keys(ctx: &egui::Context, b: &mut TerminalBackend) {
+    let (focused, events) = ctx.input(|i| (i.focused, i.events.clone()));
+    if !focused {
+        return;
+    }
+    for ev in events {
+        match ev {
+            egui::Event::Text(t) => {
+                b.process_command(BackendCommand::Write(t.into_bytes()));
+            }
+            egui::Event::Key { key, pressed: true, modifiers, .. } => {
+                if modifiers.ctrl && !modifiers.shift && !modifiers.alt {
+                    let name = key.name();
+                    if name.len() == 1 {
+                        let ch = name.as_bytes()[0].to_ascii_lowercase();
+                        if ch.is_ascii_lowercase() {
+                            b.process_command(BackendCommand::Write(vec![ch - b'a' + 1]));
+                            continue;
+                        }
+                    }
+                }
+                let seq: Option<&[u8]> = match key {
+                    Key::Enter => Some(b"\r"),
+                    Key::Backspace => Some(b"\x7f"),
+                    Key::Tab => Some(b"\t"),
+                    Key::Escape => Some(b"\x1b"),
+                    Key::ArrowUp => Some(b"\x1b[A"),
+                    Key::ArrowDown => Some(b"\x1b[B"),
+                    Key::ArrowRight => Some(b"\x1b[C"),
+                    Key::ArrowLeft => Some(b"\x1b[D"),
+                    Key::Home => Some(b"\x1b[H"),
+                    Key::End => Some(b"\x1b[F"),
+                    Key::Delete => Some(b"\x1b[3~"),
+                    Key::PageUp => Some(b"\x1b[5~"),
+                    Key::PageDown => Some(b"\x1b[6~"),
+                    _ => None,
+                };
+                if let Some(bytes) = seq {
+                    b.process_command(BackendCommand::Write(bytes.to_vec()));
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         while let Ok((_, event)) = self.events_rx.try_recv() {
@@ -420,7 +468,8 @@ impl eframe::App for App {
             }
 
             let Some(b) = self.backend.as_mut() else { return };
-            if ui.input(|i| i.pointer.hover_pos().is_some_and(|p| term_rect.contains(p))) {
+            let pointer_in_term = ui.input(|i| i.pointer.hover_pos().is_some_and(|p| term_rect.contains(p)));
+            if pointer_in_term {
                 let (scroll_delta, ctrl_held) = ui.input(|i| (i.raw_scroll_delta.y, i.modifiers.ctrl));
                 if scroll_delta != 0.0 {
                     if ctrl_held {
@@ -430,6 +479,8 @@ impl eframe::App for App {
                         b.process_command(BackendCommand::Scroll(lines));
                     }
                 }
+            } else {
+                forward_unhovered_keys(ctx, b);
             }
             let font = TerminalFont::new(FontSettings { font_type: FontId::monospace(self.font_size) });
             let mut child = ui.new_child(egui::UiBuilder::new().max_rect(term_rect));

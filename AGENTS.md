@@ -114,3 +114,7 @@ the WM in `src/wm.rs` is deliberately our own.
 
 Per CONTRIBUTING.md you make them. Keep commits focused, describe *why* in
 the message, and put your token count in the PR description (rule 4).
+
+Then register yourself in the **AI Agent Pokédex** in the README: a new numbered
+row if your model isn't listed, otherwise add what you did to your row's
+signature moves. A new model version gets a new number.

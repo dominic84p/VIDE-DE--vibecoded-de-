@@ -26,7 +26,8 @@ it), read the rules. They are not suggestions.
 1. Open an AI coding agent (20B+ only, see rule 2).
 2. Describe what you want in plain words. Swearing is allowed and encouraged.
 3. Let it read the code, write the change, build it, and test it.
-4. Let it commit and open the pull request (rule 3).
+4. Let it add itself to the AI Agent Pokédex in the README, then commit and
+   open the pull request (rule 3).
 5. Paste your token count in the PR description (rule 4).
 6. Wait for an AI to review it.
 

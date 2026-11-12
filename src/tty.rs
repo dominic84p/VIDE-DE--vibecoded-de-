@@ -262,9 +262,11 @@ pub fn run(event_loop: &mut EventLoop<'static, State>, state: &mut State) -> Res
             state.needs_redraw = false;
             let t = &mut *t;
             let elements = render::elements(&mut t.renderer, state);
-            // Composite everything, cursor included. Hardware cursor/overlay planes are flaky on
-            // NVIDIA, and direct scanout of client buffers skips our explicit-sync wait.
-            let flags = FrameFlags::empty();
+            // Composite everything by default: hardware cursor/overlay planes are flaky on
+            // NVIDIA. "Ultra Performance Mode" lets a fullscreen app's buffer be scanned out
+            // directly; the explicit-sync blocker already held its commit until the GPU
+            // finished, so the frame is complete by the time it can be picked.
+            let flags = if state.config.direct_scanout { FrameFlags::ALLOW_PRIMARY_PLANE_SCANOUT } else { FrameFlags::empty() };
             match t.output.render_frame(&mut t.renderer, &elements, render::CLEAR, flags) {
                 Ok(res) if !res.is_empty => match t.output.queue_frame(()) {
                     Ok(()) => t.frame_pending = true,

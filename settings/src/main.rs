@@ -14,17 +14,19 @@ const DIM: Color32 = Color32::from_rgb(0xa0, 0xa0, 0xa0);
 enum Page {
     Personalization,
     Mouse,
+    Gaming,
     Start,
     About,
 }
 
 impl Page {
-    const ALL: [Page; 4] = [Page::Personalization, Page::Mouse, Page::Start, Page::About];
+    const ALL: [Page; 5] = [Page::Personalization, Page::Mouse, Page::Gaming, Page::Start, Page::About];
 
     fn title(self) -> &'static str {
         match self {
             Page::Personalization => "Personalization",
             Page::Mouse => "Mouse",
+            Page::Gaming => "Gaming",
             Page::Start => "Start",
             Page::About => "About",
         }
@@ -175,6 +177,14 @@ impl eframe::App for Settings {
                         ui.spacing_mut().slider_width = 220.0;
                         ui.add(egui::Slider::new(&mut self.config.mouse_speed, -1.0..=1.0).show_value(false)).changed()
                     });
+                }
+                Page::Gaming => {
+                    changed |= row(
+                        ui,
+                        "Ultra Performance Mode",
+                        "Fullscreen optimizations: fullscreen games go straight to the screen instead of being composited (direct scanout). Lower latency; may flicker on some NVIDIA setups.",
+                        |ui| ui.checkbox(&mut self.config.direct_scanout, "").changed(),
+                    );
                 }
                 Page::Start => {
                     changed |= row(

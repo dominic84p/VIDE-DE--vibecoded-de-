@@ -13,13 +13,17 @@ pub struct Config {
     pub mouse_speed: f64,
     /// Desktop wallpaper image (drawn by vide-desktop, scaled to fill).
     pub wallpaper: PathBuf,
+    /// "Ultra Performance Mode": let fullscreen apps' frames go straight to the screen
+    /// (direct scanout) instead of being composited. Off by default: some NVIDIA setups
+    /// flicker with it.
+    pub direct_scanout: bool,
 }
 
 impl Default for Config {
     fn default() -> Self {
         // First run: start from what the user already set up in KDE.
         let (mouse_flat, mouse_speed) = kde_mouse().unwrap_or((true, 0.0));
-        Self { hide_kde_apps: false, mouse_flat, mouse_speed, wallpaper: wallpapers_dir().join("bloom.png") }
+        Self { hide_kde_apps: false, mouse_flat, mouse_speed, wallpaper: wallpapers_dir().join("bloom.png"), direct_scanout: false }
     }
 }
 
@@ -42,6 +46,7 @@ impl Config {
                 "mouse_flat" => c.mouse_flat = v == "true",
                 "mouse_speed" => c.mouse_speed = v.parse::<f64>().unwrap_or(c.mouse_speed).clamp(-1.0, 1.0),
                 "wallpaper" if !v.is_empty() => c.wallpaper = PathBuf::from(v),
+                "direct_scanout" => c.direct_scanout = v == "true",
                 _ => {}
             }
         }
@@ -55,8 +60,8 @@ impl Config {
         }
         let text = format!(
             "# VIDE-DE settings. Edited by the Settings app; changes apply live.\n\
-             hide_kde_apps={}\nmouse_flat={}\nmouse_speed={:.2}\nwallpaper={}\n",
-            self.hide_kde_apps, self.mouse_flat, self.mouse_speed, self.wallpaper.display()
+             hide_kde_apps={}\nmouse_flat={}\nmouse_speed={:.2}\nwallpaper={}\ndirect_scanout={}\n",
+            self.hide_kde_apps, self.mouse_flat, self.mouse_speed, self.wallpaper.display(), self.direct_scanout
         );
         // Write-then-rename so the compositor never reads a half-written file.
         let tmp = path.with_extension("conf.tmp");

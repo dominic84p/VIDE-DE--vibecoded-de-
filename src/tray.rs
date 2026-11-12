@@ -802,16 +802,20 @@ fn lock(c: &mut Canvas, x: i32, y: i32, color: Rgba) {
     c.outline(x + 1, y, 6, 6, color);
 }
 
-// Windows-style outline glyphs (20x20 grid, white, round joins), rendered with resvg.
-const SPEAKER: &str = r##"<path d="M2.5 7.5h3.2L10.5 3.8v12.4L5.7 12.5H2.5z" fill="none" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/>"##;
+// Windows 10 Segoe MDL2-style glyphs (20x20 grid, white, sharp miter/butt strokes), rendered with resvg.
+const SPEAKER: &str = r##"<path d="M2.8 7.8h3.1L10.3 3.8v12.4L5.9 12.2H2.8z" fill="none" stroke="#fff" stroke-width="1.2" stroke-linejoin="miter"/>"##;
 const WAVES: [&str; 3] = [
-    r##"<path d="M13 8a2.8 2.8 0 0 1 0 4" fill="none" stroke="#fff" stroke-width="1.4" stroke-linecap="round"/>"##,
-    r##"<path d="M15 6a5.6 5.6 0 0 1 0 8" fill="none" stroke="#fff" stroke-width="1.4" stroke-linecap="round"/>"##,
-    r##"<path d="M17 4a8.5 8.5 0 0 1 0 12" fill="none" stroke="#fff" stroke-width="1.4" stroke-linecap="round"/>"##,
+    r##"<path d="M12.5 7.9a3 3 0 0 1 0 4.2" fill="none" stroke="#fff" stroke-width="1.2" stroke-linecap="butt"/>"##,
+    r##"<path d="M14.4 6a5.6 5.6 0 0 1 0 8" fill="none" stroke="#fff" stroke-width="1.2" stroke-linecap="butt"/>"##,
+    r##"<path d="M16.3 4.1a8.3 8.3 0 0 1 0 11.8" fill="none" stroke="#fff" stroke-width="1.2" stroke-linecap="butt"/>"##,
 ];
-const MUTE: &str = r##"<path d="M13.5 7.8l4.4 4.4M17.9 7.8l-4.4 4.4" fill="none" stroke="#fff" stroke-width="1.4" stroke-linecap="round"/>"##;
-/// The Wi-Fi fan's arcs, outermost first.
-const ARCS: [&str; 3] = ["M2.5 7.5a11 11 0 0 1 15 0", "M5.5 10.8a7 7 0 0 1 9 0", "M8.5 14a3 3 0 0 1 3 0"];
+const MUTE: &str = r##"<path d="M13 7.6l4.8 4.8M17.8 7.6l-4.8 4.8" fill="none" stroke="#fff" stroke-width="1.25" stroke-linecap="butt"/>"##;
+/// Windows 10's 90-degree wedge Wi-Fi arcs, outermost first.
+const ARCS: [&str; 3] = [
+    "M1.9 7.7a11.5 11.5 0 0 1 16.2 0",
+    "M4.3 10.1a8 8 0 0 1 11.4 0",
+    "M6.8 12.6a4.5 4.5 0 0 1 6.4 0",
+];
 
 fn sun_svg() -> String {
     let mut rays = String::new();
@@ -820,24 +824,24 @@ fn sun_svg() -> String {
         let (s, c) = a.sin_cos();
         rays += &format!(
             r##"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}"/>"##,
-            10.0 + c * 6.0, 10.0 + s * 6.0, 10.0 + c * 8.2, 10.0 + s * 8.2
+            10.0 + c * 5.8, 10.0 + s * 5.8, 10.0 + c * 8.2, 10.0 + s * 8.2
         );
     }
     format!(
-        r##"<circle cx="10" cy="10" r="3.6" fill="none" stroke="#fff" stroke-width="1.4"/><g stroke="#fff" stroke-width="1.4" stroke-linecap="round">{rays}</g>"##
+        r##"<circle cx="10" cy="10" r="3.6" fill="none" stroke="#fff" stroke-width="1.2"/><g stroke="#fff" stroke-width="1.25" stroke-linecap="butt">{rays}</g>"##
     )
 }
 
-/// The Wi-Fi fan with `bars` (0-4) lit and the rest greyed, like Windows' signal icon.
+/// The Wi-Fi fan with `bars` (0-4) lit and the rest greyed, like Windows 10's signal icon.
 fn wifi_svg(bars: u8) -> String {
     let mut s = String::new();
     for (i, d) in ARCS.iter().enumerate() {
         let lit = bars as usize >= 4 - i;
         let col = if lit { "#fff" } else { "#6a6a6a" };
-        s += &format!(r##"<path d="{d}" fill="none" stroke="{col}" stroke-width="1.6" stroke-linecap="round"/>"##);
+        s += &format!(r##"<path d="{d}" fill="none" stroke="{col}" stroke-width="1.3" stroke-linecap="butt"/>"##);
     }
     let dot = if bars >= 1 { "#fff" } else { "#6a6a6a" };
-    s + &format!(r##"<circle cx="10" cy="17" r="1.2" fill="{dot}"/>"##)
+    s + &format!(r##"<circle cx="10" cy="15.8" r="1.15" fill="{dot}"/>"##)
 }
 
 thread_local! {

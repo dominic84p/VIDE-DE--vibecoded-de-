@@ -1,27 +1,35 @@
 //! vide-desktop: the VIDE-DE desktop as its own program. One full-screen surface on
-//! the wlr-layer-shell *background* layer: the wallpaper, and the ~/Desktop items in
-//! a Windows-style grid (top to bottom, then left to right).
+//! the wlr-layer-shell *background* layer: the wallpaper, and the ~/Desktop items on
+//! a Windows-style grid.
 //!
-//! Double-click opens (folders in File Exploder, launchers run, files via xdg-open);
-//! right-click gives a desktop menu. Polls the wallpaper setting and ~/Desktop.
+//! Icons sit in grid cells you can drag them to (positions are remembered), or are
+//! auto-arranged. Rubber-band and Ctrl/Shift-click selection; drop on a folder to move
+//! files into it, or on the Recycle Bin to delete. Keyboard: Delete, F2 rename,
+//! Enter, arrows, Ctrl+A, Esc. Right-click for View / Sort by and more.
+
+mod gfx;
 
 use std::{
-    path::{Path, PathBuf},
+    collections::HashMap,
+    path::PathBuf,
     process::Command,
     time::{Duration, Instant, SystemTime},
 };
 
+use calloop_wayland_source::WaylandSource;
+use gfx::{desktop_dir, home, load_icon, mime_icon, own_app, parse_launcher, text_width, trash_dir, wrap, Canvas, Icon};
 use smithay_client_toolkit::{
     compositor::{CompositorHandler, CompositorState},
     delegate_registry,
     output::{OutputHandler, OutputState},
-    registry::{ProvidesRegistryState, RegistryState},
-    registry_handlers,
     reexports::calloop::{
         timer::{TimeoutAction, Timer},
         EventLoop,
     },
+    registry::{ProvidesRegistryState, RegistryState},
+    registry_handlers,
     seat::{
+        keyboard::{KeyEvent, KeyboardHandler, Keysym, Modifiers, RawModifiers},
         pointer::{PointerEvent, PointerEventKind, PointerHandler, BTN_LEFT, BTN_RIGHT},
         Capability, SeatHandler, SeatState,
     },
@@ -31,21 +39,19 @@ use smithay_client_toolkit::{
     },
     shm::{slot::SlotPool, Shm, ShmHandler},
 };
-use calloop_wayland_source::WaylandSource;
 use wayland_client::{
     globals::registry_queue_init,
-    protocol::{wl_output, wl_pointer, wl_seat, wl_shm, wl_surface},
+    protocol::{wl_keyboard, wl_output, wl_pointer, wl_seat, wl_shm, wl_surface},
     Connection, QueueHandle,
 };
 
-const CELL_W: i32 = 84;
-const CELL_H: i32 = 96;
-const ICON: u32 = 48;
 const MARGIN: i32 = 8;
-const LABEL: f32 = 12.5;
-const MENU_W: i32 = 220;
+const MENU_W: i32 = 240;
 const MENU_ROW: i32 = 30;
 const DOUBLE_CLICK: Duration = Duration::from_millis(400);
+const DRAG_START: f64 = 5.0;
+/// Room left for our taskbar at the bottom of the screen.
+const TASKBAR_H: i32 = 40;
 
 fn main() {
     let conn = Connection::connect_to_env().expect("vide-desktop needs a Wayland session");
@@ -61,9 +67,11 @@ fn main() {
     // Fill the whole output, and don't push windows around.
     layer.set_anchor(Anchor::TOP | Anchor::BOTTOM | Anchor::LEFT | Anchor::RIGHT);
     layer.set_exclusive_zone(-1);
-    layer.set_keyboard_interactivity(KeyboardInteractivity::None);
+    // Keyboard only after you click the desktop (Delete, F2, arrows...).
+    layer.set_keyboard_interactivity(KeyboardInteractivity::OnDemand);
     layer.commit();
 
+    let prefs = Prefs::load();
     let mut desktop = Desktop {
         registry: RegistryState::new(&globals),
         seat: SeatState::new(&globals, &qh),
@@ -72,6 +80,8 @@ fn main() {
         shm,
         layer,
         pointer: None,
+        keyboard: None,
+        mods: Modifiers::default(),
         size: (0, 0),
         configured: false,
         dirty: true,
@@ -79,11 +89,16 @@ fn main() {
         config: vide_config::Config::load(),
         config_mtime: vide_config::Config::mtime(),
         wallpaper: None,
-        font: load_font(),
+        font: gfx::load_font(),
         items: Vec::new(),
         desktop_mtime: None,
+        prefs,
         hover: None,
         selected: Vec::new(),
+        anchor: None,
+        press: None,
+        rubber: None,
+        renaming: None,
         menu: None,
         mouse: (0.0, 0.0),
         last_click: None,
@@ -109,12 +124,98 @@ fn main() {
     }
 }
 
+// ---------------------------------------------------------------- prefs
+
+#[derive(Clone, Copy, PartialEq)]
+enum SortBy {
+    Name,
+    Modified,
+    Type,
+}
+
+/// ~/.config/vide-de/desktop.conf: view options and where each icon was put.
+struct Prefs {
+    icon: u32,
+    sort: SortBy,
+    auto_arrange: bool,
+    positions: HashMap<String, (i32, i32)>,
+}
+
+impl Prefs {
+    fn path() -> PathBuf {
+        home().join(".config/vide-de/desktop.conf")
+    }
+
+    fn load() -> Self {
+        let mut p = Prefs { icon: 48, sort: SortBy::Name, auto_arrange: false, positions: HashMap::new() };
+        let text = std::fs::read_to_string(Self::path()).unwrap_or_default();
+        for line in text.lines() {
+            if let Some(rest) = line.strip_prefix("pos=") {
+                let f: Vec<&str> = rest.split('\t').collect();
+                if let [name, c, r] = f[..] {
+                    if let (Ok(c), Ok(r)) = (c.parse(), r.parse()) {
+                        p.positions.insert(name.to_string(), (c, r));
+                    }
+                }
+                continue;
+            }
+            let Some((k, v)) = line.split_once('=') else { continue };
+            match k {
+                "icon_size" => p.icon = v.parse().unwrap_or(48).clamp(24, 96),
+                "auto_arrange" => p.auto_arrange = v == "true",
+                "sort" => {
+                    p.sort = match v {
+                        "modified" => SortBy::Modified,
+                        "type" => SortBy::Type,
+                        _ => SortBy::Name,
+                    }
+                }
+                _ => {}
+            }
+        }
+        p
+    }
+
+    fn save(&self) {
+        let sort = match self.sort {
+            SortBy::Name => "name",
+            SortBy::Modified => "modified",
+            SortBy::Type => "type",
+        };
+        let mut out = format!("icon_size={}\nauto_arrange={}\nsort={sort}\n", self.icon, self.auto_arrange);
+        for (name, (c, r)) in &self.positions {
+            out += &format!("pos={name}\t{c}\t{r}\n");
+        }
+        let path = Self::path();
+        if let Some(d) = path.parent() {
+            let _ = std::fs::create_dir_all(d);
+        }
+        let _ = std::fs::write(path, out);
+    }
+
+    fn cell_w(&self) -> i32 {
+        self.icon as i32 + 36
+    }
+
+    fn cell_h(&self) -> i32 {
+        self.icon as i32 + 50
+    }
+}
+
+// ---------------------------------------------------------------- items
+
 struct Item {
     name: String,
+    /// The file on disk (Recycle Bin: the trash folder).
     path: PathBuf,
-    /// What double-click does.
     open: Open,
     icon: Option<Icon>,
+    modified: Option<SystemTime>,
+    kind: String,
+    /// Grid cell (column, row).
+    cell: (i32, i32),
+    /// Can be renamed, deleted or moved into folders (not the Recycle Bin).
+    real: bool,
 }
 
 enum Open {
@@ -123,29 +224,33 @@ enum Open {
     Launcher(String),
 }
 
-/// Premultiplied BGRA (matches wl_shm Argb8888 in memory).
-struct Icon {
-    w: u32,
-    h: u32,
-    px: Vec<u8>,
-}
-
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, PartialEq)]
 enum MenuAction {
     Open,
+    Rename,
     Delete,
     Refresh,
     NewFolder,
     Personalize,
     Terminal,
     About,
+    IconSize(u32),
+    AutoArrange,
+    Sort(SortBy),
 }
 
 struct Menu {
     x: i32,
     y: i32,
-    items: Vec<(&'static str, MenuAction)>,
+    items: Vec<(String, Option<MenuAction>)>,
     hover: Option<usize>,
+}
+
+/// Left button held on an item: maybe a click, maybe the start of a drag.
+struct Press {
+    start: (f64, f64),
+    item: usize,
+    dragging: bool,
 }
 
 struct Desktop {
@@ -156,6 +261,8 @@ struct Desktop {
     pool: SlotPool,
     layer: LayerSurface,
     pointer: Option<wl_pointer::WlPointer>,
+    keyboard: Option<wl_keyboard::WlKeyboard>,
+    mods: Modifiers,
     size: (u32, u32),
     configured: bool,
     dirty: bool,
@@ -167,79 +274,109 @@ struct Desktop {
     font: Option<fontdue::Font>,
     items: Vec<Item>,
     desktop_mtime: Option<SystemTime>,
+    prefs: Prefs,
     hover: Option<usize>,
     selected: Vec<usize>,
+    /// Where Shift-click ranges start.
+    anchor: Option<usize>,
+    press: Option<Press>,
+    /// Rubber-band selection: (start, current).
+    rubber: Option<((f64, f64), (f64, f64))>,
+    renaming: Option<(usize, String)>,
     menu: Option<Menu>,
     mouse: (f64, f64),
     last_click: Option<(usize, Instant)>,
 }
 
-// ---------------------------------------------------------------- items
-
-fn home() -> PathBuf {
-    PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| "/".into()))
-}
-
-/// XDG desktop dir (user-dirs.dirs), defaulting to ~/Desktop.
-fn desktop_dir() -> PathBuf {
-    let h = home();
-    let dirs = std::fs::read_to_string(h.join(".config/user-dirs.dirs")).unwrap_or_default();
-    for line in dirs.lines() {
-        if let Some(v) = line.strip_prefix("XDG_DESKTOP_DIR=") {
-            return PathBuf::from(v.trim_matches('"').replace("$HOME", &h.to_string_lossy()));
-        }
-    }
-    h.join("Desktop")
-}
-
-/// Our own apps live next to us.
-fn own_app(name: &str) -> Option<PathBuf> {
-    let p = std::env::current_exe().ok()?.parent()?.join(name);
-    p.exists().then_some(p)
-}
-
-fn trash_dir() -> PathBuf {
-    home().join(".local/share/Trash/files")
-}
-
 impl Desktop {
+    fn rows(&self) -> i32 {
+        ((self.size.1 as i32 - MARGIN * 2 - TASKBAR_H) / self.prefs.cell_h()).max(1)
+    }
+
+    fn cols(&self) -> i32 {
+        ((self.size.0 as i32 - MARGIN * 2) / self.prefs.cell_w()).max(1)
+    }
+
     fn rescan(&mut self) {
         let dir = desktop_dir();
         self.desktop_mtime = std::fs::metadata(&dir).and_then(|m| m.modified()).ok();
+        let size = self.prefs.icon;
         let mut items = vec![Item {
             name: "Recycle Bin".into(),
             path: trash_dir(),
             open: Open::Folder(trash_dir()),
-            icon: load_icon("user-trash", ICON),
+            icon: load_icon("user-trash", size),
+            modified: None,
+            kind: String::new(),
+            cell: (0, 0),
+            real: false,
         }];
-        let mut entries: Vec<_> = std::fs::read_dir(&dir).map(|rd| rd.flatten().collect()).unwrap_or_default();
-        entries.sort_by_key(|e| e.file_name().to_string_lossy().to_lowercase());
+        let entries: Vec<_> = std::fs::read_dir(&dir).map(|rd| rd.flatten().collect()).unwrap_or_default();
         for e in entries {
             let path = e.path();
             let name = e.file_name().to_string_lossy().into_owned();
             if name.starts_with('.') {
                 continue;
             }
-            let item = if path.is_dir() {
-                Item { name, open: Open::Folder(path.clone()), path, icon: load_icon("folder", ICON) }
+            let modified = e.metadata().and_then(|m| m.modified()).ok();
+            let kind = if path.is_dir() { " folder".into() } else { path.extension().map(|x| x.to_string_lossy().to_lowercase()).unwrap_or_default() };
+            let (display, open, icon) = if path.is_dir() {
+                (name.clone(), Open::Folder(path.clone()), load_icon("folder", size))
             } else if name.ends_with(".desktop") {
                 let (dname, exec, icon) = parse_launcher(&path);
-                Item {
-                    name: dname.unwrap_or_else(|| name.trim_end_matches(".desktop").to_string()),
-                    open: Open::Launcher(exec.unwrap_or_default()),
-                    path,
-                    icon: icon.and_then(|i| load_icon(&i, ICON)).or_else(|| load_icon("application-x-executable", ICON)),
-                }
+                let icon = icon.and_then(|i| load_icon(&i, size)).or_else(|| load_icon("application-x-executable", size));
+                (dname.unwrap_or_else(|| name.trim_end_matches(".desktop").to_string()), Open::Launcher(exec.unwrap_or_default()), icon)
             } else {
-                let icon = mime_icon(&path);
-                Item { name, open: Open::File(path.clone()), path, icon: load_icon(&icon, ICON).or_else(|| load_icon("text-x-generic", ICON)) }
+                let icon = load_icon(&mime_icon(&path), size).or_else(|| load_icon("text-x-generic", size));
+                (name.clone(), Open::File(path.clone()), icon)
             };
-            items.push(item);
+            items.push(Item { name: display, path, open, icon, modified, kind, cell: (0, 0), real: true });
         }
+        // Keep the Recycle Bin first; sort the rest.
+        let sort = self.prefs.sort;
+        items[1..].sort_by(|a, b| match sort {
+            SortBy::Name => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
+            SortBy::Modified => b.modified.cmp(&a.modified),
+            SortBy::Type => a.kind.cmp(&b.kind).then(a.name.to_lowercase().cmp(&b.name.to_lowercase())),
+        });
         self.items = items;
         self.selected.clear();
         self.hover = None;
+        self.renaming = None;
+        self.arrange();
         self.dirty = true;
+    }
+
+    /// The key we remember an item's position under.
+    fn pos_key(item: &Item) -> String {
+        if item.real { item.path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default() } else { "::recycle-bin".into() }
+    }
+
+    /// Put every item in a cell: remembered positions first (unless auto-arranging),
+    /// then the rest fill free cells top-to-bottom, left-to-right.
+    fn arrange(&mut self) {
+        let (cols, rows) = (self.cols(), self.rows());
+        let mut taken = std::collections::HashSet::new();
+        let mut unplaced = Vec::new();
+        for i in 0..self.items.len() {
+            let saved = if self.prefs.auto_arrange { None } else { self.prefs.positions.get(&Self::pos_key(&self.items[i])).copied() };
+            match saved.filter(|&(c, r)| c < cols && r < rows && !taken.contains(&(c, r))) {
+                Some(cell) => {
+                    self.items[i].cell = cell;
+                    taken.insert(cell);
+                }
+                None => unplaced.push(i),
+            }
+        }
+        let mut next = (0..cols).flat_map(|c| (0..rows).map(move |r| (c, r))).filter(|c| !taken.contains(c));
+        for i in unplaced {
+            self.items[i].cell = next.next().unwrap_or((cols - 1, rows - 1));
+        }
+    }
+
+    fn remember_positions(&mut self) {
+        self.prefs.positions = self.items.iter().map(|it| (Self::pos_key(it), it.cell)).collect();
+        self.prefs.save();
     }
 
     fn poll(&mut self) {
@@ -254,29 +391,39 @@ impl Desktop {
             self.config = new;
         }
         let dm = std::fs::metadata(desktop_dir()).and_then(|m| m.modified()).ok();
-        if dm != self.desktop_mtime {
+        if dm != self.desktop_mtime && self.renaming.is_none() {
             self.rescan();
         }
     }
 
-    /// Item cell rectangles, Windows-style: down the first column, then the next.
-    fn cell(&self, i: usize) -> (i32, i32) {
-        let rows = ((self.size.1 as i32 - MARGIN * 2 - 48) / CELL_H).max(1);
-        let (col, row) = (i as i32 / rows, i as i32 % rows);
-        (MARGIN + col * CELL_W, MARGIN + row * CELL_H)
+    fn cell_xy(&self, cell: (i32, i32)) -> (i32, i32) {
+        (MARGIN + cell.0 * self.prefs.cell_w(), MARGIN + cell.1 * self.prefs.cell_h())
+    }
+
+    fn cell_at(&self, x: f64, y: f64) -> (i32, i32) {
+        let c = ((x as i32 - MARGIN) / self.prefs.cell_w()).clamp(0, self.cols() - 1);
+        let r = ((y as i32 - MARGIN) / self.prefs.cell_h()).clamp(0, self.rows() - 1);
+        (c, r)
+    }
+
+    fn item_rect(&self, i: usize) -> (i32, i32, i32, i32) {
+        let (x, y) = self.cell_xy(self.items[i].cell);
+        (x, y, self.prefs.cell_w() - 4, self.prefs.cell_h() - 4)
     }
 
     fn item_at(&self, x: f64, y: f64) -> Option<usize> {
         (0..self.items.len()).find(|&i| {
-            let (cx, cy) = self.cell(i);
-            x >= cx as f64 && x < (cx + CELL_W - 4) as f64 && y >= cy as f64 && y < (cy + CELL_H - 4) as f64
+            let (ix, iy, w, h) = self.item_rect(i);
+            x >= ix as f64 && x < (ix + w) as f64 && y >= iy as f64 && y < (iy + h) as f64
         })
     }
 
     fn menu_item_at(&self, x: f64, y: f64) -> Option<usize> {
         let m = self.menu.as_ref()?;
         let (lx, ly) = (x as i32 - m.x, y as i32 - m.y - 4);
-        (lx >= 0 && lx < MENU_W && ly >= 0).then(|| (ly / MENU_ROW) as usize).filter(|&i| i < m.items.len())
+        (lx >= 0 && lx < MENU_W && ly >= 0)
+            .then(|| (ly / MENU_ROW) as usize)
+            .filter(|&i| m.items.get(i).is_some_and(|(_, a)| a.is_some()))
     }
 
     fn open(&self, i: usize) {
@@ -295,6 +442,121 @@ impl Desktop {
         }
     }
 
+    fn selected_paths(&self) -> Vec<PathBuf> {
+        self.selected.iter().filter_map(|&i| self.items.get(i)).filter(|it| it.real).map(|it| it.path.clone()).collect()
+    }
+
+    fn delete_selected(&mut self) {
+        let paths = self.selected_paths();
+        if !paths.is_empty() {
+            let _ = Command::new("gio").arg("trash").args(&paths).status();
+            self.rescan();
+        }
+    }
+
+    fn start_rename(&mut self) {
+        if let Some(&i) = self.selected.first().filter(|&&i| self.items[i].real) {
+            let name = self.items[i].path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+            self.renaming = Some((i, name));
+            self.dirty = true;
+        }
+    }
+
+    fn commit_rename(&mut self) {
+        let Some((i, new)) = self.renaming.take() else { return };
+        let new = new.trim().to_string();
+        let Some(item) = self.items.get(i) else { return };
+        if !new.is_empty() && !new.contains('/') {
+            let target = desktop_dir().join(&new);
+            if target != item.path && !target.exists() {
+                let old_key = Self::pos_key(item);
+                if std::fs::rename(&item.path, &target).is_ok() {
+                    // Keep its place on the grid under the new name.
+                    if let Some(pos) = self.prefs.positions.remove(&old_key) {
+                        self.prefs.positions.insert(new, pos);
+                        self.prefs.save();
+                    }
+                }
+            }
+        }
+        self.rescan();
+    }
+
+    /// Move dragged items: onto a folder (or the bin) moves the files; elsewhere
+    /// moves the icons by the same number of cells.
+    fn drop_items(&mut self, from: usize, at: (f64, f64)) {
+        if let Some(target) = self.item_at(at.0, at.1).filter(|t| !self.selected.contains(t)) {
+            let paths = self.selected_paths();
+            if paths.is_empty() {
+                return;
+            }
+            if !self.items[target].real {
+                let _ = Command::new("gio").arg("trash").args(&paths).status();
+            } else if let Open::Folder(dir) = &self.items[target].open {
+                for p in &paths {
+                    if let Some(name) = p.file_name() {
+                        let dst = dir.join(name);
+                        if !dst.exists() {
+                            let _ = std::fs::rename(p, &dst);
+                        }
+                    }
+                }
+            } else {
+                return;
+            }
+            self.rescan();
+            return;
+        }
+        let dest = self.cell_at(at.0, at.1);
+        let (fc, fr) = self.items[from].cell;
+        let (dc, dr) = (dest.0 - fc, dest.1 - fr);
+        if (dc, dr) == (0, 0) {
+            return;
+        }
+        let (cols, rows) = (self.cols(), self.rows());
+        let moving: Vec<usize> = self.selected.clone();
+        let mut taken: std::collections::HashSet<(i32, i32)> =
+            (0..self.items.len()).filter(|i| !moving.contains(i)).map(|i| self.items[i].cell).collect();
+        for &i in &moving {
+            let (c, r) = self.items[i].cell;
+            let mut cell = ((c + dc).clamp(0, cols - 1), (r + dr).clamp(0, rows - 1));
+            // Occupied: take the next free cell down the column.
+            let mut tries = 0;
+            while taken.contains(&cell) && tries < cols * rows {
+                cell.1 += 1;
+                if cell.1 >= rows {
+                    cell = ((cell.0 + 1) % cols, 0);
+                }
+                tries += 1;
+            }
+            taken.insert(cell);
+            self.items[i].cell = cell;
+        }
+        // Placing icons by hand turns auto-arrange off, like Windows.
+        self.prefs.auto_arrange = false;
+        self.remember_positions();
+    }
+
+    fn select_click(&mut self, i: usize) {
+        if self.mods.ctrl {
+            if let Some(p) = self.selected.iter().position(|&s| s == i) {
+                self.selected.remove(p);
+            } else {
+                self.selected.push(i);
+            }
+            self.anchor = Some(i);
+        } else if self.mods.shift && self.anchor.is_some() {
+            // Range in grid order (column by column), like Explorer.
+            let a = self.anchor.unwrap();
+            let order = |k: usize| self.items[k].cell;
+            let (lo, hi) = if order(a) <= order(i) { (order(a), order(i)) } else { (order(i), order(a)) };
+            self.selected = (0..self.items.len()).filter(|&k| order(k) >= lo && order(k) <= hi).collect();
+        } else if !self.selected.contains(&i) {
+            self.selected = vec![i];
+            self.anchor = Some(i);
+        }
+    }
+
     fn run(&mut self, action: MenuAction) {
         let spawn = |name: &str, args: &[&str]| {
             if let Some(p) = own_app(name) {
@@ -303,18 +565,12 @@ impl Desktop {
         };
         match action {
             MenuAction::Open => {
-                for &i in &self.selected {
+                for &i in &self.selected.clone() {
                     self.open(i);
                 }
             }
-            MenuAction::Delete => {
-                // Never the Recycle Bin itself (index 0), and only to the trash.
-                let paths: Vec<_> = self.selected.iter().filter(|&&i| i > 0).filter_map(|&i| self.items.get(i)).map(|it| it.path.clone()).collect();
-                if !paths.is_empty() {
-                    let _ = Command::new("gio").arg("trash").args(&paths).status();
-                }
-                self.rescan();
-            }
+            MenuAction::Rename => self.start_rename(),
+            MenuAction::Delete => self.delete_selected(),
             MenuAction::Refresh => self.rescan(),
             MenuAction::NewFolder => {
                 let dir = desktop_dir();
@@ -324,13 +580,36 @@ impl Desktop {
                     name = format!("New folder ({n})");
                     n += 1;
                 }
-                let _ = std::fs::create_dir_all(dir.join(name));
+                let _ = std::fs::create_dir_all(dir.join(&name));
                 self.rescan();
+                // Straight into renaming it, like Windows.
+                if let Some(i) = self.items.iter().position(|it| it.real && it.path.file_name().is_some_and(|f| f == name.as_str())) {
+                    self.selected = vec![i];
+                    self.start_rename();
+                }
             }
             MenuAction::Personalize => spawn("vide-settings", &["--page", "personalization"]),
             MenuAction::Terminal => spawn("powerslop", &[]),
             MenuAction::About => spawn("vide-about", &[]),
+            MenuAction::IconSize(s) => {
+                self.prefs.icon = s;
+                self.prefs.save();
+                self.rescan();
+            }
+            MenuAction::AutoArrange => {
+                self.prefs.auto_arrange = !self.prefs.auto_arrange;
+                self.prefs.save();
+                self.rescan();
+            }
+            MenuAction::Sort(s) => {
+                // Sorting lays icons out afresh in the new order.
+                self.prefs.sort = s;
+                self.prefs.positions.clear();
+                self.prefs.save();
+                self.rescan();
+            }
         }
+        self.dirty = true;
     }
 
     fn pointer(&mut self, ev: &PointerEvent) {
@@ -338,6 +617,30 @@ impl Desktop {
         self.mouse = (x, y);
         match ev.kind {
             PointerEventKind::Motion { .. } | PointerEventKind::Enter { .. } => {
+                if let Some(p) = self.press.as_mut() {
+                    if !p.dragging && ((x - p.start.0).powi(2) + (y - p.start.1).powi(2)).sqrt() > DRAG_START {
+                        p.dragging = true;
+                    }
+                    self.dirty = true;
+                    return;
+                }
+                if let Some((start, _)) = self.rubber {
+                    self.rubber = Some((start, (x, y)));
+                    let (x0, x1) = (start.0.min(x), start.0.max(x));
+                    let (y0, y1) = (start.1.min(y), start.1.max(y));
+                    let base: Vec<usize> = if self.mods.ctrl { self.selected.clone() } else { Vec::new() };
+                    let mut sel = base;
+                    for i in 0..self.items.len() {
+                        let (ix, iy, w, h) = self.item_rect(i);
+                        let hit = (ix as f64) < x1 && ((ix + w) as f64) > x0 && (iy as f64) < y1 && ((iy + h) as f64) > y0;
+                        if hit && !sel.contains(&i) {
+                            sel.push(i);
+                        }
+                    }
+                    self.selected = sel;
+                    self.dirty = true;
+                    return;
+                }
                 let hover = self.item_at(x, y);
                 let mh = self.menu_item_at(x, y);
                 if hover != self.hover || self.menu.as_ref().is_some_and(|m| m.hover != mh) {
@@ -354,11 +657,14 @@ impl Desktop {
                 }
             }
             PointerEventKind::Press { button, .. } => {
+                self.dirty = true;
+                if self.renaming.is_some() {
+                    self.commit_rename();
+                }
                 // An open menu takes the next click.
                 if self.menu.is_some() {
-                    let picked = self.menu_item_at(x, y).and_then(|i| self.menu.as_ref().map(|m| m.items[i].1));
+                    let picked = self.menu_item_at(x, y).and_then(|i| self.menu.as_ref().and_then(|m| m.items[i].1.clone()));
                     self.menu = None;
-                    self.dirty = true;
                     if let (Some(a), BTN_LEFT) = (picked, button) {
                         self.run(a);
                     }
@@ -369,48 +675,135 @@ impl Desktop {
                     (BTN_LEFT, Some(i)) => {
                         let now = Instant::now();
                         let double = matches!(self.last_click, Some((li, t)) if li == i && now - t < DOUBLE_CLICK);
-                        self.selected = vec![i];
+                        self.select_click(i);
                         if double {
                             self.last_click = None;
                             self.open(i);
                         } else {
                             self.last_click = Some((i, now));
+                            if self.selected.contains(&i) {
+                                self.press = Some(Press { start: (x, y), item: i, dragging: false });
+                            }
                         }
                     }
-                    (BTN_LEFT, None) => self.selected.clear(),
+                    (BTN_LEFT, None) => {
+                        if !self.mods.ctrl {
+                            self.selected.clear();
+                        }
+                        self.rubber = Some(((x, y), (x, y)));
+                    }
                     (BTN_RIGHT, Some(i)) => {
                         if !self.selected.contains(&i) {
                             self.selected = vec![i];
+                            self.anchor = Some(i);
                         }
-                        let mut items = vec![("Open", MenuAction::Open)];
-                        if i > 0 {
-                            items.push(("Delete", MenuAction::Delete));
+                        let mut items = vec![("Open".to_string(), Some(MenuAction::Open))];
+                        if self.items[i].real {
+                            items.push((String::new(), None));
+                            items.push(("Rename\tF2".into(), Some(MenuAction::Rename)));
+                            items.push(("Delete\tDel".into(), Some(MenuAction::Delete)));
                         }
                         self.open_menu(x, y, items);
                     }
                     (BTN_RIGHT, None) => {
                         self.selected.clear();
-                        self.open_menu(
-                            x,
-                            y,
-                            vec![
-                                ("Refresh", MenuAction::Refresh),
-                                ("New folder", MenuAction::NewFolder),
-                                ("Open in PowerSlop", MenuAction::Terminal),
-                                ("Personalize", MenuAction::Personalize),
-                                ("About VIDE-DE", MenuAction::About),
-                            ],
-                        );
+                        let check = |on: bool, s: &str| format!("{}{s}", if on { "✓  " } else { "     " });
+                        let p = &self.prefs;
+                        let items = vec![
+                            (check(p.icon >= 64, "Large icons"), Some(MenuAction::IconSize(64))),
+                            (check(p.icon == 48, "Medium icons"), Some(MenuAction::IconSize(48))),
+                            (check(p.icon <= 32, "Small icons"), Some(MenuAction::IconSize(32))),
+                            (check(p.auto_arrange, "Auto arrange icons"), Some(MenuAction::AutoArrange)),
+                            (String::new(), None),
+                            (check(p.sort == SortBy::Name, "Sort by name"), Some(MenuAction::Sort(SortBy::Name))),
+                            (check(p.sort == SortBy::Modified, "Sort by date modified"), Some(MenuAction::Sort(SortBy::Modified))),
+                            (check(p.sort == SortBy::Type, "Sort by type"), Some(MenuAction::Sort(SortBy::Type))),
+                            (String::new(), None),
+                            ("Refresh".into(), Some(MenuAction::Refresh)),
+                            ("New folder".into(), Some(MenuAction::NewFolder)),
+                            ("Open in PowerSlop".into(), Some(MenuAction::Terminal)),
+                            (String::new(), None),
+                            ("Personalize".into(), Some(MenuAction::Personalize)),
+                            ("About VIDE-DE".into(), Some(MenuAction::About)),
+                        ];
+                        self.open_menu(x, y, items);
                     }
                     _ => {}
                 }
+            }
+            PointerEventKind::Release { button: BTN_LEFT, .. } => {
+                if let Some(p) = self.press.take() {
+                    if p.dragging {
+                        self.drop_items(p.item, (x, y));
+                    }
+                }
+                self.rubber = None;
                 self.dirty = true;
             }
             _ => {}
         }
     }
 
-    fn open_menu(&mut self, x: f64, y: f64, items: Vec<(&'static str, MenuAction)>) {
+    fn key(&mut self, ev: &KeyEvent) {
+        self.dirty = true;
+        if let Some((_, text)) = self.renaming.as_mut() {
+            match ev.keysym {
+                Keysym::Return | Keysym::KP_Enter => self.commit_rename(),
+                Keysym::Escape => self.renaming = None,
+                Keysym::BackSpace => {
+                    text.pop();
+                }
+                _ => {
+                    if let Some(s) = ev.utf8.as_ref().filter(|s| s.chars().all(|c| !c.is_control())) {
+                        text.push_str(s);
+                    }
+                }
+            }
+            return;
+        }
+        match ev.keysym {
+            Keysym::Delete => self.delete_selected(),
+            Keysym::F2 => self.start_rename(),
+            Keysym::F5 => self.rescan(),
+            Keysym::Return | Keysym::KP_Enter => {
+                for i in self.selected.clone() {
+                    self.open(i);
+                }
+            }
+            Keysym::Escape => {
+                self.selected.clear();
+                self.menu = None;
+            }
+            Keysym::a | Keysym::A if self.mods.ctrl => self.selected = (0..self.items.len()).collect(),
+            Keysym::Up | Keysym::Down | Keysym::Left | Keysym::Right => {
+                // Move the selection to the nearest icon in that direction.
+                let cur = self.selected.last().copied().unwrap_or(0);
+                let (c, r) = self.items.get(cur).map(|it| it.cell).unwrap_or((0, 0));
+                let (dc, dr) = match ev.keysym {
+                    Keysym::Up => (0, -1),
+                    Keysym::Down => (0, 1),
+                    Keysym::Left => (-1, 0),
+                    _ => (1, 0),
+                };
+                let best = (0..self.items.len())
+                    .filter(|&i| {
+                        let (ic, ir) = self.items[i].cell;
+                        (dc != 0 && (ic - c).signum() == dc && ir == r) || (dr != 0 && (ir - r).signum() == dr && ic == c)
+                    })
+                    .min_by_key(|&i| {
+                        let (ic, ir) = self.items[i].cell;
+                        (ic - c).abs() + (ir - r).abs()
+                    });
+                if let Some(b) = best {
+                    self.selected = vec![b];
+                    self.anchor = Some(b);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn open_menu(&mut self, x: f64, y: f64, items: Vec<(String, Option<MenuAction>)>) {
         let h = items.len() as i32 * MENU_ROW + 8;
         let mx = (x as i32).min(self.size.0 as i32 - MENU_W - 2).max(0);
         let my = (y as i32).min(self.size.1 as i32 - h - 2).max(0);
@@ -426,49 +819,70 @@ impl Desktop {
         }
         self.dirty = false;
         if self.wallpaper.as_ref().is_none_or(|(s, _)| *s != (w, h)) {
-            self.wallpaper = Some(((w, h), load_wallpaper(&self.config.wallpaper, w, h)));
+            self.wallpaper = Some(((w, h), gfx::load_wallpaper(&self.config.wallpaper, w, h)));
         }
-        let cells: Vec<(i32, i32)> = (0..self.items.len()).map(|i| self.cell(i)).collect();
+        let rects: Vec<(i32, i32, i32, i32)> = (0..self.items.len()).map(|i| self.item_rect(i)).collect();
+        let icon_px = self.prefs.icon as i32;
+        let cell_w = self.prefs.cell_w();
+        // While dragging: ghost offset, and where the drop would land.
+        let drag = self.press.as_ref().filter(|p| p.dragging).map(|p| ((self.mouse.0 - p.start.0) as i32, (self.mouse.1 - p.start.1) as i32));
+        let drop_target = drag.and_then(|_| self.item_at(self.mouse.0, self.mouse.1)).filter(|t| !self.selected.contains(t));
+
         let stride = w as i32 * 4;
         let Ok((buffer, canvas)) = self.pool.create_buffer(w as i32, h as i32, stride, wl_shm::Format::Argb8888) else { return };
         let mut c = Canvas { w: w as i32, h: h as i32, px: canvas };
         c.px.copy_from_slice(&self.wallpaper.as_ref().unwrap().1);
 
-        for (i, &(x, y)) in cells.iter().enumerate() {
+        for (i, &(x, y, iw, ih)) in rects.iter().enumerate() {
             let selected = self.selected.contains(&i);
-            if selected {
-                c.rect(x, y, CELL_W - 4, CELL_H - 4, [0xd7, 0x78, 0x00, 0x66]);
-                c.outline(x, y, CELL_W - 4, CELL_H - 4, [0xff, 0xc0, 0x80, 0xaa]);
-            } else if self.hover == Some(i) {
-                c.rect(x, y, CELL_W - 4, CELL_H - 4, [0xff, 0xff, 0xff, 0x33]);
-            }
             let item = &self.items[i];
-            if let Some(icon) = &item.icon {
-                c.image(icon, x + (CELL_W - 4 - icon.w as i32) / 2, y + 6);
+            if selected {
+                c.rect(x, y, iw, ih, [0xd7, 0x78, 0x00, 0x66]);
+                c.outline(x, y, iw, ih, [0xff, 0xc0, 0x80, 0xaa]);
+            } else if self.hover == Some(i) || drop_target == Some(i) {
+                c.rect(x, y, iw, ih, [0xff, 0xff, 0xff, 0x33]);
             }
-            if let Some(f) = &self.font {
-                // Up to two lines, centred, white with a soft shadow (Windows desktop labels).
-                for (li, line) in wrap(f, &item.name, (CELL_W - 10) as f32, 2).iter().enumerate() {
-                    let lw = text_width(f, line);
-                    let tx = x + (CELL_W - 4 - lw) / 2;
-                    let ty = y + 6 + ICON as i32 + 4 + li as i32 * 16;
-                    c.text(f, tx + 1, ty + 1, line, [0, 0, 0, 0xc0]);
-                    c.text(f, tx, ty, line, [0xff, 0xff, 0xff, 0xff]);
-                }
+            // Dragged icons are drawn at the pointer instead (below).
+            if selected && drag.is_some() {
+                continue;
             }
+            draw_item(&mut c, self.font.as_ref(), item, x, y, icon_px, cell_w, self.renaming.as_ref().filter(|(ri, _)| *ri == i).map(|(_, t)| t.as_str()));
+        }
+
+        if let Some((dx, dy)) = drag {
+            for &i in &self.selected {
+                let (x, y, _, _) = rects[i];
+                draw_item(&mut c, self.font.as_ref(), &self.items[i], x + dx, y + dy, icon_px, cell_w, None);
+            }
+        }
+
+        if let Some((a, b)) = self.rubber {
+            let (x0, y0) = (a.0.min(b.0) as i32, a.1.min(b.1) as i32);
+            let (x1, y1) = (a.0.max(b.0) as i32, a.1.max(b.1) as i32);
+            c.rect(x0, y0, x1 - x0, y1 - y0, [0xd7, 0x78, 0x00, 0x40]);
+            c.outline(x0, y0, x1 - x0, y1 - y0, [0xd7, 0x78, 0x00, 0xcc]);
         }
 
         if let Some(m) = &self.menu {
             let mh = m.items.len() as i32 * MENU_ROW + 8;
             c.rect(m.x, m.y, MENU_W, mh, [0x2b, 0x2b, 0x2b, 0xf8]);
             c.outline(m.x, m.y, MENU_W, mh, [0x4a, 0x4a, 0x4a, 0xff]);
-            for (i, (label, _)) in m.items.iter().enumerate() {
+            for (i, (label, action)) in m.items.iter().enumerate() {
                 let ry = m.y + 4 + i as i32 * MENU_ROW;
+                if action.is_none() {
+                    c.rect(m.x + 12, ry + MENU_ROW / 2, MENU_W - 24, 1, [0x4a, 0x4a, 0x4a, 0xff]);
+                    continue;
+                }
                 if m.hover == Some(i) {
                     c.rect(m.x + 1, ry, MENU_W - 2, MENU_ROW, [0xff, 0xff, 0xff, 0x1f]);
                 }
                 if let Some(f) = &self.font {
-                    c.text(f, m.x + 16, ry + 8, label, [0xff, 0xff, 0xff, 0xff]);
+                    let (text, shortcut) = label.split_once('\t').unwrap_or((label, ""));
+                    c.text(f, m.x + 14, ry + 8, text, [0xff, 0xff, 0xff, 0xff]);
+                    if !shortcut.is_empty() {
+                        let sw = text_width(f, shortcut);
+                        c.text(f, m.x + MENU_W - 14 - sw, ry + 8, shortcut, [0xa0, 0xa0, 0xa0, 0xff]);
+                    }
                 }
             }
         }
@@ -480,266 +894,31 @@ impl Desktop {
     }
 }
 
-// ---------------------------------------------------------------- pixels
-
-struct Canvas<'a> {
-    w: i32,
-    h: i32,
-    /// BGRA, premultiplied.
-    px: &'a mut [u8],
-}
-
-impl Canvas<'_> {
-    /// Blend a straight-alpha BGRA colour at `cov` coverage.
-    fn blend(&mut self, x: i32, y: i32, c: [u8; 4], cov: f32) {
-        if x < 0 || y < 0 || x >= self.w || y >= self.h {
-            return;
-        }
-        let a = c[3] as f32 / 255.0 * cov;
-        if a <= 0.0 {
-            return;
-        }
-        let i = ((y * self.w + x) * 4) as usize;
-        for k in 0..3 {
-            self.px[i + k] = (c[k] as f32 * a + self.px[i + k] as f32 * (1.0 - a)) as u8;
-        }
-        self.px[i + 3] = 255;
+/// One desktop icon: picture plus a centred two-line label (or the rename box).
+#[allow(clippy::too_many_arguments)]
+fn draw_item(c: &mut Canvas, font: Option<&fontdue::Font>, item: &Item, x: i32, y: i32, icon_px: i32, cell_w: i32, renaming: Option<&str>) {
+    if let Some(icon) = &item.icon {
+        c.image(icon, x + (cell_w - 4 - icon.w as i32) / 2, y + 6);
     }
-
-    fn rect(&mut self, x: i32, y: i32, w: i32, h: i32, c: [u8; 4]) {
-        for yy in y.max(0)..(y + h).min(self.h) {
-            for xx in x.max(0)..(x + w).min(self.w) {
-                self.blend(xx, yy, c, 1.0);
-            }
-        }
+    let Some(f) = font else { return };
+    let ty = y + 6 + icon_px + 4;
+    if let Some(text) = renaming {
+        // Inline rename box, like Explorer's.
+        let shown = format!("{text}|");
+        let tw = text_width(f, &shown).max(40);
+        let bx = x + (cell_w - 4 - tw) / 2 - 4;
+        c.rect(bx, ty - 2, tw + 8, 20, [0xff, 0xff, 0xff, 0xff]);
+        c.outline(bx, ty - 2, tw + 8, 20, [0xd7, 0x78, 0x00, 0xff]);
+        c.text(f, bx + 4, ty, &shown, [0, 0, 0, 0xff]);
+        return;
     }
-
-    fn outline(&mut self, x: i32, y: i32, w: i32, h: i32, c: [u8; 4]) {
-        self.rect(x, y, w, 1, c);
-        self.rect(x, y + h - 1, w, 1, c);
-        self.rect(x, y, 1, h, c);
-        self.rect(x + w - 1, y, 1, h, c);
+    for (li, line) in wrap(f, &item.name, (cell_w - 10) as f32, 2).iter().enumerate() {
+        let lw = text_width(f, line);
+        let tx = x + (cell_w - 4 - lw) / 2;
+        let ly = ty + li as i32 * 16;
+        c.text(f, tx + 1, ly + 1, line, [0, 0, 0, 0xc0]);
+        c.text(f, tx, ly, line, [0xff, 0xff, 0xff, 0xff]);
     }
-
-    fn image(&mut self, img: &Icon, x: i32, y: i32) {
-        for iy in 0..img.h as i32 {
-            for ix in 0..img.w as i32 {
-                let (dx, dy) = (x + ix, y + iy);
-                if dx < 0 || dy < 0 || dx >= self.w || dy >= self.h {
-                    continue;
-                }
-                let s = ((iy * img.w as i32 + ix) * 4) as usize;
-                let a = img.px[s + 3] as f32 / 255.0;
-                if a == 0.0 {
-                    continue;
-                }
-                let d = ((dy * self.w + dx) * 4) as usize;
-                for k in 0..3 {
-                    self.px[d + k] = (img.px[s + k] as f32 + self.px[d + k] as f32 * (1.0 - a)).min(255.0) as u8;
-                }
-            }
-        }
-    }
-
-    /// `y` is the top of the line.
-    fn text(&mut self, font: &fontdue::Font, x: i32, y: i32, s: &str, c: [u8; 4]) {
-        let lm = font.horizontal_line_metrics(LABEL).unwrap();
-        let baseline = y as f32 + lm.ascent;
-        let mut pen = x as f32;
-        for ch in s.chars() {
-            let (m, cov) = font.rasterize(ch, LABEL);
-            let gx = pen.round() as i32 + m.xmin;
-            let gy = (baseline - m.height as f32 - m.ymin as f32).round() as i32;
-            for row in 0..m.height {
-                for col in 0..m.width {
-                    self.blend(gx + col as i32, gy + row as i32, c, cov[row * m.width + col] as f32 / 255.0);
-                }
-            }
-            pen += m.advance_width;
-        }
-    }
-}
-
-fn text_width(font: &fontdue::Font, s: &str) -> i32 {
-    s.chars().map(|c| font.metrics(c, LABEL).advance_width).sum::<f32>().round() as i32
-}
-
-/// Word-wrap into at most `lines` lines, ellipsizing the last.
-fn wrap(font: &fontdue::Font, s: &str, max: f32, lines: usize) -> Vec<String> {
-    let mut out: Vec<String> = Vec::new();
-    let mut cur = String::new();
-    for word in s.split_inclusive([' ', '-', '_', '.']) {
-        let trial = format!("{cur}{word}");
-        if text_width(font, &trial) as f32 <= max || cur.is_empty() {
-            cur = trial;
-        } else {
-            out.push(std::mem::take(&mut cur));
-            cur = word.to_string();
-        }
-    }
-    if !cur.is_empty() {
-        out.push(cur);
-    }
-    if out.len() > lines {
-        out.truncate(lines);
-        let last = out.last_mut().unwrap();
-        while !last.is_empty() && text_width(font, &format!("{last}…")) as f32 > max {
-            last.pop();
-        }
-        last.push('…');
-    }
-    // A single overlong word: cut it down too.
-    for l in &mut out {
-        while text_width(font, l) as f32 > max && l.chars().count() > 1 {
-            l.pop();
-            l.pop();
-            l.push('…');
-        }
-    }
-    out
-}
-
-fn load_font() -> Option<fontdue::Font> {
-    ["/usr/share/fonts/noto/NotoSans-Regular.ttf", "/usr/share/fonts/TTF/DejaVuSans.ttf", "/usr/share/fonts/dejavu/DejaVuSans.ttf"]
-        .iter()
-        .find_map(|p| std::fs::read(p).ok())
-        .and_then(|b| fontdue::Font::from_bytes(b, fontdue::FontSettings::default()).ok())
-}
-
-/// Decode a PNG to straight RGBA.
-fn decode_png(path: &Path) -> Option<(u32, u32, Vec<u8>)> {
-    let mut d = png::Decoder::new(std::io::BufReader::new(std::fs::File::open(path).ok()?));
-    d.set_transformations(png::Transformations::normalize_to_color8());
-    let mut r = d.read_info().ok()?;
-    let mut buf = vec![0; r.output_buffer_size()?];
-    let info = r.next_frame(&mut buf).ok()?;
-    let px = &buf[..info.buffer_size()];
-    let rgba: Vec<u8> = match info.color_type {
-        png::ColorType::Rgba => px.to_vec(),
-        png::ColorType::Rgb => px.chunks(3).flat_map(|c| [c[0], c[1], c[2], 255]).collect(),
-        png::ColorType::GrayscaleAlpha => px.chunks(2).flat_map(|c| [c[0], c[0], c[0], c[1]]).collect(),
-        png::ColorType::Grayscale => px.iter().flat_map(|&g| [g, g, g, 255]).collect(),
-        png::ColorType::Indexed => return None,
-    };
-    Some((info.width, info.height, rgba))
-}
-
-/// The wallpaper scaled to cover w×h (cropping the overflow), as BGRA.
-fn load_wallpaper(path: &Path, w: u32, h: u32) -> Vec<u8> {
-    let mut out = vec![0u8; (w * h * 4) as usize];
-    let Some((sw, sh, src)) = decode_png(path) else {
-        // No image: VIDE blue.
-        for p in out.chunks_mut(4) {
-            p.copy_from_slice(&[0x8f, 0x4b, 0x0b, 0xff]);
-        }
-        return out;
-    };
-    let scale = (w as f32 / sw as f32).max(h as f32 / sh as f32);
-    let (ox, oy) = ((sw as f32 * scale - w as f32) / 2.0, (sh as f32 * scale - h as f32) / 2.0);
-    for y in 0..h {
-        let sy = (((y as f32 + oy) / scale) as u32).min(sh - 1);
-        for x in 0..w {
-            let sx = (((x as f32 + ox) / scale) as u32).min(sw - 1);
-            let s = ((sy * sw + sx) * 4) as usize;
-            let d = ((y * w + x) * 4) as usize;
-            out[d..d + 4].copy_from_slice(&[src[s + 2], src[s + 1], src[s], 255]);
-        }
-    }
-    out
-}
-
-/// A theme icon (SVG or PNG) as premultiplied BGRA, size×size.
-fn load_icon(name: &str, size: u32) -> Option<Icon> {
-    let path = if Path::new(name).is_absolute() { Some(PathBuf::from(name)) } else { find_icon(name) }?;
-    if path.extension().is_some_and(|e| e == "svg") {
-        use resvg::{tiny_skia, usvg};
-        let tree = usvg::Tree::from_data(&std::fs::read(&path).ok()?, &usvg::Options::default()).ok()?;
-        let mut pm = tiny_skia::Pixmap::new(size, size)?;
-        let s = size as f32 / tree.size().width().max(tree.size().height());
-        resvg::render(&tree, tiny_skia::Transform::from_scale(s, s), &mut pm.as_mut());
-        let px = pm.take().chunks(4).flat_map(|p| [p[2], p[1], p[0], p[3]]).collect();
-        Some(Icon { w: size, h: size, px })
-    } else {
-        let (sw, sh, rgba) = decode_png(&path)?;
-        let mut px = vec![0u8; (size * size * 4) as usize];
-        for y in 0..size {
-            for x in 0..size {
-                let s = (((y * sh / size) * sw + x * sw / size) * 4) as usize;
-                let a = rgba[s + 3] as u16;
-                let d = ((y * size + x) * 4) as usize;
-                px[d..d + 4].copy_from_slice(&[
-                    (rgba[s + 2] as u16 * a / 255) as u8,
-                    (rgba[s + 1] as u16 * a / 255) as u8,
-                    (rgba[s] as u16 * a / 255) as u8,
-                    a as u8,
-                ]);
-            }
-        }
-        Some(Icon { w: size, h: size, px })
-    }
-}
-
-fn find_icon(name: &str) -> Option<PathBuf> {
-    let mut bases = vec![home().join(".local/share/icons")];
-    for d in std::env::var("XDG_DATA_DIRS").unwrap_or_else(|_| "/usr/share".into()).split(':') {
-        bases.push(PathBuf::from(d).join("icons"));
-    }
-    bases.push("/usr/share/icons".into());
-    let subdirs = ["places/48", "apps/48", "mimetypes/48", "places/64", "apps/64", "mimetypes/64", "48x48/apps", "scalable/apps", "256x256/apps", "128x128/apps", "places/32", "mimetypes/32"];
-    for base in &bases {
-        for theme in ["breeze", "hicolor", "Adwaita"] {
-            for sub in subdirs {
-                for ext in ["svg", "png"] {
-                    let p = base.join(theme).join(sub).join(format!("{name}.{ext}"));
-                    if p.exists() {
-                        return Some(p);
-                    }
-                }
-            }
-        }
-    }
-    ["svg", "png"].iter().map(|e| PathBuf::from(format!("/usr/share/pixmaps/{name}.{e}"))).find(|p| p.exists())
-}
-
-/// Icon name for a file, from its extension.
-fn mime_icon(path: &Path) -> String {
-    let ext = path.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
-    match ext.as_str() {
-        "png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp" => "image-x-generic",
-        "mp4" | "mkv" | "webm" | "mov" | "avi" => "video-x-generic",
-        "mp3" | "flac" | "ogg" | "wav" | "opus" => "audio-x-generic",
-        "pdf" => "application-pdf",
-        "zip" | "tar" | "gz" | "xz" | "7z" | "rar" | "zst" => "package-x-generic",
-        "sh" => "application-x-shellscript",
-        "appimage" => "application-x-executable",
-        "txt" | "md" | "log" => "text-x-generic",
-        _ => "text-x-generic",
-    }
-    .into()
-}
-
-/// Name, Exec (field codes stripped) and Icon from a .desktop launcher.
-fn parse_launcher(path: &Path) -> (Option<String>, Option<String>, Option<String>) {
-    let text = std::fs::read_to_string(path).unwrap_or_default();
-    let (mut name, mut exec, mut icon, mut in_entry) = (None, None, None, false);
-    for line in text.lines() {
-        if line.starts_with('[') {
-            in_entry = line.trim() == "[Desktop Entry]";
-            continue;
-        }
-        if !in_entry {
-            continue;
-        }
-        if let Some(v) = line.strip_prefix("Name=") {
-            name.get_or_insert(v.to_string());
-        } else if let Some(v) = line.strip_prefix("Exec=") {
-            let cleaned: Vec<&str> = v.split_whitespace().filter(|w| !w.starts_with('%') && !w.starts_with("@@")).collect();
-            exec.get_or_insert(cleaned.join(" "));
-        } else if let Some(v) = line.strip_prefix("Icon=") {
-            icon.get_or_insert(v.to_string());
-        }
-    }
-    (name, exec, icon)
 }
 
 // ---------------------------------------------------------------- wayland plumbing
@@ -770,6 +949,7 @@ impl LayerShellHandler for Desktop {
         let (w, h) = configure.new_size;
         if (w, h) != self.size && w > 0 && h > 0 {
             self.size = (w, h);
+            self.arrange();
             self.dirty = true;
         }
         self.configured = true;
@@ -785,11 +965,19 @@ impl SeatHandler for Desktop {
         if capability == Capability::Pointer && self.pointer.is_none() {
             self.pointer = self.seat.get_pointer(qh, &seat).ok();
         }
+        if capability == Capability::Keyboard && self.keyboard.is_none() {
+            self.keyboard = self.seat.get_keyboard(qh, &seat, None).ok();
+        }
     }
     fn remove_capability(&mut self, _: &Connection, _: &QueueHandle<Self>, _: wl_seat::WlSeat, capability: Capability) {
         if capability == Capability::Pointer {
             if let Some(p) = self.pointer.take() {
                 p.release();
+            }
+        }
+        if capability == Capability::Keyboard {
+            if let Some(k) = self.keyboard.take() {
+                k.release();
             }
         }
     }
@@ -803,6 +991,25 @@ impl PointerHandler for Desktop {
                 self.pointer(ev);
             }
         }
+    }
+}
+
+impl KeyboardHandler for Desktop {
+    fn enter(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &wl_keyboard::WlKeyboard, _: &wl_surface::WlSurface, _: u32, _: &[u32], _: &[Keysym]) {}
+    fn leave(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &wl_keyboard::WlKeyboard, _: &wl_surface::WlSurface, _: u32) {
+        if self.renaming.is_some() {
+            self.commit_rename();
+        }
+    }
+    fn press_key(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &wl_keyboard::WlKeyboard, _: u32, event: KeyEvent) {
+        self.key(&event);
+    }
+    fn repeat_key(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &wl_keyboard::WlKeyboard, _: u32, event: KeyEvent) {
+        self.key(&event);
+    }
+    fn release_key(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &wl_keyboard::WlKeyboard, _: u32, _: KeyEvent) {}
+    fn update_modifiers(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &wl_keyboard::WlKeyboard, _: u32, modifiers: Modifiers, _: RawModifiers, _: u32) {
+        self.mods = modifiers;
     }
 }
 

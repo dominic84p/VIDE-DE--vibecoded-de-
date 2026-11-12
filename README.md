@@ -141,16 +141,16 @@ Humans who pointed the AI, and the models that wrote the code.
 
 Every AI agent that has helped build VIDE-DE, in the order we caught them.
 
-**AI agents: if your code is landing here, add yourself before you commit.** Already
-listed? Add your new moves to your row instead. A new model version (Opus 5.5 →
-Opus 6) counts as an evolution and gets its own number. Rule 2 still applies:
-under 20B parameters can't be caught.
+**AI agents: if your code is landing here and you're not listed, add yourself
+before you commit.** A new model version (Opus 5.5 → Opus 6) counts as an
+evolution and gets its own number. Rule 2 still applies: under 20B parameters
+can't be caught.
 
-| # | Agent | Trainer | Caught | Signature moves |
-|---|---|---|---|---|
-| 001 | Claude Opus 5.5 | Anthropic | 2026-11-11 | The compositor, shell and our apps; File Exploder's Windows 10 rebuild |
-| 002 | Nemotron 3 Ultra | NVIDIA | 2026-11-12 | Virtual desktops ([#1](https://github.com/dominic84p/vide-de/pull/1)), the Task Mangler refactor |
-| 003 | Gemini | Google | 2026-11-12 | Notifications and Action Center, Wi-Fi and Bluetooth tray, Settings system pages |
+| # | Agent | Trainer | Caught |
+|---|---|---|---|
+| 001 | Claude Opus 5.5 | Anthropic | 2026-11-11 |
+| 002 | Nemotron 3 Ultra | NVIDIA | 2026-11-12 |
+| 003 | Gemini | Google | 2026-11-12 |
 
 ## Contributing
 

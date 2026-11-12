@@ -53,6 +53,10 @@ enum Action {
     Screenshot { region: bool },
     Quit,
     Vt(i32),
+    Workspace(usize),
+    WorkspaceNext,
+    WorkspacePrev,
+    MoveToWorkspace(usize),
     /// Swallowed by the start menu.
     Menu(MenuKey),
 }
@@ -109,6 +113,31 @@ fn bind(super_mod: bool, mods: &ModifiersState, sym: Keysym) -> Option<Action> {
         Keysym::f => Some(Action::Fullscreen),
         Keysym::space => Some(Action::StartMenu),
         Keysym::e if mods.shift => Some(Action::Quit),
+        // Workspace switching: Mod+1-9,0 (0 = workspace 10)
+        // Mod+Shift+1-9,0 to move focused window to workspace (must come first)
+        Keysym::_1 if mods.shift => Some(Action::MoveToWorkspace(0)),
+        Keysym::_2 if mods.shift => Some(Action::MoveToWorkspace(1)),
+        Keysym::_3 if mods.shift => Some(Action::MoveToWorkspace(2)),
+        Keysym::_4 if mods.shift => Some(Action::MoveToWorkspace(3)),
+        Keysym::_5 if mods.shift => Some(Action::MoveToWorkspace(4)),
+        Keysym::_6 if mods.shift => Some(Action::MoveToWorkspace(5)),
+        Keysym::_7 if mods.shift => Some(Action::MoveToWorkspace(6)),
+        Keysym::_8 if mods.shift => Some(Action::MoveToWorkspace(7)),
+        Keysym::_9 if mods.shift => Some(Action::MoveToWorkspace(8)),
+        Keysym::_0 if mods.shift => Some(Action::MoveToWorkspace(9)),
+        Keysym::_1 => Some(Action::Workspace(0)),
+        Keysym::_2 => Some(Action::Workspace(1)),
+        Keysym::_3 => Some(Action::Workspace(2)),
+        Keysym::_4 => Some(Action::Workspace(3)),
+        Keysym::_5 => Some(Action::Workspace(4)),
+        Keysym::_6 => Some(Action::Workspace(5)),
+        Keysym::_7 => Some(Action::Workspace(6)),
+        Keysym::_8 => Some(Action::Workspace(7)),
+        Keysym::_9 => Some(Action::Workspace(8)),
+        Keysym::_0 => Some(Action::Workspace(9)),
+        // Mod+Ctrl+Left/Right for next/prev workspace
+        Keysym::Left if mods.ctrl => Some(Action::WorkspacePrev),
+        Keysym::Right if mods.ctrl => Some(Action::WorkspaceNext),
         _ => None,
     }
 }
@@ -302,6 +331,23 @@ impl State {
             Action::Screenshot { region } => self.start_screenshot(region),
             Action::Quit => self.running = false,
             Action::Vt(n) => self.pending_vt = Some(n),
+            Action::Workspace(ws) => {
+                self.wm.set_workspace(ws);
+                self.focus_top();
+            }
+            Action::WorkspaceNext => {
+                self.wm.next_workspace();
+                self.focus_top();
+            }
+            Action::WorkspacePrev => {
+                self.wm.prev_workspace();
+                self.focus_top();
+            }
+            Action::MoveToWorkspace(ws) => {
+                if let Some(s) = focused {
+                    self.wm.move_window_to_workspace(&s, ws);
+                }
+            }
             Action::Menu(k) => self.menu_key(k),
         }
         self.needs_redraw = true;
@@ -571,6 +617,10 @@ impl State {
                             }
                         }
                         TaskbarHit::Window(s) => self.activate_from_taskbar(&s),
+                        TaskbarHit::Workspace(ws) => {
+                            self.wm.set_workspace(ws);
+                            self.focus_top();
+                        }
                         TaskbarHit::ShowDesktop => self.show_desktop(),
                         TaskbarHit::Volume => self.toggle_flyout(crate::tray::Flyout::Volume),
                         TaskbarHit::Brightness => self.toggle_flyout(crate::tray::Flyout::Brightness),

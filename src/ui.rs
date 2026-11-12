@@ -13,6 +13,7 @@ use smithay::{
 use crate::{
     canvas::{ellipsize, hex, measure, Canvas, Rgba},
     icons::Icons,
+    wm::WORKSPACE_COUNT,
 };
 
 const fn rgba(c: u32, a: u8) -> Rgba {
@@ -60,6 +61,7 @@ pub enum TaskbarHit {
     Volume,
     Brightness,
     Window(WlSurface),
+    Workspace(usize),
     ShowDesktop,
     Nothing,
 }
@@ -83,6 +85,8 @@ pub struct TaskbarKey {
     /// Volume percent and mute, for the tray icon.
     pub volume: (u32, bool),
     pub flyout: Option<crate::tray::Flyout>,
+    pub current_workspace: usize,
+    pub workspace_has_windows: [bool; WORKSPACE_COUNT],
 }
 
 pub struct Taskbar {
@@ -121,10 +125,53 @@ pub fn draw_taskbar(font: Option<&Font>, icons: &mut Icons, logo: Option<&crate:
     }
     hits.push((rect(sx, 0, SEARCH_W, TASKBAR_H), TaskbarHit::Search));
 
+    // Workspace indicator.
+    const WS_BTN_W: i32 = 28;
+    let ws_x = sx + SEARCH_W + 4;
+    for ws in 0..WORKSPACE_COUNT {
+        let x = ws_x + ws as i32 * WS_BTN_W;
+        let is_current = ws == key.current_workspace;
+        let has_windows = key.workspace_has_windows[ws];
+        let is_hovered = hovered(&TaskbarHit::Workspace(ws));
+        
+        let bg = if is_current {
+            TASK_ACTIVE
+        } else if is_hovered {
+            TASK_HOVER
+        } else if has_windows {
+            rgba(0xffffff, 0x10)
+        } else {
+            TASKBAR_BG
+        };
+        c.rect(x, 0, WS_BTN_W, TASKBAR_H, bg);
+        
+        // Draw workspace number (1-9, 0 for 10)
+        if let Some(f) = font {
+            let num = if ws == 9 { '0' } else { char::from_digit((ws + 1) as u32, 10).unwrap() };
+            let s = num.to_string();
+            let tw = measure(f, 12.0, &s);
+            let fg = if is_current { WHITE } else { TEXT_DIM };
+            c.text(f, 12.0, x + (WS_BTN_W - tw) / 2, 0, TASKBAR_H, fg, &s);
+        }
+        
+        // Indicator dot for workspaces with windows
+        if has_windows && !is_current {
+            let dot_color = if is_hovered { WHITE } else { TEXT_DIM };
+            c.circle((x + WS_BTN_W / 2) as f32, TASKBAR_H as f32 - 6.0, 3.0, dot_color);
+        }
+        
+        // Active workspace underline
+        if is_current {
+            c.rect(x, TASKBAR_H - 2, WS_BTN_W, 2, TASK_LINE);
+        }
+        
+        hits.push((rect(x, 0, WS_BTN_W, TASKBAR_H), TaskbarHit::Workspace(ws)));
+    }
+
     // Window buttons.
     let right_edge = w - CLOCK_W - SHOW_DESKTOP_W;
     let tray_x = right_edge - TRAY_W * 2;
-    let mut x = sx + SEARCH_W + 4;
+    let mut x = ws_x + WORKSPACE_COUNT as i32 * WS_BTN_W + 4;
     for item in &key.items {
         if x + TASK_W > tray_x {
             break;

@@ -147,8 +147,9 @@ pub fn elements_with(renderer: &mut GlesRenderer, state: &mut State, cursor: boo
     // Fullscreen apps cover it, unless the start menu is up (Super over a game shows it, like Windows).
     let fullscreen_top = state.wm.top().is_some_and(|w| w.fullscreen.is_some() && Some(w.surface()) == focused.as_ref());
     if !fullscreen_top || state.start.open {
-        let mut items: Vec<_> = state.wm.windows.iter().filter(|w| w.mapped).collect();
+        let mut items: Vec<_> = state.wm.windows.iter().filter(|w| w.mapped && w.workspace == state.wm.current_workspace).collect();
         items.sort_by_key(|w| w.id);
+        let (current_ws, ws_has_windows) = state.wm.workspace_indicator();
         let key = TaskbarKey {
             width: ow,
             items: items
@@ -169,6 +170,8 @@ pub fn elements_with(renderer: &mut GlesRenderer, state: &mut State, cursor: boo
             start_open: state.start.open,
             volume: ((state.tray.volume * 100.0).round() as u32, state.tray.muted),
             flyout: state.tray.flyout,
+            current_workspace: current_ws,
+            workspace_has_windows: ws_has_windows,
         };
         if state.taskbar.as_ref().is_none_or(|t| t.key != key) {
             state.taskbar = Some(ui::draw_taskbar(state.font.as_ref(), &mut state.icons, state.logo.as_ref(), key));
@@ -177,11 +180,11 @@ pub fn elements_with(renderer: &mut GlesRenderer, state: &mut State, cursor: boo
         out.extend(image(renderer, &bar.buffer, (0, oh - TASKBAR_H).into(), Kind::Unspecified));
     }
 
-    // Windows, top to bottom.
+    // Windows, top to bottom (only current workspace).
     let font = state.font.as_ref();
     let icons = &mut state.icons;
     let apps = &state.apps;
-    for w in state.wm.windows.iter_mut().rev().filter(|w| !w.minimized && w.mapped) {
+    for w in state.wm.windows.iter_mut().rev().filter(|w| !w.minimized && w.mapped && w.workspace == state.wm.current_workspace) {
         let active = Some(w.surface()) == focused.as_ref();
         let sloc = w.surface_loc();
         for (popup, offset) in PopupManager::popups_for_surface(w.surface()) {

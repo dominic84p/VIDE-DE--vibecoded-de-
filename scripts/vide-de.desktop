@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=VIDE-DE
+Comment=Vibecoded Desktop Environment (Wayland)
+Exec=/usr/local/bin/vide-session
+Type=Application
+DesktopNames=VIDE

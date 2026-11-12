@@ -341,6 +341,9 @@ fn tray_icons(state: &mut State) -> Vec<Option<std::rc::Rc<crate::icons::Icon>>>
                 if !item.icon_name.is_empty() {
                     state.icons.set_custom(&item.icon_name, copy(ic));
                 }
+                if !item.proc_name.is_empty() {
+                    state.icons.set_custom(&item.proc_name, copy(ic));
+                }
             }
             let icon = raw_icon.map(|ic| {
                 let scaled = crate::icons::from_rgba(ic.w, ic.h, ic.rgba, TRAY_ICON);

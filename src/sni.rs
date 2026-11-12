@@ -33,6 +33,8 @@ pub struct TrayItem {
     pub title: String,
     pub icon_name: String,
     pub theme_path: String,
+    /// Executable name of the owning process (e.g. `antigravity`), for matching windows.
+    pub proc_name: String,
     /// Premultiplied RGBA, when the app sends pixels instead of an icon name.
     pub pixmap: Option<(u32, u32, Vec<u8>)>,
 }
@@ -199,6 +201,7 @@ fn refresh(conn: &Connection, items: &Registry) -> Vec<TrayItem> {
             title: p.get_property::<String>("Title").unwrap_or_default(),
             icon_name,
             theme_path: p.get_property::<String>("IconThemePath").unwrap_or_default(),
+            proc_name: bus_proc_name(conn, &bus),
             pixmap,
         });
     }
@@ -208,12 +211,30 @@ fn refresh(conn: &Connection, items: &Registry) -> Vec<TrayItem> {
     out
 }
 
-/// Pick the pixmap closest to 22px and convert ARGB32 (network order) to premultiplied RGBA.
+/// Resolve the executable name of a D-Bus connection (`bus`) via `GetConnectionUnixProcessID`.
+fn bus_proc_name(conn: &Connection, bus: &str) -> String {
+    let Ok(reply) = conn.call_method(
+        Some("org.freedesktop.DBus"),
+        "/org/freedesktop/DBus",
+        Some("org.freedesktop.DBus"),
+        "GetConnectionUnixProcessID",
+        &(bus,),
+    ) else {
+        return String::new();
+    };
+    let Ok(pid) = reply.body().deserialize::<u32>() else { return String::new() };
+    std::fs::read_link(format!("/proc/{pid}/exe"))
+        .ok()
+        .and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
+        .unwrap_or_default()
+}
+
+/// Pick the pixmap closest to 48px and convert ARGB32 (network order) to premultiplied RGBA.
 fn best_pixmap(pixmaps: Vec<(i32, i32, Vec<u8>)>) -> Option<(u32, u32, Vec<u8>)> {
     let (w, h, data) = pixmaps
         .into_iter()
         .filter(|(w, h, d)| *w > 0 && *h > 0 && d.len() >= (*w * *h * 4) as usize)
-        .min_by_key(|(w, _, _)| (w - 22).abs())?;
+        .min_by_key(|(w, _, _)| (w - 48).abs())?;
     let mut rgba = Vec::with_capacity(data.len());
     for px in data.chunks_exact(4).take((w * h) as usize) {
         let (a, r, g, b) = (px[0] as u16, px[1] as u16, px[2] as u16, px[3] as u16);

@@ -637,7 +637,12 @@ impl State {
     fn window_for_tray(&self, id: &str) -> Option<smithay::reexports::wayland_server::protocol::wl_surface::WlSurface> {
         let norm = |s: &str| s.chars().filter(|c| c.is_alphanumeric()).flat_map(char::to_lowercase).collect::<String>();
         let item = self.sni_items.iter().find(|i| i.id == id)?;
-        let needles: Vec<String> = [item.title.as_str(), item.icon_name.as_str(), id.split('/').next().unwrap_or(id)]
+        let needles: Vec<String> = [
+            item.proc_name.as_str(),
+            item.title.as_str(),
+            item.icon_name.as_str(),
+            id.split('/').next().unwrap_or(id),
+        ]
             .into_iter()
             .filter(|s| !s.is_empty() && !s.starts_with(':'))
             .map(norm)

@@ -220,15 +220,34 @@ impl State {
             if app_of(w).is_some_and(|id| self.pins.taskbar.contains(&id)) {
                 continue;
             }
+            let app_id = w.app_id();
+            let icon = if app_id.is_empty() {
+                self.client_proc_name(w.surface())
+                    .map(|p| crate::apps::icon_for_app_id(&self.apps, &p))
+                    .unwrap_or_default()
+            } else {
+                crate::apps::icon_for_app_id(&self.apps, &app_id)
+            };
             out.push(TaskItem {
                 windows: vec![w.surface().clone()],
                 title: w.title(),
-                icon: crate::apps::icon_for_app_id(&self.apps, &w.app_id()),
+                icon,
                 pinned: None,
                 focused: is_focused(w),
             });
         }
         out
+    }
+
+    fn client_proc_name(&self, surface: &WlSurface) -> Option<String> {
+        use smithay::reexports::wayland_server::Resource as _;
+        let client = self.dh.get_client(surface.id()).ok()?;
+        let pid = client.get_credentials(&self.dh).ok()?.pid;
+        if pid <= 0 {
+            return None;
+        }
+        let exe = std::fs::read_link(format!("/proc/{pid}/exe")).ok()?;
+        exe.file_name().map(|n| n.to_string_lossy().into_owned())
     }
 
     /// Left press on a taskbar button. Pinned buttons wait for the release, since

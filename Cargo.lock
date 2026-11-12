@@ -4406,6 +4406,8 @@ version = "0.1.0"
 dependencies = [
  "eframe 0.37.0",
  "egui_extras",
+ "image",
+ "libc",
  "sysinfo",
 ]
 

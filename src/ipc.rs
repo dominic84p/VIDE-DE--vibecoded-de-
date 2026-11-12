@@ -4,9 +4,12 @@
 //! - `snip`: start a region screenshot (Snip & Sketchy's "New")
 //! - `screenshot`: capture the whole screen
 //! - `copy-png <path>`: put a PNG on the clipboard
+//! - `windows`: replies with one line per window, `id<TAB>pid<TAB>minimized<TAB>app_id<TAB>title`
+//!   (Task Mangler's "Apps" are the processes that own a window)
+//! - `focus-window <id>` / `close-window <id>`: Task Mangler's "Switch to" and polite End task
 
 use std::{
-    io::{BufRead, BufReader},
+    io::{BufRead, BufReader, Write},
     os::unix::net::{UnixListener, UnixStream},
     path::PathBuf,
     sync::Arc,
@@ -15,6 +18,7 @@ use std::{
 
 use smithay::{
     reexports::calloop::{generic::Generic, Interest, LoopHandle, Mode, PostAction},
+    utils::SERIAL_COUNTER,
     wayland::selection::data_device::set_data_device_selection,
 };
 
@@ -49,7 +53,7 @@ fn handle_client(state: &mut State, stream: UnixStream) {
     let _ = stream.set_nonblocking(false);
     let _ = stream.set_read_timeout(Some(Duration::from_millis(200)));
     let mut line = String::new();
-    if BufReader::new(stream).read_line(&mut line).is_err() {
+    if BufReader::new(&stream).read_line(&mut line).is_err() {
         return;
     }
     let line = line.trim();
@@ -63,6 +67,26 @@ fn handle_client(state: &mut State, stream: UnixStream) {
             }
             Err(e) => tracing::warn!("copy-png {arg}: {e}"),
         },
+        "windows" => {
+            let mut out = String::new();
+            for w in &state.wm.windows {
+                let pid = state.window_pid(w.surface()).unwrap_or(0);
+                // Tabs and newlines would break the line format; titles rarely have them.
+                let clean = |s: String| s.replace(['\t', '\n'], " ");
+                out += &format!("{}\t{pid}\t{}\t{}\t{}\n", w.id, w.minimized as u8, clean(w.app_id()), clean(w.title()));
+            }
+            let _ = (&stream).write_all(out.as_bytes());
+        }
+        "focus-window" | "close-window" => {
+            let id: u64 = arg.parse().unwrap_or(u64::MAX);
+            let Some(s) = state.wm.windows.iter().find(|w| w.id == id).map(|w| w.surface().clone()) else { return };
+            if cmd == "focus-window" {
+                state.focus(Some(s), SERIAL_COUNTER.next_serial());
+                state.needs_redraw = true;
+            } else if let Some(w) = state.wm.find(&s) {
+                w.close();
+            }
+        }
         other => tracing::warn!("control socket: unknown command {other:?}"),
     }
 }

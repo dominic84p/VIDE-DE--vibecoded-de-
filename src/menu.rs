@@ -201,7 +201,7 @@ impl State {
 
     /// The process behind a window: X11 windows report their own PID (their Wayland
     /// connection is Xwayland's, which must never be killed); Wayland apps by socket.
-    fn window_pid(&self, surface: &WlSurface) -> Option<u32> {
+    pub fn window_pid(&self, surface: &WlSurface) -> Option<u32> {
         let w = self.wm.find(surface)?;
         match w.x11() {
             Some(x) => x.pid(),

@@ -166,7 +166,7 @@ impl PortalSession {
         });
     }
 
-    #[zbus(property)]
+    #[zbus(property, name = "version")]
     fn version(&self) -> u32 {
         1
     }
@@ -286,7 +286,7 @@ impl ScreenCastPortal {
         3 // Hidden (1) | Embedded (2)
     }
 
-    #[zbus(property)]
+    #[zbus(property, name = "version")]
     fn version(&self) -> u32 {
         4
     }
@@ -307,7 +307,7 @@ impl ScreenshotPortal {
         (0, HashMap::new())
     }
 
-    #[zbus(property)]
+    #[zbus(property, name = "version")]
     fn version(&self) -> u32 {
         2
     }

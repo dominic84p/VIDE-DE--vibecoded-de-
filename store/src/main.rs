@@ -212,11 +212,11 @@ impl StoreApp {
             )
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
-                    // Macrohard Store branding
+                    // Window Shopping branding
                     let (rect, _) = ui.allocate_exact_size(Vec2::new(24.0, 24.0), egui::Sense::hover());
                     draw_ms_store_bag(ui.painter(), rect);
                     ui.label(
-                        RichText::new("Macrohard Store")
+                        RichText::new("Window Shopping")
                             .font(FontId::proportional(16.0))
                             .strong()
                             .color(TEXT),
@@ -484,7 +484,7 @@ impl StoreApp {
                 ui.horizontal(|ui| {
                     ui.vertical(|ui| {
                         ui.label(
-                            RichText::new("Welcome to Macrohard Store")
+                            RichText::new("Welcome to Window Shopping")
                                 .font(FontId::proportional(26.0))
                                 .strong()
                                 .color(Color32::WHITE),
@@ -1149,14 +1149,14 @@ fn truncate(s: &str, max_chars: usize) -> String {
 fn main() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_title("Macrohard Store")
-            .with_app_id("macrohard-store")
+            .with_title("Window Shopping")
+            .with_app_id("window-shopping")
             .with_inner_size([1060.0, 720.0])
             .with_min_inner_size([720.0, 500.0]),
         ..Default::default()
     };
     eframe::run_native(
-        "Macrohard Store",
+        "Window Shopping",
         options,
         Box::new(|cc| Ok(Box::new(StoreApp::new(cc)))),
     )

@@ -14,7 +14,7 @@ BINS=(
   file-exploder
   task-mangler
   snip-and-sketchy
-  macrohard-store
+  window-shopping
 )
 
 # Build as the normal user before elevating so target/ stays user-owned.

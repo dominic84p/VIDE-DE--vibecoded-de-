@@ -571,7 +571,7 @@ impl State {
             Entry::Power(a) => return self.power(a),
             Entry::Web(q) => {
                 let q: String = q.chars().map(|c| if c.is_ascii_alphanumeric() { c.to_string() } else if c == ' ' { "+".into() } else { format!("%{:02X}", c as u32 & 0xff) }).collect();
-                self.spawn(&format!("xdg-open 'https://www.bing.com/search?q={q}'"));
+                self.spawn(&format!("xdg-open 'https://www.google.com/search?q={q}'"));
             }
         }
         self.toggle_start();

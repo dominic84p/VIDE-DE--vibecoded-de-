@@ -1,8 +1,8 @@
 [package]
-name = "macrohard-store"
+name = "window-shopping"
 version = "0.1.0"
 edition = "2024"
-description = "Macrohard Store - Software Center for VIDE-DE"
+description = "Window Shopping - Software Center for VIDE-DE"
 
 [dependencies]
 eframe = "0.37"

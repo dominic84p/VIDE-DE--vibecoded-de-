@@ -160,7 +160,7 @@ const BUILTIN: &[(&str, &str, &str, &str, &str, &str)] = &[
     ("task-mangler", "task-mangler", "Task Mangler", "See what's running. Like Task Manager, but it mangles", "utilities-system-monitor", "System;Monitor;"),
     ("snip-and-sketchy", "snip-and-sketchy", "Snip & Sketchy", "Mark up your screenshots. Like Snip & Sketch, but sketchier", "applets-screenshooter", "Utility;Graphics;"),
     ("file-exploder", "file-exploder", "File Exploder", "Your files. Like File Explorer, but it might go off", "system-file-manager", "System;FileManager;"),
-    ("macrohard-store", "macrohard-store", "Macrohard Store", "Get apps, Flatpaks, and updates for your PC", "system-software-install", "System;PackageManager;"),
+    ("window-shopping", "window-shopping", "Window Shopping", "Get apps, Flatpaks, and updates for your PC", "system-software-install", "System;PackageManager;"),
 ];
 
 /// Our bundled wallpapers, installed for vide-desktop and the Settings picker.

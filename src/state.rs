@@ -462,6 +462,12 @@ impl State {
              org.freedesktop.DBus.NameHasOwner string:org.freedesktop.secrets | grep -q true \
              || exec ksecretd",
         );
+        // Polkit agent: shows the password prompt when mounting a disk (File Exploder's
+        // drives) or anything else needs admin rights.
+        self.spawn(
+            "for a in /usr/lib/polkit-kde-authentication-agent-1 /usr/libexec/polkit-kde-authentication-agent-1 \
+             /usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1; do [ -x \"$a\" ] && exec \"$a\"; done",
+        );
         // The desktop (wallpaper + icons) is its own program on the background layer;
         // without it we fall back to drawing a wallpaper ourselves.
         if let Some(desktop) = crate::input::own_app("vide-desktop") {

@@ -1,7 +1,9 @@
 //! Notifications: Action Center panel + real `org.freedesktop.Notifications` service.
 //!
 //! We run the D-Bus notification service on its own thread so client notifications
-//! don't block compositor frames. The Action Center panel opens from the taskbar clock.
+//! don't block compositor frames. The Action Center panel opens from the taskbar clock:
+//! Windows 10's full-height panel with notifications on top and the quick action tiles
+//! (Network, All settings, Bluetooth, Night light...) at the bottom.
 
 use std::{
     collections::HashMap,
@@ -29,17 +31,48 @@ use crate::{
     ui::TASKBAR_H,
 };
 
-const ACTION_CENTER_W: i32 = 420;
-const ACTION_CENTER_H: i32 = 520;
+const ACTION_CENTER_W: i32 = 396;
 const HEADER_H: i32 = 44;
-const ACCENT: Rgba = hex(0x76b9ed);
+const ACCENT: Rgba = hex(0x0078d7);
+const ACCENT_HOVER: Rgba = hex(0x1a86dd);
 const BG: Rgba = hex(0x1f1f1f);
 const BORDER: Rgba = hex(0x3c3c3c);
 const CARD: Rgba = hex(0x2b2b2b);
 const CARD_HOVER: Rgba = hex(0x353535);
+const BUTTON: Rgba = hex(0x4c4c4c);
+const TILE: Rgba = hex(0x3b3b3b);
+const TILE_HOVER: Rgba = hex(0x4a4a4a);
+const LINK: Rgba = hex(0x8ec5f5);
 const WHITE: Rgba = hex(0xffffff);
 const DIM: Rgba = hex(0xa0a0a0);
-const RED: Rgba = hex(0xe81123);
+const BODY: Rgba = hex(0xc8c8c8);
+const TILE_W: i32 = (ACTION_CENTER_W - 24 - 12) / 4;
+const TILE_H: i32 = 58;
+
+/// Windows 10's quick action tiles, in its default order. The first row shows
+/// collapsed; Expand shows the rest.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum QuickAction {
+    Network,
+    AllSettings,
+    Bluetooth,
+    NightLight,
+    FocusAssist,
+    Airplane,
+    ScreenSnip,
+    Hotspot,
+}
+
+const QUICK_ACTIONS: [(QuickAction, &str); 8] = [
+    (QuickAction::Network, "Network"),
+    (QuickAction::AllSettings, "All settings"),
+    (QuickAction::Bluetooth, "Bluetooth"),
+    (QuickAction::NightLight, "Night light"),
+    (QuickAction::FocusAssist, "Focus assist"),
+    (QuickAction::Airplane, "Airplane mode"),
+    (QuickAction::ScreenSnip, "Screen snip"),
+    (QuickAction::Hotspot, "Mobile hotspot"),
+];
 
 fn rect(x: i32, y: i32, w: i32, h: i32) -> Rectangle<i32, Logical> {
     Rectangle::new((x, y).into(), (w, h).into())
@@ -64,12 +97,19 @@ pub enum ActionCenterHit {
     Card(u32),
     Close(u32),
     Action(u32, String),
+    Tile(QuickAction),
+    Expand,
+    Manage,
 }
 
 #[derive(Clone, PartialEq)]
 pub struct ActionCenterKey {
     pub notifications: Vec<Notification>,
     pub hover: ActionCenterHit,
+    pub height: i32,
+    pub expanded: bool,
+    /// Which quick action tiles are lit, in QUICK_ACTIONS order.
+    pub on: [bool; 8],
 }
 
 pub struct ActionCenterPanel {
@@ -84,6 +124,9 @@ pub struct ActionCenter {
     pub notifications: Vec<Notification>,
     pub panel: Option<ActionCenterPanel>,
     pub hover: ActionCenterHit,
+    /// All the quick actions showing, not just the first row.
+    pub expanded: bool,
+    pub focus_assist: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -223,19 +266,61 @@ fn run(events: LoopSender<NotifEvent>, cmds: mpsc::Receiver<NotifCmd>) -> zbus::
 }
 
 impl State {
+    /// Docked to the right edge, from the top of the screen down to the taskbar.
     pub fn action_center_rect(&self) -> Rectangle<i32, Logical> {
-        let x = self.output_size.w - ACTION_CENTER_W - 8;
-        Rectangle::new(
-            (x, self.output_size.h - TASKBAR_H - ACTION_CENTER_H - 8).into(),
-            (ACTION_CENTER_W, ACTION_CENTER_H).into(),
-        )
+        let h = self.output_size.h - TASKBAR_H;
+        Rectangle::new((self.output_size.w - ACTION_CENTER_W, 0).into(), (ACTION_CENTER_W, h).into())
     }
 
     pub fn toggle_action_center(&mut self) {
         self.action_center.open = !self.action_center.open;
         if self.action_center.open {
             self.action_center.hover = ActionCenterHit::Nothing;
+            self.close_flyout();
+            // Bluetooth / airplane state for the tiles.
+            self.refresh_network();
         }
+        self.needs_redraw = true;
+    }
+
+    fn quick_action(&mut self, q: QuickAction) {
+        let settings = |state: &mut State, page: &str| {
+            if let Some(s) = crate::input::own_app("vide-settings") {
+                state.spawn(&format!("{s} --page {page}"));
+            }
+            state.close_action_center();
+        };
+        match q {
+            QuickAction::Network => {
+                self.close_action_center();
+                self.toggle_flyout(crate::tray::Flyout::Network);
+            }
+            QuickAction::AllSettings => settings(self, "personalization"),
+            QuickAction::Bluetooth => {
+                let on = !self.tray.net.bt_on;
+                self.set_bluetooth(on);
+            }
+            QuickAction::NightLight => {
+                self.config.night_light = !self.config.night_light;
+                if let Err(e) = self.config.save() {
+                    tracing::warn!("couldn't save night light: {e}");
+                }
+            }
+            QuickAction::FocusAssist => self.action_center.focus_assist = !self.action_center.focus_assist,
+            QuickAction::Airplane => {
+                let on = !self.tray.net.airplane;
+                self.set_airplane(on);
+            }
+            QuickAction::ScreenSnip => {
+                self.close_action_center();
+                self.start_screenshot(true);
+            }
+            QuickAction::Hotspot => {
+                let on = !self.tray.net.hotspot;
+                self.set_hotspot(on);
+            }
+        }
+        self.action_center.panel = None;
         self.needs_redraw = true;
     }
 
@@ -309,6 +394,18 @@ impl State {
                     }
                 }
             }
+            ActionCenterHit::Tile(q) => self.quick_action(q),
+            ActionCenterHit::Expand => {
+                self.action_center.expanded = !self.action_center.expanded;
+                self.action_center.panel = None;
+                self.needs_redraw = true;
+            }
+            ActionCenterHit::Manage => {
+                if let Some(s) = crate::input::own_app("vide-settings") {
+                    self.spawn(&s);
+                }
+                self.close_action_center();
+            }
             ActionCenterHit::Nothing => {}
         }
     }
@@ -317,9 +414,22 @@ impl State {
         if !self.action_center.open {
             return None;
         }
+        let n = &self.tray.net;
+        let on = QUICK_ACTIONS.map(|(q, _)| match q {
+            QuickAction::Network => (n.wifi_on || n.wired.is_some()) && !n.airplane,
+            QuickAction::Bluetooth => n.bt_on,
+            QuickAction::NightLight => self.config.night_light,
+            QuickAction::FocusAssist => self.action_center.focus_assist,
+            QuickAction::Airplane => n.airplane,
+            QuickAction::Hotspot => n.hotspot,
+            QuickAction::AllSettings | QuickAction::ScreenSnip => false,
+        });
         let key = ActionCenterKey {
             notifications: self.action_center.notifications.clone(),
             hover: self.action_center.hover.clone(),
+            height: self.action_center_rect().size.h,
+            expanded: self.action_center.expanded,
+            on,
         };
         if self.action_center.panel.as_ref().is_none_or(|p| p.key != key) {
             let panel = draw_action_center(self.font.as_ref(), key);
@@ -333,117 +443,134 @@ fn draw_action_center(
     font: Option<&fontdue::Font>,
     key: ActionCenterKey,
 ) -> ActionCenterPanel {
-    let mut c = Canvas::new(ACTION_CENTER_W, ACTION_CENTER_H);
+    let (w, h) = (ACTION_CENTER_W, key.height);
+    let mut c = Canvas::new(w, h);
     c.fill(BG);
-    c.outline(0, 0, ACTION_CENTER_W, ACTION_CENTER_H, BORDER);
+    c.rect(0, 0, 1, h, BORDER);
+    let mut hits = vec![(rect(0, 0, w, h), ActionCenterHit::Nothing)];
+    let hover = |x: &ActionCenterHit| key.hover == *x;
+    let Some(f) = font else { return ActionCenterPanel { key, buffer: c.into_buffer(), hits } };
 
-    let mut hits = vec![(rect(0, 0, ACTION_CENTER_W, ACTION_CENTER_H), ActionCenterHit::Nothing)];
-
-    // Header.
-    if let Some(f) = font {
-        c.text(f, 14.0, 16, 12, 24, WHITE, "Notifications");
-        c.rect(8, HEADER_H - 1, ACTION_CENTER_W - 16, 1, BORDER);
-
-        if !key.notifications.is_empty() {
-            let clear_text = "Clear all";
-            let cw = measure(f, 12.0, clear_text);
-            let cx = ACTION_CENTER_W - 16 - cw;
-            let clear_hover = key.hover == ActionCenterHit::ClearAll;
-            let col = if clear_hover { WHITE } else { DIM };
-            c.text(f, 12.0, cx, 14, 20, col, clear_text);
-            hits.push((rect(cx - 8, 8, cw + 16, 28), ActionCenterHit::ClearAll));
+    // Bottom up: tiles, then the Expand / Clear all row above them.
+    let rows = if key.expanded { 2 } else { 1 };
+    let tiles_top = h - 12 - rows * TILE_H - (rows - 1) * 4;
+    let links_y = tiles_top - 34;
+    for (i, (q, label)) in QUICK_ACTIONS.iter().enumerate().take(rows as usize * 4) {
+        let x = 12 + (i as i32 % 4) * (TILE_W + 4);
+        let y = tiles_top + (i as i32 / 4) * (TILE_H + 4);
+        let hit = ActionCenterHit::Tile(*q);
+        let fill = match (key.on[i], hover(&hit)) {
+            (true, true) => ACCENT_HOVER,
+            (true, false) => ACCENT,
+            (false, true) => TILE_HOVER,
+            (false, false) => TILE,
+        };
+        c.rect(x, y, TILE_W, TILE_H, fill);
+        let (gx, gy) = (x as f32 + 18.0, y as f32 + 17.0);
+        match q {
+            QuickAction::Network => crate::tray::wifi(&mut c, gx, gy, true),
+            QuickAction::AllSettings => crate::tray::glyph(&mut c, GEAR.into(), gx, gy, 18),
+            QuickAction::Bluetooth => crate::tray::bluetooth(&mut c, gx, gy),
+            QuickAction::NightLight => crate::tray::sun(&mut c, gx, gy, WHITE),
+            QuickAction::FocusAssist => crate::tray::glyph(&mut c, MOON.into(), gx, gy, 18),
+            QuickAction::Airplane => crate::tray::airplane(&mut c, gx, gy),
+            QuickAction::ScreenSnip => crate::tray::glyph(&mut c, SNIP.into(), gx, gy, 18),
+            QuickAction::Hotspot => crate::tray::hotspot(&mut c, gx, gy),
         }
+        c.text(f, 12.0, x + 8, y + 34, 18, WHITE, &crate::canvas::ellipsize(f, 12.0, label, TILE_W - 12));
+        hits.push((rect(x, y, TILE_W, TILE_H), hit));
+    }
+    let expand = if key.expanded { "Collapse" } else { "Expand" };
+    let ew = measure(f, 12.0, expand);
+    c.text(f, 12.0, 14, links_y, 24, if hover(&ActionCenterHit::Expand) { WHITE } else { LINK }, expand);
+    hits.push((rect(10, links_y, ew + 8, 24), ActionCenterHit::Expand));
+    if !key.notifications.is_empty() {
+        let clear = "Clear all notifications";
+        let cw = measure(f, 12.0, clear);
+        c.text(f, 12.0, w - 14 - cw, links_y, 24, if hover(&ActionCenterHit::ClearAll) { WHITE } else { LINK }, clear);
+        hits.push((rect(w - 18 - cw, links_y, cw + 8, 24), ActionCenterHit::ClearAll));
     }
 
+    // Top: "Manage notifications".
+    let manage = "Manage notifications";
+    let mw = measure(f, 12.0, manage);
+    c.text(f, 12.0, w - 14 - mw, 10, 24, if hover(&ActionCenterHit::Manage) { WHITE } else { LINK }, manage);
+    hits.push((rect(w - 18 - mw, 10, mw + 8, 24), ActionCenterHit::Manage));
+
     if key.notifications.is_empty() {
-        if let Some(f) = font {
-            c.text(f, 13.0, 16, HEADER_H + 24, 24, DIM, "No new notifications");
-        }
+        let t = "No new notifications";
+        c.text(f, 14.0, (w - measure(f, 14.0, t)) / 2, HEADER_H + 10, 24, BODY, t);
+        hits.reverse();
         return ActionCenterPanel { key, buffer: c.into_buffer(), hits };
     }
 
-    // Cards list.
-    let card_x = 12;
-    let card_w = ACTION_CENTER_W - 24;
-    let mut y = HEADER_H + 10;
-
+    // Notifications, grouped under their app's name like Windows.
+    let (card_x, card_w) = (12, w - 24);
+    let mut y = HEADER_H;
+    let mut last_app: Option<&str> = None;
     for n in &key.notifications {
         let has_actions = !n.actions.is_empty();
-        let card_h = if has_actions { 96 } else { 72 };
-        if y + card_h > ACTION_CENTER_H - 8 {
+        let body_lines: Vec<&str> = n.body.lines().filter(|l| !l.trim().is_empty()).take(2).collect();
+        let card_h = 36 + body_lines.len() as i32 * 18 + if has_actions { 40 } else { 0 } + 8;
+        let header = last_app != Some(n.app_name.as_str());
+        let need = card_h + if header { 30 } else { 0 };
+        if y + need > links_y - 8 {
             break;
         }
+        if header {
+            c.text(f, 13.0, card_x + 2, y + 4, 22, WHITE, &crate::canvas::ellipsize(f, 13.0, &n.app_name, card_w - 8));
+            y += 30;
+            last_app = Some(&n.app_name);
+        }
+        let card_hit = ActionCenterHit::Card(n.id);
+        let card_hover = hover(&card_hit) || matches!(&key.hover, ActionCenterHit::Close(id) | ActionCenterHit::Action(id, _) if *id == n.id);
+        c.rect(card_x, y, card_w, card_h, if card_hover { CARD_HOVER } else { CARD });
+        hits.push((rect(card_x, y, card_w, card_h), card_hit));
 
-        let is_card_hover = key.hover == ActionCenterHit::Card(n.id);
-        let bg = if is_card_hover { CARD_HOVER } else { CARD };
-        c.round_rect(card_x, y, card_w, card_h, 4, bg);
-        c.outline(card_x, y, card_w, card_h, BORDER);
-
-        // Entire card is a hit target.
-        hits.push((rect(card_x, y, card_w, card_h), ActionCenterHit::Card(n.id)));
-
-        if let Some(f) = font {
-            // App name.
-            c.text(f, 11.0, card_x + 12, y + 8, 16, ACCENT, &n.app_name);
-
-            // Timestamp.
-            let tw = measure(f, 11.0, &n.timestamp);
-            let close_btn_x = card_x + card_w - 24;
-            c.text(f, 11.0, close_btn_x - tw - 8, y + 8, 16, DIM, &n.timestamp);
-
-            // Close button (x).
-            let close_hover = key.hover == ActionCenterHit::Close(n.id);
+        c.text(f, 14.0, card_x + 12, y + 8, 22, WHITE, &crate::canvas::ellipsize(f, 14.0, &n.summary, card_w - 90));
+        for (i, line) in body_lines.iter().enumerate() {
+            c.text(f, 13.0, card_x + 12, y + 32 + i as i32 * 18, 18, BODY, &crate::canvas::ellipsize(f, 13.0, line, card_w - 24));
+        }
+        // Time, or the close X while hovered, top right.
+        let cx = card_x + card_w - 28;
+        if card_hover {
+            let close_hover = hover(&ActionCenterHit::Close(n.id));
             if close_hover {
-                c.round_rect(close_btn_x, y + 6, 18, 18, 2, RED);
+                c.rect(cx, y + 6, 22, 22, BUTTON);
             }
-            c.text(f, 12.0, close_btn_x + 5, y + 6, 18, WHITE, "×");
-            hits.push((rect(close_btn_x - 2, y + 4, 22, 22), ActionCenterHit::Close(n.id)));
-
-            // Summary.
-            let summary_display = if n.summary.len() > 40 {
-                format!("{}...", &n.summary[..37])
-            } else {
-                n.summary.clone()
-            };
-            c.text(f, 13.0, card_x + 12, y + 26, 18, WHITE, &summary_display);
-
-            // Body.
-            let body_first_line = n.body.lines().next().unwrap_or("");
-            let body_display = if body_first_line.len() > 50 {
-                format!("{}...", &body_first_line[..47])
-            } else {
-                body_first_line.to_string()
-            };
-            c.text(f, 12.0, card_x + 12, y + 46, 18, DIM, &body_display);
-
-            // Actions buttons.
-            if has_actions {
-                let mut ax = card_x + 12;
-                for (action_key, label) in n.actions.iter().take(3) {
-                    let lw = measure(f, 11.0, label);
-                    let bw = (lw + 16).max(40);
-                    if ax + bw > card_x + card_w - 12 {
-                        break;
-                    }
-                    let act_hover = key.hover == ActionCenterHit::Action(n.id, action_key.clone());
-                    let btn_bg = if act_hover { CARD_HOVER } else { CARD };
-                    c.round_rect(ax, y + 68, bw, 20, 2, btn_bg);
-                    c.outline(ax, y + 68, bw, 20, BORDER);
-                    c.text(f, 11.0, ax + 8, y + 70, 16, WHITE, label);
-                    hits.push((
-                        rect(ax, y + 68, bw, 20),
-                        ActionCenterHit::Action(n.id, action_key.clone()),
-                    ));
-                    ax += bw + 8;
-                }
+            let (x0, y0) = (cx as f32 + 7.0, y as f32 + 13.0);
+            c.line(x0, y0, x0 + 8.0, y0 + 8.0, 1.2, WHITE);
+            c.line(x0 + 8.0, y0, x0, y0 + 8.0, 1.2, WHITE);
+            hits.push((rect(cx, y + 6, 22, 22), ActionCenterHit::Close(n.id)));
+        } else {
+            let tw = measure(f, 11.0, &n.timestamp);
+            c.text(f, 11.0, card_x + card_w - 12 - tw, y + 8, 22, DIM, &n.timestamp);
+        }
+        if has_actions {
+            let actions: Vec<_> = n.actions.iter().filter(|(k, _)| k != "default").take(3).collect();
+            let count = actions.len().max(1) as i32;
+            let bw = (card_w - 24 - (count - 1) * 4) / count;
+            for (i, (action_key, label)) in actions.into_iter().enumerate() {
+                let bx = card_x + 12 + i as i32 * (bw + 4);
+                let by = y + card_h - 40;
+                let hit = ActionCenterHit::Action(n.id, action_key.clone());
+                c.rect(bx, by, bw, 32, if hover(&hit) { hex(0x5c5c5c) } else { BUTTON });
+                let lw = measure(f, 12.0, label);
+                c.text(f, 12.0, bx + (bw - lw).max(8) / 2, by, 32, WHITE, &crate::canvas::ellipsize(f, 12.0, label, bw - 12));
+                hits.push((rect(bx, by, bw, 32), hit));
             }
         }
-
-        y += card_h + 8;
+        y += card_h + 4;
     }
 
+    // Later entries win in hit tests, so specific rects go before the background.
+    hits.reverse();
     ActionCenterPanel { key, buffer: c.into_buffer(), hits }
 }
+
+const GEAR: &str = r##"<circle cx="10" cy="10" r="2.6" fill="none" stroke="#fff" stroke-width="1.3"/><path d="M10 2.5v2.2M10 15.3v2.2M2.5 10h2.2M15.3 10h2.2M4.7 4.7l1.6 1.6M13.7 13.7l1.6 1.6M4.7 15.3l1.6-1.6M13.7 6.3l1.6-1.6" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/><circle cx="10" cy="10" r="5.4" fill="none" stroke="#fff" stroke-width="1.3"/>"##;
+const MOON: &str = r##"<path d="M14.5 13.2A6.5 6.5 0 0 1 7.3 3.4a6.5 6.5 0 1 0 7.2 9.8z" fill="none" stroke="#fff" stroke-width="1.3" stroke-linejoin="round"/>"##;
+const SNIP: &str = r##"<path d="M3 3h3M8.5 3h3M14 3h3v3M17 8.5v3M17 14v3h-3M11.5 17h-3M6 17H3v-3M3 11.5v-3M3 6V3" stroke="#fff" stroke-width="1.3" stroke-linecap="round"/><path d="M10 7v6M7 10h6" stroke="#fff" stroke-width="1.3" stroke-linecap="round"/>"##;
 
 #[cfg(test)]
 mod tests {

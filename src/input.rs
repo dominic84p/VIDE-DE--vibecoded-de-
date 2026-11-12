@@ -82,6 +82,9 @@ enum Action {
     MoveToWorkspace(usize),
     /// Swallowed by the start menu.
     Menu(MenuKey),
+    /// Typing into the network flyout's security key box.
+    FlyoutKey(MenuKey),
+    CloseFlyout,
 }
 
 enum MenuKey {
@@ -294,6 +297,13 @@ impl State {
                     }
                     return;
                 }
+                if self.tray.flyout == Some(crate::tray::Flyout::Network) && self.flyout_rect().to_f64().contains(self.pointer_loc) {
+                    let v = event.amount(Axis::Vertical).unwrap_or_else(|| event.amount_v120(Axis::Vertical).unwrap_or(0.0) / 8.0);
+                    if v != 0.0 {
+                        self.flyout_scroll(v.signum() as i32);
+                    }
+                    return;
+                }
                 if self.start.open {
                     if let Target::Start(_) = self.target(self.pointer_loc) {
                         let v = event
@@ -363,6 +373,13 @@ impl State {
             }
             if state.snip.is_some() && modified == Keysym::Escape {
                 return FilterResult::Intercept(if pressed { Action::CancelSnip } else { Action::CloseMenu });
+            }
+            if state.tray.password.is_some() && state.tray.flyout == Some(crate::tray::Flyout::Network) {
+                let k = if pressed { menu_key(modified, modified.key_char()) } else { MenuKey::Ignore };
+                return FilterResult::Intercept(Action::FlyoutKey(k));
+            }
+            if state.tray.flyout.is_some() && pressed && modified == Keysym::Escape {
+                return FilterResult::Intercept(Action::CloseFlyout);
             }
             if state.action_center.open && pressed && modified == Keysym::Escape {
                 return FilterResult::Intercept(Action::CloseActionCenter);
@@ -476,6 +493,14 @@ impl State {
                 }
             }
             Action::Menu(k) => self.menu_key(k),
+            Action::FlyoutKey(k) => match k {
+                MenuKey::Char(c) => self.flyout_type(Some(c), false),
+                MenuKey::Backspace => self.flyout_type(None, true),
+                MenuKey::Launch => self.run_flyout_action(crate::tray::FlyoutAction::PasswordNext),
+                MenuKey::Close => self.run_flyout_action(crate::tray::FlyoutAction::PasswordCancel),
+                _ => {}
+            },
+            Action::CloseFlyout => self.close_flyout(),
         }
         self.needs_redraw = true;
     }
@@ -699,6 +724,10 @@ impl State {
                 Target::ActionCenter(h) => h.clone(),
                 _ => crate::notifications::ActionCenterHit::Nothing,
             };
+            let fly_hover = if self.flyout_rect().to_f64().contains(pos) { self.flyout_action(pos) } else { None };
+            if self.tray.hover != fly_hover {
+                self.tray.hover = fly_hover;
+            }
             if self.action_center.hover != ac_hover {
                 self.action_center.hover = ac_hover;
                 self.action_center.panel = None;
@@ -817,7 +846,7 @@ impl State {
             if !matches!(
                 target,
                 Target::Taskbar(
-                    TaskbarHit::Volume | TaskbarHit::Brightness | TaskbarHit::Network | TaskbarHit::Bluetooth
+                    TaskbarHit::Volume | TaskbarHit::Brightness | TaskbarHit::Network
                 )
             ) {
                 self.close_flyout();
@@ -902,7 +931,6 @@ impl State {
                         TaskbarHit::Volume => self.toggle_flyout(crate::tray::Flyout::Volume),
                         TaskbarHit::Brightness => self.toggle_flyout(crate::tray::Flyout::Brightness),
                         TaskbarHit::Network => self.toggle_flyout(crate::tray::Flyout::Network),
-                        TaskbarHit::Bluetooth => self.toggle_flyout(crate::tray::Flyout::Bluetooth),
                         TaskbarHit::Clock => self.toggle_action_center(),
                         TaskbarHit::TrayApp(id) => {
                             self.tray_menu_x = pos.x as i32;

@@ -1,41 +1,74 @@
-//! System tray: volume (PipeWire, through `wpctl`), brightness, Wi-Fi and Bluetooth.
+//! System tray: volume (PipeWire, through `wpctl`), brightness and the network flyout.
 //! Brightness dims the picture in the compositor, so it works on any monitor, not
-//! just laptop panels. NetworkManager and BlueZ are queried only when a flyout opens,
-//! so an idle desktop doesn't keep spawning helpers.
+//! just laptop panels.
+//!
+//! The network flyout is Windows 10's: available networks (click one to expand it,
+//! Connect asks for the security key right in the flyout), "Network & Internet
+//! settings", and the Wi-Fi / Airplane mode / Mobile hotspot tiles. NetworkManager,
+//! rfkill and BlueZ are asked on a thread, so a slow `nmcli` never stalls a frame;
+//! answers come back over a calloop channel.
 
-use std::process::Command;
+use std::{process::Command, time::Duration};
 
 use smithay::{
     backend::renderer::element::memory::MemoryRenderBuffer,
+    reexports::calloop::{
+        channel::{self, Sender},
+        timer::{TimeoutAction, Timer},
+    },
     utils::{Logical, Point, Rectangle},
 };
 
 use crate::{
-    canvas::{hex, Canvas, Rgba},
+    canvas::{ellipsize, hex, measure, Canvas, Rgba},
     state::State,
     ui::TASKBAR_H,
 };
 
 pub const FLYOUT_W: i32 = 360;
 pub const FLYOUT_H: i32 = 96;
-pub const MENU_H: i32 = 224;
+/// The network flyout, when the screen is tall enough.
+const NET_H: i32 = 560;
 const SLIDER_X: i32 = 60;
 const SLIDER_W: i32 = FLYOUT_W - SLIDER_X - 64;
 const BG: Rgba = hex(0x1f1f1f);
-const BORDER: Rgba = hex(0x3c3c3c);
+const BORDER: Rgba = hex(0x484848);
 const TRACK: Rgba = hex(0x5a5a5a);
 const FILL: Rgba = hex(0x76b9ed);
 const WHITE: Rgba = hex(0xffffff);
 const DIM: Rgba = hex(0xa0a0a0);
+const ROW_HOVER: Rgba = hex(0x333333);
+const ROW_OPEN: Rgba = hex(0x3a3a3a);
+const ACCENT: Rgba = hex(0x0078d7);
+const ACCENT_HOVER: Rgba = hex(0x1a86dd);
+const TILE: Rgba = hex(0x3b3b3b);
+const TILE_HOVER: Rgba = hex(0x4a4a4a);
+const BUTTON: Rgba = hex(0x4c4c4c);
+const BUTTON_HOVER: Rgba = hex(0x5c5c5c);
+const LINK: Rgba = hex(0x8ec5f5);
+const ERROR: Rgba = hex(0xff99a4);
 /// Lowest brightness we allow, so the screen can't be dimmed to black by accident.
 pub const MIN_BRIGHTNESS: f32 = 0.2;
+/// Windows' wording for a wrong Wi-Fi password, in its two lines.
+const WRONG_KEY: [&str; 2] = ["The network security key isn't correct.", "Please try again."];
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Flyout {
     Volume,
     Brightness,
     Network,
-    Bluetooth,
+}
+
+/// What the taskbar's network icon shows.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum NetIcon {
+    Airplane,
+    Wired,
+    /// Connected to Wi-Fi, with 1-4 bars.
+    Wifi(u8),
+    /// Wi-Fi on but not connected.
+    Searching,
+    WifiOff,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -46,23 +79,42 @@ pub struct NetRow {
     pub active: bool,
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct BtRow {
-    pub mac: String,
-    pub name: String,
-    pub connected: bool,
-}
-
-/// What a click on a flyout row means. Input routing applies it.
+/// What a click on the network flyout means. Input routing applies it.
 #[derive(Clone, Debug, PartialEq)]
 pub enum FlyoutAction {
+    /// Expand (or collapse) a network's row.
+    Select(String),
+    Connect(String),
+    Disconnect,
+    Properties,
+    ToggleAutoConnect,
+    PasswordField,
+    PasswordNext,
+    PasswordCancel,
     WifiToggle,
-    WifiConnect(String, bool),
-    BluetoothToggle,
-    BluetoothConnect(String, bool),
+    AirplaneToggle,
+    HotspotToggle,
     NetworkSettings,
-    BluetoothSettings,
-    SoundSettings,
+}
+
+/// One look at the radios and NetworkManager, taken on a thread.
+#[derive(Clone, Debug, Default)]
+pub struct NetSnapshot {
+    pub wifi_on: bool,
+    pub bt_on: bool,
+    pub airplane: bool,
+    pub hotspot: bool,
+    /// Name of the wired connection, when one is up.
+    pub wired: Option<String>,
+    pub wifi_dev: Option<String>,
+    pub networks: Vec<NetRow>,
+    /// Wi-Fi connections NetworkManager already has a password for.
+    pub saved: Vec<String>,
+}
+
+pub enum TrayUpdate {
+    Net(NetSnapshot),
+    Connected { ssid: String, ok: bool },
 }
 
 pub struct Tray {
@@ -72,14 +124,19 @@ pub struct Tray {
     pub flyout: Option<Flyout>,
     /// Left button held on the slider.
     pub dragging: bool,
-    pub wifi_on: bool,
-    pub bt_on: bool,
-    pub ssid: String,
-    pub networks: Vec<NetRow>,
-    pub devices: Vec<BtRow>,
-    /// Last refresh/action message, shown under the flyout title.
-    pub notice: Option<String>,
-    picture: Option<(String, MemoryRenderBuffer)>,
+    pub net: NetSnapshot,
+    /// The network row that's open (Connect / Disconnect showing).
+    pub expanded: Option<String>,
+    /// Typing a security key for `expanded`.
+    pub password: Option<String>,
+    pub password_error: bool,
+    pub auto_connect: bool,
+    pub connecting: Option<String>,
+    pub hover: Option<FlyoutAction>,
+    /// Network rows scrolled past.
+    pub scroll: usize,
+    picture: Option<(String, MemoryRenderBuffer, Vec<(Rectangle<i32, Logical>, FlyoutAction)>)>,
+    updates: Option<Sender<TrayUpdate>>,
 }
 
 impl Tray {
@@ -91,13 +148,35 @@ impl Tray {
             brightness: 1.0,
             flyout: None,
             dragging: false,
-            wifi_on: false,
-            bt_on: false,
-            ssid: String::new(),
-            networks: Vec::new(),
-            devices: Vec::new(),
-            notice: None,
+            net: NetSnapshot::default(),
+            expanded: None,
+            password: None,
+            password_error: false,
+            auto_connect: true,
+            connecting: None,
+            hover: None,
+            scroll: 0,
             picture: None,
+            updates: None,
+        }
+    }
+
+    pub fn wifi_on(&self) -> bool {
+        self.net.wifi_on
+    }
+
+    pub fn icon(&self) -> NetIcon {
+        let n = &self.net;
+        if n.airplane {
+            NetIcon::Airplane
+        } else if n.wired.is_some() {
+            NetIcon::Wired
+        } else if let Some(a) = n.networks.iter().find(|r| r.active) {
+            NetIcon::Wifi(((a.signal + 24) / 25).clamp(1, 4) as u8)
+        } else if n.wifi_on {
+            NetIcon::Searching
+        } else {
+            NetIcon::WifiOff
         }
     }
 }
@@ -115,19 +194,157 @@ fn command(cmd: &str, args: &[&str]) -> Option<String> {
     Some(String::from_utf8_lossy(&out.stdout).into_owned())
 }
 
+/// Run a command off the main loop, without a shell (SSIDs and keys are user text).
+fn run_quiet(cmd: &str, args: &[&str]) -> bool {
+    Command::new(cmd).args(args).output().is_ok_and(|o| o.status.success())
+}
+
+/// nmcli's terse output escapes ':' inside fields as '\:'.
+fn split_terse(line: &str) -> Vec<String> {
+    let mut out = vec![String::new()];
+    let mut chars = line.chars();
+    while let Some(c) = chars.next() {
+        match c {
+            '\\' => out.last_mut().unwrap().extend(chars.next()),
+            ':' => out.push(String::new()),
+            c => out.last_mut().unwrap().push(c),
+        }
+    }
+    out
+}
+
+fn snapshot() -> NetSnapshot {
+    let mut s = NetSnapshot { wifi_on: command("nmcli", &["radio", "wifi"]).is_some_and(|s| s.trim() == "enabled"), ..Default::default() };
+    let mut wifi_conn = None;
+    for line in command("nmcli", &["-t", "-f", "DEVICE,TYPE,STATE,CONNECTION", "device"]).unwrap_or_default().lines() {
+        let f = split_terse(line);
+        if f.len() < 4 {
+            continue;
+        }
+        match f[1].as_str() {
+            "ethernet" if f[2] == "connected" && s.wired.is_none() => s.wired = Some(f[3].clone()),
+            "wifi" if s.wifi_dev.is_none() => {
+                s.wifi_dev = Some(f[0].clone());
+                wifi_conn = (f[2] == "connected").then(|| f[3].clone());
+            }
+            _ => {}
+        }
+    }
+    for line in command("nmcli", &["-t", "-f", "IN-USE,SIGNAL,SECURITY,SSID", "device", "wifi", "list", "--rescan", "no"]).unwrap_or_default().lines() {
+        let f = split_terse(line);
+        if f.len() < 4 || f[3].is_empty() {
+            continue;
+        }
+        let active = f[0].contains('*');
+        // One row per name, though a network often has several access points; the
+        // one we're on may not be the first listed.
+        if let Some(n) = s.networks.iter_mut().find(|n| n.ssid == f[3]) {
+            n.active |= active;
+            continue;
+        }
+        s.networks.push(NetRow { ssid: f[3].clone(), signal: f[1].parse().unwrap_or(0), secure: !f[2].is_empty() && f[2] != "--", active });
+    }
+    // The connection is usually named after the network, which covers lists that don't mark it.
+    if !s.networks.iter().any(|n| n.active)
+        && let Some(c) = &wifi_conn
+        && let Some(n) = s.networks.iter_mut().find(|n| n.ssid == *c)
+    {
+        n.active = true;
+    }
+    // Windows lists the connected network first, then by signal.
+    s.networks.sort_by(|a, b| b.active.cmp(&a.active).then(b.signal.cmp(&a.signal)));
+    s.networks.truncate(20);
+    for line in command("nmcli", &["-t", "-f", "NAME,TYPE", "connection", "show"]).unwrap_or_default().lines() {
+        let f = split_terse(line);
+        if f.len() >= 2 && f[1] == "802-11-wireless" {
+            s.saved.push(f[0].clone());
+        }
+    }
+    s.hotspot = command("nmcli", &["-t", "-f", "NAME", "connection", "show", "--active"]).is_some_and(|o| o.lines().any(|l| l == "Hotspot"));
+    // Airplane mode is every radio soft-blocked, the way rfkill (and GNOME/KDE) see it.
+    let rf = command("rfkill", &["list"]).unwrap_or_default();
+    let soft: Vec<bool> = rf.lines().filter_map(|l| l.trim().strip_prefix("Soft blocked: ")).map(|v| v == "yes").collect();
+    s.airplane = !soft.is_empty() && soft.iter().all(|b| *b);
+    s.bt_on = command("bluetoothctl", &["show"]).is_some_and(|o| o.contains("Powered: yes"));
+    s
+}
+
 impl State {
     pub fn flyout_rect(&self) -> Rectangle<i32, Logical> {
         let h = match self.tray.flyout {
-            Some(Flyout::Network | Flyout::Bluetooth) => MENU_H,
+            Some(Flyout::Network) => NET_H.min(self.output_size.h - TASKBAR_H - 16),
             _ => FLYOUT_H,
         };
         let x = self.output_size.w - FLYOUT_W - 8;
         Rectangle::new((x, self.output_size.h - TASKBAR_H - h - 8).into(), (FLYOUT_W, h).into())
     }
 
+    fn tray_sender(&mut self) -> Sender<TrayUpdate> {
+        if let Some(tx) = &self.tray.updates {
+            return tx.clone();
+        }
+        let (tx, rx) = channel::channel();
+        let res = self.loop_handle.insert_source(rx, |event, _, state| {
+            if let channel::Event::Msg(u) = event {
+                state.apply_tray_update(u);
+            }
+        });
+        if let Err(e) = res {
+            tracing::warn!("tray updates disabled: {e}");
+        }
+        self.tray.updates = Some(tx.clone());
+        tx
+    }
+
+    /// Re-read the radios and networks on a thread.
+    pub fn refresh_network(&mut self) {
+        let tx = self.tray_sender();
+        std::thread::spawn(move || {
+            let _ = tx.send(TrayUpdate::Net(snapshot()));
+        });
+    }
+
+    fn refresh_network_in(&mut self, d: Duration) {
+        let _ = self.loop_handle.insert_source(Timer::from_duration(d), |_, _, state| {
+            state.refresh_network();
+            TimeoutAction::Drop
+        });
+    }
+
+    /// Keep the taskbar icon honest: a quick look every 20 s.
+    pub fn start_network_polling(&mut self) {
+        self.refresh_network();
+        let _ = self.loop_handle.insert_source(Timer::from_duration(Duration::from_secs(20)), |_, _, state| {
+            state.refresh_network();
+            TimeoutAction::ToDuration(Duration::from_secs(20))
+        });
+    }
+
+    fn apply_tray_update(&mut self, u: TrayUpdate) {
+        match u {
+            TrayUpdate::Net(s) => {
+                self.tray.net = s;
+                self.taskbar = None;
+            }
+            TrayUpdate::Connected { ssid, ok } => {
+                self.tray.connecting = None;
+                if ok {
+                    self.tray.expanded = None;
+                    self.tray.password = None;
+                } else if self.tray.net.networks.iter().any(|n| n.ssid == ssid && n.secure) {
+                    // Ask again, with Windows' wrong-key message.
+                    self.tray.expanded = Some(ssid);
+                    self.tray.password = Some(String::new());
+                    self.tray.password_error = true;
+                }
+                self.refresh_network();
+            }
+        }
+        self.needs_redraw = true;
+    }
+
     pub fn toggle_flyout(&mut self, f: Flyout) {
         self.tray.flyout = if self.tray.flyout == Some(f) { None } else { Some(f) };
-        self.tray.notice = None;
         match f {
             Flyout::Volume => {
                 if let Some((v, m)) = read_volume() {
@@ -135,8 +352,15 @@ impl State {
                     self.tray.muted = m;
                 }
             }
-            Flyout::Network => self.refresh_network(),
-            Flyout::Bluetooth => self.refresh_bluetooth(),
+            Flyout::Network => {
+                self.tray.expanded = None;
+                self.tray.password = None;
+                self.tray.scroll = 0;
+                self.refresh_network();
+                // Windows rescans when the flyout opens; results land a few seconds later.
+                std::thread::spawn(|| run_quiet("nmcli", &["device", "wifi", "rescan"]));
+                self.refresh_network_in(Duration::from_secs(4));
+            }
             Flyout::Brightness => {}
         }
         self.needs_redraw = true;
@@ -145,6 +369,8 @@ impl State {
     pub fn close_flyout(&mut self) {
         if self.tray.flyout.take().is_some() {
             self.tray.dragging = false;
+            self.tray.password = None;
+            self.tray.hover = None;
             self.needs_redraw = true;
         }
     }
@@ -171,132 +397,158 @@ impl State {
         self.needs_redraw = true;
     }
 
-    fn refresh_network(&mut self) {
-        self.tray.wifi_on = command("nmcli", &["radio", "wifi"]).is_some_and(|s| s.trim() == "enabled");
-        self.tray.ssid.clear();
-        self.tray.networks.clear();
-        let Some(out) = command("nmcli", &["-t", "-f", "IN-USE,SIGNAL,SECURITY,SSID", "device", "wifi", "list", "--rescan", "no"]) else { return };
-        for line in out.lines() {
-            let mut f = line.splitn(4, ':');
-            let active = f.next().unwrap_or("").contains('*');
-            let signal = f.next().unwrap_or("0").parse().unwrap_or(0);
-            let security = f.next().unwrap_or("").replace("\\:", ":");
-            let ssid = f.next().unwrap_or("").replace("\\:", ":");
-            if ssid.is_empty() || self.tray.networks.iter().any(|n| n.ssid == ssid) {
-                continue;
-            }
-            if active {
-                self.tray.ssid = ssid.clone();
-            }
-            self.tray.networks.push(NetRow { ssid, signal, secure: !security.is_empty() && security != "--", active });
-        }
-        self.tray.networks.sort_by(|a, b| b.active.cmp(&a.active).then(b.signal.cmp(&a.signal)));
-        self.tray.networks.truncate(5);
-    }
-
-    fn refresh_bluetooth(&mut self) {
-        self.tray.bt_on = command("bluetoothctl", &["show"]).is_some_and(|s| s.contains("Powered: yes"));
-        self.tray.devices.clear();
-        let Some(out) = command("bluetoothctl", &["devices", "Paired"]) else { return };
-        let connected = command("bluetoothctl", &["devices", "Connected"]).unwrap_or_default();
-        for line in out.lines() {
-            let Some(rest) = line.strip_prefix("Device ") else { continue };
-            let Some((mac, name)) = rest.split_once(' ') else { continue };
-            self.tray.devices.push(BtRow {
-                mac: mac.to_string(),
-                name: name.to_string(),
-                connected: connected.contains(mac),
-            });
-        }
-        self.tray.devices.truncate(5);
-    }
-
-    /// The row under `p` in an open Network/Bluetooth flyout.
-    pub fn flyout_action(&self, p: Point<f64, Logical>) -> Option<FlyoutAction> {
-        let f = self.tray.flyout?;
-        let local = p - self.flyout_rect().loc.to_f64();
-        if local.x < 0.0 || local.x >= FLYOUT_W as f64 {
-            return None;
-        }
-        if local.y >= (MENU_H - 32) as f64 {
-            return match f {
-                Flyout::Network => Some(FlyoutAction::NetworkSettings),
-                Flyout::Bluetooth => Some(FlyoutAction::BluetoothSettings),
-                _ => None,
-            };
-        }
-        // The first 36px are the heading; rows are 28px high after that.
-        if local.y < 36.0 {
-            return match f {
-                Flyout::Network => Some(FlyoutAction::WifiToggle),
-                Flyout::Bluetooth => Some(FlyoutAction::BluetoothToggle),
-                _ => None,
-            };
-        }
-        let row = ((local.y - 36.0) / 28.0) as usize;
-        match f {
-            Flyout::Network => self.tray.networks.get(row).map(|n| FlyoutAction::WifiConnect(n.ssid.clone(), n.secure)),
-            Flyout::Bluetooth => self.tray.devices.get(row).map(|d| FlyoutAction::BluetoothConnect(d.mac.clone(), d.connected)),
-            _ => None,
-        }
-    }
-
-    /// Run a flyout click: NetworkManager/BlueZ calls that must not block the
-    /// compositor are spawned, then the flyout is refreshed.
-    pub fn run_flyout_action(&mut self, a: FlyoutAction) {
-        match a {
-            FlyoutAction::WifiToggle => {
-                let on = !self.tray.wifi_on;
-                self.spawn(&format!("nmcli radio wifi {}", if on { "on" } else { "off" }));
-                self.tray.wifi_on = on;
-                self.tray.notice = Some(if on { "Wi-Fi on".into() } else { "Wi-Fi off".into() });
-            }
-            FlyoutAction::WifiConnect(ssid, secure) => {
-                if secure {
-                    // We can't type a Wi-Fi password in a tiny canvas flyout; Settings has a field.
-                    self.tray.notice = Some("Opening Settings for the password…".into());
-                    if let Some(settings) = crate::input::own_app("vide-settings") {
-                        self.spawn(&format!("{settings} --page network"));
-                    }
-                } else {
-                    self.spawn(&format!("nmcli device wifi connect '{}'", ssid.replace('\'', "'\\''")));
-                    self.tray.notice = Some(format!("Connecting to {ssid}…"));
-                }
-            }
-            FlyoutAction::BluetoothToggle => {
-                let on = !self.tray.bt_on;
-                self.spawn(&format!("bluetoothctl power {}", if on { "on" } else { "off" }));
-                self.tray.bt_on = on;
-                self.tray.notice = Some(if on { "Bluetooth on".into() } else { "Bluetooth off".into() });
-            }
-            FlyoutAction::BluetoothConnect(mac, connected) => {
-                self.spawn(&format!("bluetoothctl {} {mac}", if connected { "disconnect" } else { "connect" }));
-                self.tray.notice = Some(if connected { "Disconnecting…".into() } else { "Connecting…".into() });
-            }
-            FlyoutAction::NetworkSettings => {
-                if let Some(settings) = crate::input::own_app("vide-settings") {
-                    self.spawn(&format!("{settings} --page network"));
-                }
-            }
-            FlyoutAction::BluetoothSettings => {
-                if let Some(settings) = crate::input::own_app("vide-settings") {
-                    self.spawn(&format!("{settings} --page bluetooth"));
-                }
-            }
-            FlyoutAction::SoundSettings => {
-                if let Some(settings) = crate::input::own_app("vide-settings") {
-                    self.spawn(&format!("{settings} --page sound"));
-                }
-            }
-        }
-        self.close_flyout();
+    pub fn set_bluetooth(&mut self, on: bool) {
+        self.tray.net.bt_on = on;
+        std::thread::spawn(move || run_quiet("bluetoothctl", &["power", if on { "on" } else { "off" }]));
+        self.refresh_network_in(Duration::from_millis(1500));
         self.needs_redraw = true;
     }
 
-    /// Pointer at `p` on the open flyout's slider (or the mute icon): apply it.
+    pub fn set_airplane(&mut self, on: bool) {
+        self.tray.net.airplane = on;
+        if on {
+            self.tray.net.wifi_on = false;
+            self.tray.net.bt_on = false;
+        }
+        std::thread::spawn(move || run_quiet("rfkill", &[if on { "block" } else { "unblock" }, "all"]));
+        self.refresh_network_in(Duration::from_millis(1500));
+        self.taskbar = None;
+        self.needs_redraw = true;
+    }
+
+    pub fn set_hotspot(&mut self, on: bool) {
+        self.tray.net.hotspot = on;
+        std::thread::spawn(move || {
+            if on {
+                run_quiet("nmcli", &["device", "wifi", "hotspot"])
+            } else {
+                run_quiet("nmcli", &["connection", "down", "Hotspot"])
+            }
+        });
+        self.refresh_network_in(Duration::from_secs(2));
+        self.needs_redraw = true;
+    }
+
+    fn connect(&mut self, ssid: String, key: Option<String>) {
+        let saved = self.tray.net.saved.contains(&ssid);
+        let auto = self.tray.auto_connect;
+        let tx = self.tray_sender();
+        self.tray.connecting = Some(ssid.clone());
+        self.tray.password = None;
+        self.tray.password_error = false;
+        std::thread::spawn(move || {
+            let ok = match &key {
+                Some(k) => run_quiet("nmcli", &["device", "wifi", "connect", &ssid, "password", k]),
+                None if saved => run_quiet("nmcli", &["connection", "up", "id", &ssid]),
+                None => run_quiet("nmcli", &["device", "wifi", "connect", &ssid]),
+            };
+            if ok && !auto {
+                run_quiet("nmcli", &["connection", "modify", "id", &ssid, "connection.autoconnect", "no"]);
+            }
+            let _ = tx.send(TrayUpdate::Connected { ssid, ok });
+        });
+    }
+
+    /// The network flyout's hit under `p`.
+    pub fn flyout_action(&self, p: Point<f64, Logical>) -> Option<FlyoutAction> {
+        if self.tray.flyout != Some(Flyout::Network) {
+            return None;
+        }
+        let local = (p - self.flyout_rect().loc.to_f64()).to_i32_round();
+        let (_, _, hits) = self.tray.picture.as_ref()?;
+        hits.iter().rev().find(|(r, _)| r.contains(local)).map(|(_, a)| a.clone())
+    }
+
+    /// Run a network flyout click. The flyout stays open, as in Windows, except for
+    /// the links that open Settings.
+    pub fn run_flyout_action(&mut self, a: FlyoutAction) {
+        let settings = |state: &mut State| {
+            if let Some(settings) = crate::input::own_app("vide-settings") {
+                state.spawn(&format!("{settings} --page network"));
+            }
+            state.close_flyout();
+        };
+        match a {
+            FlyoutAction::Select(ssid) => {
+                let open = self.tray.expanded.as_ref() != Some(&ssid);
+                self.tray.expanded = open.then_some(ssid);
+                self.tray.password = None;
+                self.tray.password_error = false;
+                self.tray.auto_connect = true;
+            }
+            FlyoutAction::Connect(ssid) => {
+                let secure = self.tray.net.networks.iter().any(|n| n.ssid == ssid && n.secure);
+                if secure && !self.tray.net.saved.contains(&ssid) {
+                    self.tray.password = Some(String::new());
+                } else {
+                    self.connect(ssid, None);
+                }
+            }
+            FlyoutAction::PasswordNext => {
+                if let (Some(ssid), Some(key)) = (self.tray.expanded.clone(), self.tray.password.clone())
+                    && !key.is_empty()
+                {
+                    self.connect(ssid, Some(key));
+                }
+            }
+            FlyoutAction::PasswordCancel => {
+                self.tray.password = None;
+                self.tray.password_error = false;
+            }
+            FlyoutAction::PasswordField => {}
+            FlyoutAction::Disconnect => {
+                if let Some(dev) = self.tray.net.wifi_dev.clone() {
+                    std::thread::spawn(move || run_quiet("nmcli", &["device", "disconnect", &dev]));
+                    self.refresh_network_in(Duration::from_millis(1500));
+                }
+                self.tray.expanded = None;
+            }
+            FlyoutAction::ToggleAutoConnect => self.tray.auto_connect = !self.tray.auto_connect,
+            FlyoutAction::WifiToggle => {
+                let on = !self.tray.net.wifi_on;
+                self.tray.net.wifi_on = on;
+                if on {
+                    self.tray.net.airplane = false;
+                }
+                std::thread::spawn(move || run_quiet("nmcli", &["radio", "wifi", if on { "on" } else { "off" }]));
+                self.refresh_network_in(Duration::from_secs(2));
+                self.taskbar = None;
+            }
+            FlyoutAction::AirplaneToggle => {
+                let on = !self.tray.net.airplane;
+                self.set_airplane(on);
+            }
+            FlyoutAction::HotspotToggle => {
+                let on = !self.tray.net.hotspot;
+                self.set_hotspot(on);
+            }
+            FlyoutAction::Properties | FlyoutAction::NetworkSettings => settings(self),
+        }
+        self.needs_redraw = true;
+    }
+
+    /// Typing into the security key box.
+    pub fn flyout_type(&mut self, c: Option<char>, backspace: bool) {
+        let Some(pw) = self.tray.password.as_mut() else { return };
+        if backspace {
+            pw.pop();
+        } else if let Some(c) = c {
+            pw.push(c);
+        }
+        self.tray.password_error = false;
+        self.needs_redraw = true;
+    }
+
+    pub fn flyout_scroll(&mut self, rows: i32) {
+        let max = self.tray.net.networks.len().saturating_sub(1);
+        self.tray.scroll = (self.tray.scroll as i32 + rows).clamp(0, max as i32) as usize;
+        self.needs_redraw = true;
+    }
+
+    /// Pointer at `p` on the open flyout: a network-flyout click, or the slider / mute icon.
     pub fn flyout_press(&mut self, p: Point<f64, Logical>) {
         let Some(f) = self.tray.flyout else { return };
-        if matches!(f, Flyout::Network | Flyout::Bluetooth) {
+        if f == Flyout::Network {
             if let Some(a) = self.flyout_action(p) {
                 self.run_flyout_action(a);
             }
@@ -313,7 +565,7 @@ impl State {
 
     pub fn flyout_drag(&mut self, p: Point<f64, Logical>) {
         let Some(f) = self.tray.flyout else { return };
-        if matches!(f, Flyout::Network | Flyout::Bluetooth) {
+        if f == Flyout::Network {
             return;
         }
         let local = p.x - self.flyout_rect().loc.x as f64;
@@ -321,42 +573,34 @@ impl State {
         match f {
             Flyout::Volume => self.set_volume(v),
             Flyout::Brightness => self.set_brightness(MIN_BRIGHTNESS + v * (1.0 - MIN_BRIGHTNESS)),
-            _ => {}
+            Flyout::Network => {}
         }
     }
 
     pub fn flyout_picture(&mut self) -> Option<&MemoryRenderBuffer> {
         let f = self.tray.flyout?;
+        let h = self.flyout_rect().size.h;
+        let t = &self.tray;
         let key = match f {
-            Flyout::Volume => format!("volume:{}:{}", (self.tray.volume * 100.0).round(), self.tray.muted),
-            Flyout::Brightness => format!("brightness:{}", (self.tray.brightness * 100.0).round()),
+            Flyout::Volume => format!("volume:{}:{}", (t.volume * 100.0).round(), t.muted),
+            Flyout::Brightness => format!("brightness:{}", (t.brightness * 100.0).round()),
             Flyout::Network => format!(
-                "network:{}:{}:{}:{}",
-                self.tray.wifi_on,
-                self.tray.ssid,
-                self.tray.notice.clone().unwrap_or_default(),
-                self.tray.networks.iter().map(|n| format!("{}:{}:{}:{},", n.ssid, n.signal, n.secure, n.active)).collect::<String>()
-            ),
-            Flyout::Bluetooth => format!(
-                "bt:{}:{}:{}:{}",
-                self.tray.bt_on,
-                self.tray.notice.clone().unwrap_or_default(),
-                self.tray.devices.iter().map(|d| format!("{}:{}:{},", d.mac, d.name, d.connected)).collect::<String>(),
-                self.tray.devices.len()
+                "network:{h}:{:?}:{:?}:{:?}:{}:{}:{:?}:{:?}:{}",
+                t.net, t.expanded, t.password.as_ref().map(|p| p.chars().count()), t.password_error, t.auto_connect, t.connecting, t.hover, t.scroll
             ),
         };
-        if self.tray.picture.as_ref().is_none_or(|(k, _)| *k != key) {
-            let mut c = Canvas::new(FLYOUT_W, if matches!(f, Flyout::Network | Flyout::Bluetooth) { MENU_H } else { FLYOUT_H });
+        if self.tray.picture.as_ref().is_none_or(|(k, _, _)| *k != key) {
+            let mut c = Canvas::new(FLYOUT_W, h);
             c.fill(BG);
             c.outline(0, 0, c.w, c.h, BORDER);
+            let mut hits = Vec::new();
             match f {
                 Flyout::Volume | Flyout::Brightness => draw_slider(&mut c, self, f),
-                Flyout::Network => draw_network(&mut c, self),
-                Flyout::Bluetooth => draw_bluetooth(&mut c, self),
+                Flyout::Network => hits = draw_network(&mut c, self),
             }
-            self.tray.picture = Some((key, c.into_buffer()));
+            self.tray.picture = Some((key, c.into_buffer(), hits));
         }
-        self.tray.picture.as_ref().map(|(_, b)| b)
+        self.tray.picture.as_ref().map(|(_, b, _)| b)
     }
 }
 
@@ -383,96 +627,179 @@ fn draw_slider(c: &mut Canvas, state: &State, f: Flyout) {
     c.round_rect(SLIDER_X + fill_w - 5, cy - 11, 10, 22, 4, if muted { TRACK } else { FILL });
 }
 
-fn draw_network(c: &mut Canvas, state: &State) {
-    let Some(font) = state.font.as_ref() else { return };
-    c.text(font, 13.0, 12, 8, 22, WHITE, "Wi-Fi");
-    let status = if state.tray.wifi_on {
-        if state.tray.ssid.is_empty() { "On".to_string() } else { format!("On · {}", state.tray.ssid) }
-    } else {
-        "Off".into()
-    };
-    let tw = crate::canvas::measure(font, 11.0, &status);
-    c.text(font, 11.0, FLYOUT_W - 12 - tw, 10, 20, if state.tray.wifi_on { FILL } else { DIM }, &status);
-    c.rect(12, 32, FLYOUT_W - 24, 1, BORDER);
-
-    if !state.tray.wifi_on {
-        c.text(font, 12.5, 18, 48, 24, DIM, "Wi-Fi is off. Click the title to turn it on.");
-    } else if state.tray.networks.is_empty() {
-        c.text(font, 12.5, 18, 48, 24, DIM, "No networks found.");
-    }
-    for (i, net) in state.tray.networks.iter().take(5).enumerate() {
-        let y = 36 + i as i32 * 28;
-        if net.active {
-            c.rect(8, y, FLYOUT_W - 16, 26, hex(0x2f2f2f));
-        }
-        wifi_bars(c, 18, y + 13, net.signal);
-        let name = if net.ssid.len() > 26 { format!("{}…", &net.ssid[..26]) } else { net.ssid.clone() };
-        c.text(font, 12.5, 36, y + 4, 20, if net.active { FILL } else { WHITE }, &name);
-        if net.secure {
-            lock(c, FLYOUT_W - 58, y + 7, DIM);
-        }
-        if net.active {
-            c.text(font, 11.0, FLYOUT_W - 44, y + 5, 20, FILL, "Connected");
-        }
-    }
-    if let Some(n) = &state.tray.notice {
-        c.text(font, 10.5, 18, MENU_H - 56, 16, DIM, n);
-    }
-    c.rect(12, MENU_H - 36, FLYOUT_W - 24, 1, BORDER);
-    c.text(font, 12.5, 18, MENU_H - 30, 24, WHITE, "Network settings");
+fn rect(x: i32, y: i32, w: i32, h: i32) -> Rectangle<i32, Logical> {
+    Rectangle::new((x, y).into(), (w, h).into())
 }
 
-fn draw_bluetooth(c: &mut Canvas, state: &State) {
-    let Some(font) = state.font.as_ref() else { return };
-    c.text(font, 13.0, 12, 8, 22, WHITE, "Bluetooth");
-    let status = if state.tray.bt_on { "On" } else { "Off" };
-    let tw = crate::canvas::measure(font, 11.0, status);
-    c.text(font, 11.0, FLYOUT_W - 12 - tw, 10, 20, if state.tray.bt_on { FILL } else { DIM }, status);
-    c.rect(12, 32, FLYOUT_W - 24, 1, BORDER);
-    if !state.tray.bt_on {
-        c.text(font, 12.5, 18, 48, 24, DIM, "Bluetooth is off. Click the title to turn it on.");
-    } else if state.tray.devices.is_empty() {
-        c.text(font, 12.5, 18, 48, 24, DIM, "No paired devices.");
+/// A flat Windows flyout button; returns its rect.
+fn button(c: &mut Canvas, font: &fontdue::Font, x: i32, y: i32, w: i32, label: &str, hover: bool) -> Rectangle<i32, Logical> {
+    c.rect(x, y, w, 32, if hover { BUTTON_HOVER } else { BUTTON });
+    if hover {
+        c.outline(x, y, w, 32, hex(0x858585));
     }
-    for (i, dev) in state.tray.devices.iter().take(5).enumerate() {
-        let y = 36 + i as i32 * 28;
-        if dev.connected {
-            c.rect(8, y, FLYOUT_W - 16, 26, hex(0x2f2f2f));
-        }
-        bluetooth_glyph(c, 18, y + 4, if dev.connected { FILL } else { WHITE });
-        let name = if dev.name.len() > 28 { format!("{}…", &dev.name[..28]) } else { dev.name.clone() };
-        c.text(font, 12.5, 34, y + 4, 20, if dev.connected { FILL } else { WHITE }, &name);
-        let action = if dev.connected { "Disconnect" } else { "Connect" };
-        let aw = crate::canvas::measure(font, 10.5, action);
-        c.text(font, 10.5, FLYOUT_W - 14 - aw, y + 5, 20, DIM, action);
-    }
-    if let Some(n) = &state.tray.notice {
-        c.text(font, 10.5, 18, MENU_H - 56, 16, DIM, n);
-    }
-    c.rect(12, MENU_H - 36, FLYOUT_W - 24, 1, BORDER);
-    c.text(font, 12.5, 18, MENU_H - 30, 24, WHITE, "Bluetooth settings");
+    let tw = measure(font, 13.0, label);
+    c.text(font, 13.0, x + (w - tw) / 2, y, 32, WHITE, label);
+    rect(x, y, w, 32)
 }
 
-fn wifi_bars(c: &mut Canvas, x: i32, y: i32, signal: u32) {
-    for i in 0..4 {
-        let h = 4 + i * 3;
-        let on = signal as f32 / 100.0 > i as f32 * 0.25;
-        c.rect(x + i * 5, y + 9 - h, 3, h, if on { WHITE } else { TRACK });
+/// Windows 10's network flyout. Returns the click targets.
+fn draw_network(c: &mut Canvas, state: &State) -> Vec<(Rectangle<i32, Logical>, FlyoutAction)> {
+    let mut hits = vec![];
+    let Some(font) = state.font.as_ref() else { return hits };
+    let t = &state.tray;
+    let n = &t.net;
+    let h = c.h;
+    let hover = |a: &FlyoutAction| t.hover.as_ref() == Some(a);
+    let tiles_y = h - 82;
+    let settings_y = tiles_y - 70;
+    let list_bottom = settings_y - 4;
+    let mut y = 0;
+
+    // Wired connection first, like Windows.
+    if let Some(name) = &n.wired {
+        ethernet_glyph(c, 28.0, (y + 32) as f32);
+        c.text(font, 14.0, 56, y + 12, 20, WHITE, &ellipsize(font, 14.0, name, FLYOUT_W - 72));
+        c.text(font, 12.0, 56, y + 32, 18, DIM, "Connected");
+        y += 64;
     }
+
+    if n.airplane {
+        c.text(font, 13.0, 16, y + 16, 20, DIM, "Airplane mode is on.");
+    } else if !n.wifi_on {
+        c.text(font, 13.0, 16, y + 16, 20, DIM, "Wi-Fi is turned off.");
+    } else if n.networks.is_empty() {
+        c.text(font, 13.0, 16, y + 16, 20, DIM, "No Wi-Fi networks found.");
+    }
+    let rows: &[NetRow] = if n.wifi_on && !n.airplane { &n.networks } else { &[] };
+    for net in rows.iter().skip(t.scroll) {
+        let open = t.expanded.as_ref() == Some(&net.ssid);
+        let typing = open && t.password.is_some();
+        let rh = match (open, net.active, typing) {
+            (false, _, _) => 64,
+            (true, true, _) => 132,
+            (true, false, false) => 140,
+            (true, false, true) => if t.password_error { 210 } else { 176 },
+        };
+        if y + 64 > list_bottom {
+            break;
+        }
+        let select = FlyoutAction::Select(net.ssid.clone());
+        if open {
+            c.rect(0, y, FLYOUT_W, rh.min(list_bottom - y), ROW_OPEN);
+        } else if hover(&select) {
+            c.rect(0, y, FLYOUT_W, rh, ROW_HOVER);
+        }
+        hits.push((rect(0, y, FLYOUT_W, 64), select));
+        wifi_signal(c, 28.0, (y + 30) as f32, net.signal, net.secure);
+        c.text(font, 14.0, 56, y + 12, 20, WHITE, &ellipsize(font, 14.0, &net.ssid, FLYOUT_W - 72));
+        let status = if t.connecting.as_ref() == Some(&net.ssid) {
+            "Connecting…".to_string()
+        } else if net.active {
+            format!("Connected, {}", if net.secure { "secured" } else { "open" })
+        } else if net.secure {
+            "Secured".into()
+        } else {
+            "Open".into()
+        };
+        c.text(font, 12.0, 56, y + 32, 18, DIM, &status);
+
+        if open && net.active {
+            let props = "Properties";
+            let pw = measure(font, 13.0, props);
+            c.text(font, 13.0, 56, y + 62, 20, if hover(&FlyoutAction::Properties) { WHITE } else { LINK }, props);
+            hits.push((rect(52, y + 60, pw + 8, 24), FlyoutAction::Properties));
+            let r = button(c, font, FLYOUT_W - 16 - 120, y + 88, 120, "Disconnect", hover(&FlyoutAction::Disconnect));
+            hits.push((r, FlyoutAction::Disconnect));
+        } else if open && !typing {
+            // "Connect automatically" checkbox, then Connect.
+            let (bx, by) = (56, y + 64);
+            if t.auto_connect {
+                c.rect(bx, by, 18, 18, ACCENT);
+                c.line(bx as f32 + 4.0, by as f32 + 9.5, bx as f32 + 7.5, by as f32 + 13.0, 1.6, WHITE);
+                c.line(bx as f32 + 7.5, by as f32 + 13.0, bx as f32 + 14.0, by as f32 + 5.5, 1.6, WHITE);
+            } else {
+                c.outline(bx, by, 18, 18, WHITE);
+                c.outline(bx + 1, by + 1, 16, 16, WHITE);
+            }
+            c.text(font, 13.0, bx + 28, by - 1, 20, WHITE, "Connect automatically");
+            hits.push((rect(bx - 4, by - 4, 220, 26), FlyoutAction::ToggleAutoConnect));
+            let busy = t.connecting.is_some();
+            let r = button(c, font, FLYOUT_W - 16 - 120, y + 96, 120, "Connect", hover(&FlyoutAction::Connect(net.ssid.clone())) && !busy);
+            if !busy {
+                hits.push((r, FlyoutAction::Connect(net.ssid.clone())));
+            }
+        } else if typing {
+            c.text(font, 13.0, 56, y + 62, 20, WHITE, "Enter the network security key");
+            let (fx, fy, fw) = (56, y + 88, FLYOUT_W - 56 - 16);
+            c.rect(fx, fy, fw, 32, hex(0x101010));
+            c.outline(fx, fy, fw, 32, ACCENT);
+            c.outline(fx + 1, fy + 1, fw - 2, 30, ACCENT);
+            // One dot per character, drawn: the UI font has no bullet glyph.
+            let len = t.password.as_ref().map(|p| p.chars().count()).unwrap_or(0).min(((fw - 24) / 9) as usize);
+            for i in 0..len {
+                c.circle((fx + 14 + i as i32 * 9) as f32, (fy + 16) as f32, 3.0, WHITE);
+            }
+            c.rect(fx + 12 + len as i32 * 9, fy + 8, 1, 16, WHITE);
+            hits.push((rect(fx, fy, fw, 32), FlyoutAction::PasswordField));
+            let mut by = fy + 44;
+            if t.password_error {
+                for (i, line) in WRONG_KEY.iter().enumerate() {
+                    c.text(font, 12.0, 56, fy + 36 + i as i32 * 16, 18, ERROR, line);
+                }
+                by += 34;
+            }
+            let r = button(c, font, FLYOUT_W - 16 - 100, by, 100, "Cancel", hover(&FlyoutAction::PasswordCancel));
+            hits.push((r, FlyoutAction::PasswordCancel));
+            let r = button(c, font, FLYOUT_W - 16 - 208, by, 100, "Next", hover(&FlyoutAction::PasswordNext));
+            hits.push((r, FlyoutAction::PasswordNext));
+        }
+        y += rh;
+    }
+    // Rows below the list area are covered by the settings link and tiles.
+    c.rect(1, settings_y - 4, FLYOUT_W - 2, h - settings_y + 3, BG);
+
+    // "Network & Internet settings".
+    let s = FlyoutAction::NetworkSettings;
+    if hover(&s) {
+        c.rect(1, settings_y, FLYOUT_W - 2, 62, ROW_HOVER);
+    }
+    c.text(font, 14.0, 16, settings_y + 8, 22, WHITE, "Network & Internet settings");
+    c.text(font, 12.0, 16, settings_y + 32, 18, DIM, "Change settings, such as making a connection metered.");
+    hits.push((rect(0, settings_y, FLYOUT_W, 62), s));
+
+    // Quick action tiles.
+    let tw = (FLYOUT_W - 24 - 8) / 3;
+    for (i, (label, on, a)) in [
+        ("Wi-Fi", n.wifi_on && !n.airplane, FlyoutAction::WifiToggle),
+        ("Airplane mode", n.airplane, FlyoutAction::AirplaneToggle),
+        ("Mobile hotspot", n.hotspot, FlyoutAction::HotspotToggle),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let x = 12 + i as i32 * (tw + 4);
+        let hov = hover(&a);
+        c.rect(x, tiles_y, tw, 70, match (on, hov) {
+            (true, true) => ACCENT_HOVER,
+            (true, false) => ACCENT,
+            (false, true) => TILE_HOVER,
+            (false, false) => TILE,
+        });
+        let (gx, gy) = (x as f32 + 18.0, tiles_y as f32 + 20.0);
+        match i {
+            0 => wifi(c, gx, gy, true),
+            1 => airplane(c, gx, gy),
+            _ => hotspot(c, gx, gy),
+        }
+        c.text(font, 12.0, x + 10, tiles_y + 44, 18, WHITE, &ellipsize(font, 12.0, label, tw - 14));
+        hits.push((rect(x, tiles_y, tw, 70), a));
+    }
+    hits
 }
 
 fn lock(c: &mut Canvas, x: i32, y: i32, color: Rgba) {
-    c.outline(x, y + 5, 9, 8, color);
-    c.outline(x + 2, y, 5, 6, color);
-}
-
-fn bluetooth_glyph(c: &mut Canvas, x: i32, y: i32, color: Rgba) {
-    let (x, y) = (x as f32, y as f32);
-    c.line(x + 5.0, y + 1.0, x + 10.0, y + 9.0, 1.4, color);
-    c.line(x + 10.0, y + 9.0, x + 4.0, y + 14.0, 1.4, color);
-    c.line(x + 4.0, y + 14.0, x + 4.0, y + 0.0, 1.4, color);
-    c.line(x + 4.0, y + 0.0, x + 10.0, y + 5.0, 1.4, color);
-    c.line(x + 10.0, y + 5.0, x + 5.0, y + 13.0, 1.4, color);
+    c.rect(x, y + 4, 8, 6, color);
+    c.outline(x + 1, y, 6, 6, color);
 }
 
 // Windows-style outline glyphs (20x20 grid, white, round joins), rendered with resvg.
@@ -483,6 +810,8 @@ const WAVES: [&str; 3] = [
     r##"<path d="M17 4a8.5 8.5 0 0 1 0 12" fill="none" stroke="#fff" stroke-width="1.4" stroke-linecap="round"/>"##,
 ];
 const MUTE: &str = r##"<path d="M13.5 7.8l4.4 4.4M17.9 7.8l-4.4 4.4" fill="none" stroke="#fff" stroke-width="1.4" stroke-linecap="round"/>"##;
+/// The Wi-Fi fan's arcs, outermost first.
+const ARCS: [&str; 3] = ["M2.5 7.5a11 11 0 0 1 15 0", "M5.5 10.8a7 7 0 0 1 9 0", "M8.5 14a3 3 0 0 1 3 0"];
 
 fn sun_svg() -> String {
     let mut rays = String::new();
@@ -499,12 +828,16 @@ fn sun_svg() -> String {
     )
 }
 
-fn wifi_svg() -> String {
-    r##"<path d="M2.5 7.5a11 11 0 0 1 15 0M5.5 10.8a7 7 0 0 1 9 0M8.5 14a3 3 0 0 1 3 0" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/><circle cx="10" cy="17" r="1.1" fill="#fff"/>"##.into()
-}
-
-fn bt_svg() -> String {
-    r##"<path d="M8 2.5v15l6-4.2-10-6.6M14 9.3l-6 4.2" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>"##.into()
+/// The Wi-Fi fan with `bars` (0-4) lit and the rest greyed, like Windows' signal icon.
+fn wifi_svg(bars: u8) -> String {
+    let mut s = String::new();
+    for (i, d) in ARCS.iter().enumerate() {
+        let lit = bars as usize >= 4 - i;
+        let col = if lit { "#fff" } else { "#6a6a6a" };
+        s += &format!(r##"<path d="{d}" fill="none" stroke="{col}" stroke-width="1.6" stroke-linecap="round"/>"##);
+    }
+    let dot = if bars >= 1 { "#fff" } else { "#6a6a6a" };
+    s + &format!(r##"<circle cx="10" cy="17" r="1.2" fill="{dot}"/>"##)
 }
 
 thread_local! {
@@ -512,7 +845,7 @@ thread_local! {
 }
 
 /// Rasterize (and cache) one glyph, centred at (x, y).
-fn glyph(c: &mut Canvas, body: String, x: f32, y: f32, size: u32) {
+pub fn glyph(c: &mut Canvas, body: String, x: f32, y: f32, size: u32) {
     let key = format!("{size}:{body}");
     let icon = GLYPHS.with(|g| {
         g.borrow_mut()
@@ -547,18 +880,71 @@ pub fn sun(c: &mut Canvas, x: f32, y: f32, _color: Rgba) {
     glyph(c, sun_svg(), x, y, 20);
 }
 
-/// Wi-Fi: radio waves.
+/// Wi-Fi: radio waves, all lit when `on`, struck through when off.
 pub fn wifi(c: &mut Canvas, x: f32, y: f32, on: bool) {
-    if !on {
-        // Off: the waves with a slash through them.
-        glyph(c, format!(r##"{}{}"##, wifi_svg(), r##"<path d="M3 3l14 14" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/>"##), x, y, 20);
+    if on {
+        glyph(c, wifi_svg(4), x, y, 20);
     } else {
-        glyph(c, wifi_svg(), x, y, 20);
+        glyph(c, format!(r##"{}{}"##, wifi_svg(4), r##"<path d="M3 3l14 14" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/>"##), x, y, 20);
     }
 }
 
-/// Bluetooth rune.
-pub fn bluetooth(c: &mut Canvas, x: f32, y: f32, on: bool) {
-    let body = if on { bt_svg() } else { format!(r##"{}{}"##, bt_svg(), r##"<path d="M3 3l14 14" stroke="#fff" stroke-width="1.4" stroke-linecap="round"/>"##) };
-    glyph(c, body, x, y, 20);
+/// One network's signal strength, with a lock when it's secured.
+fn wifi_signal(c: &mut Canvas, x: f32, y: f32, signal: u32, secure: bool) {
+    glyph(c, wifi_svg(((signal + 24) / 25).min(4) as u8), x, y, 24);
+    if secure {
+        lock(c, x as i32 + 6, y as i32 + 2, WHITE);
+    }
+}
+
+fn ethernet_glyph(c: &mut Canvas, x: f32, y: f32) {
+    glyph(
+        c,
+        r##"<rect x="2.5" y="3.5" width="15" height="10" rx="0.5" fill="none" stroke="#fff" stroke-width="1.3"/><path d="M7 17.5h6M10 13.5v4" stroke="#fff" stroke-width="1.3" stroke-linecap="round"/>"##.into(),
+        x,
+        y,
+        24,
+    );
+}
+
+pub fn airplane(c: &mut Canvas, x: f32, y: f32) {
+    glyph(
+        c,
+        r##"<path d="M10 2.2c.7 0 1.1.6 1.1 1.5v4.5l6.4 3.7v1.6l-6.4-2v3.8l1.9 1.4v1.3L10 17.2l-3 .8v-1.3l1.9-1.4v-3.8l-6.4 2v-1.6l6.4-3.7V3.7c0-.9.4-1.5 1.1-1.5z" fill="none" stroke="#fff" stroke-width="1.1" stroke-linejoin="round"/>"##.into(),
+        x,
+        y,
+        20,
+    );
+}
+
+pub fn hotspot(c: &mut Canvas, x: f32, y: f32) {
+    glyph(
+        c,
+        r##"<circle cx="10" cy="10" r="1.7" fill="#fff"/><path d="M6.6 6.6a4.8 4.8 0 0 0 0 6.8M13.4 6.6a4.8 4.8 0 0 1 0 6.8M4 4a8.5 8.5 0 0 0 0 12M16 4a8.5 8.5 0 0 1 0 12" fill="none" stroke="#fff" stroke-width="1.3" stroke-linecap="round"/>"##.into(),
+        x,
+        y,
+        20,
+    );
+}
+
+pub fn bluetooth(c: &mut Canvas, x: f32, y: f32) {
+    glyph(
+        c,
+        r##"<path d="M8 2.5v15l6-4.2-10-6.6M14 9.3l-6 4.2" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>"##.into(),
+        x,
+        y,
+        20,
+    );
+}
+
+/// The taskbar's network icon.
+pub fn net_icon(c: &mut Canvas, x: f32, y: f32, icon: NetIcon) {
+    match icon {
+        NetIcon::Airplane => airplane(c, x, y),
+        NetIcon::Wired => ethernet_glyph(c, x, y),
+        NetIcon::Wifi(bars) => glyph(c, wifi_svg(bars), x, y, 20),
+        // Windows shows the fan greyed with an asterisk: networks available, none joined.
+        NetIcon::Searching => glyph(c, wifi_svg(0) + r##"<path d="M15.5 13v4M13.5 14l4 2M17.5 14l-4 2" stroke="#fff" stroke-width="1.1" stroke-linecap="round"/>"##, x, y, 20),
+        NetIcon::WifiOff => wifi(c, x, y, false),
+    }
 }

@@ -64,7 +64,6 @@ pub enum TaskbarHit {
     Volume,
     Brightness,
     Network,
-    Bluetooth,
     /// The clock: opens the Action Center (notifications).
     Clock,
     /// An app's tray icon, by its tray id.
@@ -98,9 +97,8 @@ pub struct TaskbarKey {
     pub start_open: bool,
     /// Volume percent and mute, for the tray icon.
     pub volume: (u32, bool),
-    /// Radio state, so the network and Bluetooth glyphs show on/off.
-    pub wifi_on: bool,
-    pub bt_on: bool,
+    /// What the network icon shows: Wi-Fi bars, wired, off, airplane mode.
+    pub net: crate::tray::NetIcon,
     pub flyout: Option<crate::tray::Flyout>,
     pub current_workspace: usize,
     pub taskview_open: bool,
@@ -171,7 +169,7 @@ pub fn draw_taskbar(
 
     // Window buttons.
     let right_edge = w - CLOCK_W - SHOW_DESKTOP_W;
-    const TRAY_ITEMS: i32 = 4;
+    const TRAY_ITEMS: i32 = 3;
     let apps_x = right_edge - TRAY_W * TRAY_ITEMS - TRAY_W * key.tray_apps.len() as i32;
     let mut x = TASK_BUTTONS_X;
     for (i, item) in key.items.iter().enumerate() {
@@ -222,11 +220,11 @@ pub fn draw_taskbar(
     }
     let tray_x = apps_x + TRAY_W * key.tray_apps.len() as i32;
 
-    // Tray: network, Bluetooth, brightness, volume, just left of the clock.
-    use crate::tray::{bluetooth, speaker, sun, wifi, Flyout};
+    // Tray: network, brightness, volume, just left of the clock. Bluetooth lives in
+    // the Action Center's quick actions, as in Windows 10.
+    use crate::tray::{net_icon, speaker, sun, Flyout};
     for (i, (hit, open)) in [
         (TaskbarHit::Network, key.flyout == Some(Flyout::Network)),
-        (TaskbarHit::Bluetooth, key.flyout == Some(Flyout::Bluetooth)),
         (TaskbarHit::Brightness, key.flyout == Some(Flyout::Brightness)),
         (TaskbarHit::Volume, key.flyout == Some(Flyout::Volume)),
     ]
@@ -243,8 +241,7 @@ pub fn draw_taskbar(
         match hit {
             TaskbarHit::Volume => speaker(&mut c, cx - 5.0, cy, key.volume.1, key.volume.0 as f32 / 100.0, WHITE),
             TaskbarHit::Brightness => sun(&mut c, cx, cy, WHITE),
-            TaskbarHit::Network => wifi(&mut c, cx, cy, key.wifi_on),
-            _ => bluetooth(&mut c, cx, cy, key.bt_on),
+            _ => net_icon(&mut c, cx, cy, key.net),
         }
         hits.push((rect(bx, 0, TRAY_W, TASKBAR_H), hit));
     }

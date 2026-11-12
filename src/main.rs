@@ -124,6 +124,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     })?;
     state.notif_tx = Some(notifications::start(notif_tx));
+    // Network and radio state for the tray icon, read off the main thread.
+    state.start_network_polling();
 
     // Testing aids: open the start menu or Task View at launch, and/or have the
     // compositor screenshot itself after a few seconds (lands in ~/Pictures/Screenshots).
@@ -137,6 +139,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     if std::env::var_os("VIBE_DEBUG_DESKTOPS").is_some() {
         state.toggle_desktops();
+    }
+    // "network", "network-key" or "action-center": open that panel a moment in, once the radios are read.
+    if let Ok(which) = std::env::var("VIBE_DEBUG_OPEN") {
+        event_loop.handle().insert_source(Timer::from_duration(Duration::from_secs(3)), move |_, _, state| {
+            match which.as_str() {
+                "network" => state.toggle_flyout(tray::Flyout::Network),
+                // The security key prompt, on the second network listed.
+                "network-key" => {
+                    state.toggle_flyout(tray::Flyout::Network);
+                    state.tray.expanded = state.tray.net.networks.get(1).map(|n| n.ssid.clone());
+                    state.tray.password = Some("hunter2".into());
+                    state.tray.password_error = true;
+                }
+                _ => state.toggle_action_center(),
+            }
+            TimeoutAction::Drop
+        })?;
     }
     if std::env::var_os("VIBE_DEBUG_SWITCHER").is_some() {
         event_loop.handle().insert_source(Timer::from_duration(Duration::from_secs(5)), |_, _, state| {

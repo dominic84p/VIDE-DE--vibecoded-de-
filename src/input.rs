@@ -47,6 +47,7 @@ enum Action {
     WindowMenu,
     CloseMenu,
     CancelSnip,
+    CloseDesktops,
     Volume(f32),
     Mute,
     Brightness(f32),
@@ -160,6 +161,8 @@ fn menu_key(sym: Keysym, ch: Option<char>) -> MenuKey {
 enum Target {
     /// Over our right-click menu, maybe on an item.
     Menu(Option<usize>),
+    /// Over the Task View panel, maybe on a desktop tile.
+    Desktops(Option<usize>),
     Start(StartHit),
     Taskbar(TaskbarHit),
     Window(Hit),
@@ -195,6 +198,16 @@ impl State {
             InputEvent::PointerAxis { event } => {
                 let over_volume = matches!(self.target(self.pointer_loc), Target::Taskbar(TaskbarHit::Volume))
                     || (self.tray.flyout == Some(crate::tray::Flyout::Volume) && self.flyout_rect().to_f64().contains(self.pointer_loc));
+                if matches!(self.target(self.pointer_loc), Target::Taskbar(TaskbarHit::TaskView)) {
+                    let v = event.amount(Axis::Vertical).unwrap_or_else(|| event.amount_v120(Axis::Vertical).unwrap_or(0.0) / 8.0);
+                    if v > 0.0 {
+                        self.wm.next_workspace();
+                    } else if v < 0.0 {
+                        self.wm.prev_workspace();
+                    }
+                    self.focus_top();
+                    return;
+                }
                 if over_volume {
                     let v = event.amount(Axis::Vertical).unwrap_or_else(|| event.amount_v120(Axis::Vertical).unwrap_or(0.0) / 8.0);
                     if v != 0.0 {
@@ -263,6 +276,9 @@ impl State {
             if state.snip.is_some() && modified == Keysym::Escape {
                 return FilterResult::Intercept(if pressed { Action::CancelSnip } else { Action::CloseMenu });
             }
+            if state.desktops.open && pressed && modified == Keysym::Escape {
+                return FilterResult::Intercept(Action::CloseDesktops);
+            }
             if state.menu.is_some() && pressed && modified == Keysym::Escape {
                 return FilterResult::Intercept(Action::CloseMenu);
             }
@@ -325,6 +341,7 @@ impl State {
             }
             Action::CloseMenu => self.close_menu(),
             Action::CancelSnip => self.cancel_snip(),
+            Action::CloseDesktops => self.close_desktops(),
             Action::Volume(d) => self.set_volume(self.tray.volume + d),
             Action::Mute => self.toggle_mute(),
             Action::Brightness(d) => self.set_brightness(self.tray.brightness + d),
@@ -419,6 +436,9 @@ impl State {
                 return Target::Menu(m.item_at(pos));
             }
         }
+        if self.desktops.open && self.desktops_rect().to_f64().contains(pos) {
+            return Target::Desktops(self.desktop_at(pos));
+        }
         for x in self.x11_overrides.iter().rev() {
             if let Some(s) = x.wl_surface() {
                 if let Some((hit, o)) = under_from_surface_tree(&s, pos, x.geometry().loc, WindowSurfaceType::ALL) {
@@ -485,8 +505,12 @@ impl State {
             if let Some(m) = self.menu.as_mut() {
                 m.hover = menu_hover;
             }
+            self.desktops.hover = match target {
+                Target::Desktops(d) => d,
+                _ => None,
+            };
             self.hover = match target {
-                Target::Menu(_) => Hover::None,
+                Target::Menu(_) | Target::Desktops(_) => Hover::None,
                 Target::Start(h) => Hover::Start(h),
                 Target::Taskbar(h) => Hover::Taskbar(h),
                 Target::Window(Hit::Client(s, origin)) => {
@@ -573,6 +597,20 @@ impl State {
             }
         }
 
+        // Task View panel: a click on a tile switches desktop; anywhere else closes it
+        // (the Task View button itself toggles it below).
+        if self.desktops.open {
+            if let Target::Desktops(tile) = target {
+                if let (true, Some(ws)) = (left, tile) {
+                    self.switch_desktop(ws);
+                }
+                return;
+            }
+            if !matches!(target, Target::Taskbar(TaskbarHit::TaskView)) {
+                self.close_desktops();
+            }
+        }
+
         // An open right-click menu eats the next click: run the item, or just close it.
         if self.menu.is_some() {
             if let Target::Menu(item) = target {
@@ -621,10 +659,7 @@ impl State {
                             }
                         }
                         TaskbarHit::Window(s) => self.activate_from_taskbar(&s),
-                        TaskbarHit::Workspace(ws) => {
-                            self.wm.set_workspace(ws);
-                            self.focus_top();
-                        }
+                        TaskbarHit::TaskView => self.toggle_desktops(),
                         TaskbarHit::ShowDesktop => self.show_desktop(),
                         TaskbarHit::Volume => self.toggle_flyout(crate::tray::Flyout::Volume),
                         TaskbarHit::Brightness => self.toggle_flyout(crate::tray::Flyout::Brightness),
@@ -691,7 +726,7 @@ impl State {
                 }
                 forward(self);
             }
-            Target::Menu(_) => {}
+            Target::Menu(_) | Target::Desktops(_) => {}
         }
     }
 

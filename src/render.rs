@@ -89,6 +89,12 @@ pub fn elements_with(renderer: &mut GlesRenderer, state: &mut State, cursor: boo
         out.push(Elem::Solid(SolidColorRenderElement::from_buffer(&state.dim, (0, 0), 1.0, 1.0, Kind::Unspecified)));
     }
 
+    // Task View desktop switcher.
+    let desktops_at = state.desktops_rect().loc;
+    if let Some(buf) = state.desktops_picture() {
+        out.extend(image(renderer, &buf, desktops_at, Kind::Unspecified));
+    }
+
     // Tray flyout (volume/brightness slider), above the taskbar.
     let flyout_at = state.flyout_rect().loc;
     if let Some(buf) = state.flyout_picture().cloned() {
@@ -149,7 +155,6 @@ pub fn elements_with(renderer: &mut GlesRenderer, state: &mut State, cursor: boo
     if !fullscreen_top || state.start.open {
         let mut items: Vec<_> = state.wm.windows.iter().filter(|w| w.mapped && w.workspace == state.wm.current_workspace).collect();
         items.sort_by_key(|w| w.id);
-        let (current_ws, ws_has_windows) = state.wm.workspace_indicator();
         let key = TaskbarKey {
             width: ow,
             items: items
@@ -170,8 +175,8 @@ pub fn elements_with(renderer: &mut GlesRenderer, state: &mut State, cursor: boo
             start_open: state.start.open,
             volume: ((state.tray.volume * 100.0).round() as u32, state.tray.muted),
             flyout: state.tray.flyout,
-            current_workspace: current_ws,
-            workspace_has_windows: ws_has_windows,
+            current_workspace: state.wm.current_workspace,
+            taskview_open: state.desktops.open,
         };
         if state.taskbar.as_ref().is_none_or(|t| t.key != key) {
             state.taskbar = Some(ui::draw_taskbar(state.font.as_ref(), &mut state.icons, state.logo.as_ref(), key));

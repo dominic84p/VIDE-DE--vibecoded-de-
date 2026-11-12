@@ -393,17 +393,6 @@ impl Wm {
         }
     }
 
-    /// Get workspace indicator data for the taskbar.
-    pub fn workspace_indicator(&self) -> (usize, [bool; WORKSPACE_COUNT]) {
-        let mut has_windows = [false; WORKSPACE_COUNT];
-        for w in &self.windows {
-            if w.mapped && !w.minimized {
-                has_windows[w.workspace] = true;
-            }
-        }
-        (self.current_workspace, has_windows)
-    }
-
     /// Called on every commit of a toplevel's root surface.
     pub fn on_commit(&mut self, surface: &WlSurface) {
         let Some(w) = self.find_mut(surface) else { return };

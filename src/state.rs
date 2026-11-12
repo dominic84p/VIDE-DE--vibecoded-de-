@@ -140,6 +140,7 @@ pub struct State {
     pub start: Start,
     pub menu: Option<crate::menu::Menu>,
     pub tray: crate::tray::Tray,
+    pub desktops: crate::desktops::Desktops,
     /// Full-screen black at partial alpha: our software brightness.
     pub dim: smithay::backend::renderer::element::solid::SolidColorBuffer,
     /// A screenshot to take on the next frame: `Some(None)` = whole screen, else a region.
@@ -214,6 +215,7 @@ impl State {
             start: Start::default(),
             menu: None,
             tray: crate::tray::Tray::new(),
+            desktops: Default::default(),
             dim: Default::default(),
             screenshot_requested: None,
             snip: None,

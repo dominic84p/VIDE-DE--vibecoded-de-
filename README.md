@@ -28,6 +28,8 @@ taskbar, start menu and titlebars are all our own code.
   - clipboard and middle-click paste
   - your cursor and icon themes
 - **X11 apps** through Xwayland, GPU-accelerated (linux-dmabuf), so games run properly
+- **Virtual desktops**: 10 of them, behind a Task View button next to search
+  (click for a panel of desktops with their apps; scroll over it to flip)
 - **Right-click menus** on taskbar buttons, titlebars and the desktop
 - **Tray** with volume (PipeWire) and brightness sliders
 - **Screenshots** and a Windows-style snipping tool
@@ -50,6 +52,9 @@ eats Super).
 | Mod+Down | Minimize (or restore if maximized) |
 | Mod+F | Fullscreen |
 | Mod+drag | Move a window from anywhere |
+| Mod+1…9, 0 | Switch to desktop 1–10 |
+| Mod+Shift+1…9, 0 | Move window to desktop 1–10 |
+| Mod+Ctrl+←/→ | Previous / next desktop |
 | Alt+F4 | Close window |
 | Alt+Space (TTY) | Window menu |
 | PrtSc | Screenshot (saved to ~/Pictures/Screenshots + clipboard) |

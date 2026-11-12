@@ -1,6 +1,7 @@
 mod apps;
 mod canvas;
 mod cursor;
+mod desktops;
 mod focus;
 mod icons;
 mod input;
@@ -80,9 +81,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     state.startup = std::env::var("VIBE_STARTUP").ok();
     xwayland::start(&event_loop.handle(), &mut state);
 
-    // Open the start menu at launch (for screenshots/testing).
+    // Testing aids: open the start menu or Task View at launch, and/or have the
+    // compositor screenshot itself after a few seconds (lands in ~/Pictures/Screenshots).
     if std::env::var_os("VIBE_DEBUG_START").is_some() {
         state.toggle_start();
+    }
+    if std::env::var_os("VIBE_DEBUG_DESKTOPS").is_some() {
+        state.toggle_desktops();
+    }
+    if std::env::var_os("VIBE_DEBUG_SHOT").is_some() {
+        event_loop.handle().insert_source(Timer::from_duration(Duration::from_secs(6)), |_, _, state| {
+            state.screenshot_requested = Some(None);
+            TimeoutAction::Drop
+        })?;
     }
 
     // Nested if we're inside another desktop, real hardware otherwise. `--tty` / `--nested` force it.

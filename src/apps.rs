@@ -14,14 +14,7 @@ pub struct App {
 }
 
 pub fn scan() -> Vec<App> {
-    let mut dirs = Vec::new();
-    if let Ok(home) = std::env::var("HOME") {
-        dirs.push(PathBuf::from(format!("{home}/.local/share/applications")));
-        dirs.push(PathBuf::from(format!("{home}/.local/share/flatpak/exports/share/applications")));
-    }
-    dirs.push("/var/lib/flatpak/exports/share/applications".into());
-    dirs.push("/usr/local/share/applications".into());
-    dirs.push("/usr/share/applications".into());
+    let dirs: Vec<PathBuf> = crate::icons::data_dirs().into_iter().map(|d| d.join("applications")).collect();
 
     // Earlier dirs override later ones with the same desktop-file id.
     let mut seen = HashSet::new();
@@ -70,7 +63,9 @@ fn parse(text: &str) -> Option<App> {
             "Terminal" => terminal = v.trim() == "true",
             "NoDisplay" | "Hidden" => hidden |= v.trim() == "true",
             "Type" => is_app = v.trim() == "Application",
-            "OnlyShowIn" => hidden |= !v.split(';').any(|d| d == "KDE" || d.is_empty()),
+            // We show KDE's apps (we stand in for its shell) and our own.
+            "OnlyShowIn" => hidden |= !v.split(';').any(|d| matches!(d, "KDE" | "VIDE-DE" | "")),
+            "NotShowIn" => hidden |= v.split(';').any(|d| d == "VIDE-DE"),
             _ => {}
         }
     }
@@ -115,4 +110,37 @@ pub fn icon_for_app_id(apps: &[App], app_id: &str) -> String {
         .or_else(|| apps.iter().find(|a| a.id.rsplit('.').next().is_some_and(|l| l.to_lowercase() == lower)))
         .map(|a| a.icon.clone())
         .unwrap_or_else(|| app_id.to_string())
+}
+
+/// Register our own apps (About VIDE-DE) like any installed app: a .desktop file and
+/// an icon in the user's data dir, so our start menu and search index them. Marked
+/// OnlyShowIn=VIDE-DE so other desktops don't list them.
+pub fn install_builtin() {
+    let Ok(home) = std::env::var("HOME") else { return };
+    let Some(bin_dir) = std::env::current_exe().ok().and_then(|p| p.parent().map(|d| d.to_path_buf())) else { return };
+    let about = bin_dir.join("vide-about");
+    if !about.exists() {
+        return;
+    }
+    let share = PathBuf::from(&home).join(".local/share");
+    let icon = share.join("icons/hicolor/512x512/apps/vide-de.png");
+    let desktop = share.join("applications/vide-about.desktop");
+    let entry = format!(
+        "[Desktop Entry]\nType=Application\nName=About VIDE-DE\nComment=System information for the vibecoded desktop\n\
+         Exec=\"{}\"\nIcon=vide-de\nStartupWMClass=vide-about\nCategories=System;Settings;\nOnlyShowIn=VIDE-DE;\n",
+        about.display()
+    );
+    let write = |path: &PathBuf, bytes: &[u8]| {
+        // Only touch the file when it changed, so we don't churn other launchers' caches.
+        if std::fs::read(path).ok().as_deref() != Some(bytes) {
+            if let Some(dir) = path.parent() {
+                let _ = std::fs::create_dir_all(dir);
+            }
+            if let Err(e) = std::fs::write(path, bytes) {
+                tracing::warn!("couldn't install {}: {e}", path.display());
+            }
+        }
+    };
+    write(&icon, include_bytes!("../assets/logo-512.png"));
+    write(&desktop, entry.as_bytes());
 }

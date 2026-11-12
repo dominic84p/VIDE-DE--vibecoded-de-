@@ -46,10 +46,7 @@ impl Icons {
                 themes.push(t.into());
             }
         }
-        let mut bases = vec![PathBuf::from("/usr/share/icons")];
-        if let Ok(home) = std::env::var("HOME") {
-            bases.insert(0, PathBuf::from(format!("{home}/.local/share/icons")));
-        }
+        let bases: Vec<PathBuf> = data_dirs().into_iter().map(|d| d.join("icons")).filter(|p| p.is_dir()).collect();
 
         // Earlier themes win; within a theme, the best-scoring file wins.
         let mut index: HashMap<String, (usize, i32, PathBuf)> = HashMap::new();
@@ -136,6 +133,24 @@ fn score(path: &Path) -> i32 {
     score
 }
 
+/// Where icons and apps live: the user's dir, then `XDG_DATA_DIRS` (which is how
+/// Flatpak and Snap apps get found), then the usual defaults.
+pub fn data_dirs() -> Vec<PathBuf> {
+    let mut dirs = Vec::new();
+    if let Ok(home) = std::env::var("HOME") {
+        dirs.push(PathBuf::from(format!("{home}/.local/share")));
+        dirs.push(PathBuf::from(format!("{home}/.local/share/flatpak/exports/share")));
+    }
+    let xdg = std::env::var("XDG_DATA_DIRS").unwrap_or_default();
+    dirs.extend(xdg.split(':').filter(|s| !s.is_empty()).map(PathBuf::from));
+    for d in ["/var/lib/flatpak/exports/share", "/usr/local/share", "/usr/share"] {
+        dirs.push(PathBuf::from(d));
+    }
+    let mut seen = std::collections::HashSet::new();
+    dirs.retain(|d| seen.insert(d.clone()));
+    dirs
+}
+
 fn kde_icon_theme() -> Option<String> {
     let home = std::env::var("HOME").ok()?;
     let rc = std::fs::read_to_string(format!("{home}/.config/kdeglobals")).ok()?;
@@ -211,8 +226,25 @@ pub fn from_rgba(w: u32, h: u32, rgba: Vec<u8>, size: u32) -> Icon {
     scale(&Icon { w, h, rgba }, size)
 }
 
+/// Fit into size×size keeping the aspect ratio, centred on transparent padding.
 fn scale(src: &Icon, size: u32) -> Icon {
-    scale_to(src, size, size)
+    if src.w == src.h {
+        return scale_to(src, size, size);
+    }
+    let (w, h) = if src.w > src.h {
+        (size, (src.h * size / src.w).max(1))
+    } else {
+        ((src.w * size / src.h).max(1), size)
+    };
+    let fitted = scale_to(src, w, h);
+    let mut rgba = vec![0u8; (size * size * 4) as usize];
+    let (ox, oy) = ((size - w) / 2, (size - h) / 2);
+    for y in 0..h {
+        let src_row = &fitted.rgba[(y * w * 4) as usize..((y + 1) * w * 4) as usize];
+        let at = (((y + oy) * size + ox) * 4) as usize;
+        rgba[at..at + src_row.len()].copy_from_slice(src_row);
+    }
+    Icon { w: size, h: size, rgba }
 }
 
 /// Box-filter (or nearest, when enlarging) scale to w×h.

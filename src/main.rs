@@ -76,6 +76,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     })?;
 
     tracing::info!("listening on {socket_name}");
+    apps::install_builtin();
     let mut state = State::new(dh, event_loop.handle(), socket_name);
 
     // Optional autostart, e.g. `VIBE_STARTUP=konsole cargo run`. Runs once Xwayland is up.

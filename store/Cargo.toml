@@ -7,3 +7,4 @@ description = "Window Shopping - Software Center for VIDE-DE"
 [dependencies]
 eframe = "0.37"
 image = { version = "0.25", default-features = false, features = ["png"] }
+resvg = { version = "0.50.0", default-features = false }

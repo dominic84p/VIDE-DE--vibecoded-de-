@@ -5581,6 +5581,7 @@ version = "0.1.0"
 dependencies = [
  "eframe 0.37.0",
  "image",
+ "resvg 0.50.0",
 ]
 
 [[package]]

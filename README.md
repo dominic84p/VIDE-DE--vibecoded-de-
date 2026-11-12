@@ -44,9 +44,12 @@ taskbar, start menu and titlebars are all our own code.
   - **PowerSlop** (`powerslop`): the terminal. Like PowerShell, but vibecoded (blue, banner, `PS>` prompt, tabs)
   - **File Exploder** (`file-exploder`): the file manager, like File Explorer. Win+E
   - **Task Mangler** (`task-mangler`): processes and performance, like Task Manager. Ctrl+Shift+Esc
+  - **Snip & Sketchy** (`snip-and-sketchy`): mark up screenshots (pens, highlighter, eraser,
+    crop, undo), like Snip & Sketch. Win+Shift+S snips straight into it
   - **About VIDE-DE** (`vide-about`): your system info via fastfetch
 - **End process** in window right-click menus, for apps that won't close
-- **Smooth**: damage-tracked rendering, paced to vsync
+- **Smooth**: damage-tracked rendering, paced to vsync, zero-copy GPU buffers, and optional
+  direct scanout for fullscreen games (Settings → Gaming → Ultra Performance Mode)
 
 ## Keybinds
 
@@ -71,7 +74,7 @@ eats Super).
 | Alt+F4 | Close window |
 | Alt+Space (TTY) | Window menu |
 | PrtSc | Screenshot (saved to ~/Pictures/Screenshots + clipboard) |
-| Win+Shift+S / Shift+PrtSc | Snip a region |
+| Win+Shift+S / Shift+PrtSc | Snip a region (opens in Snip & Sketchy) |
 | Volume / brightness keys | Adjust, same as the tray sliders |
 | Mod+Shift+E | Quit |
 | Ctrl+Alt+F1–F12 | Switch VT |

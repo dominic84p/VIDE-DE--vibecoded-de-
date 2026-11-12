@@ -143,6 +143,7 @@ const BUILTIN: &[(&str, &str, &str, &str, &str, &str)] = &[
     ("vide-settings", "vide-settings", "Settings", "Mouse, Start menu and other VIDE-DE options", "preferences-system", "Settings;System;"),
     ("powerslop", "powerslop", "PowerSlop", "Like PowerShell, but vibecoded", "utilities-terminal", "System;TerminalEmulator;"),
     ("task-mangler", "task-mangler", "Task Mangler", "See what's running. Like Task Manager, but it mangles", "utilities-system-monitor", "System;Monitor;"),
+    ("snip-and-sketchy", "snip-and-sketchy", "Snip & Sketchy", "Mark up your screenshots. Like Snip & Sketch, but sketchier", "applets-screenshooter", "Utility;Graphics;"),
     ("file-exploder", "file-exploder", "File Exploder", "Your files. Like File Explorer, but it might go off", "system-file-manager", "System;FileManager;"),
 ];
 

@@ -94,7 +94,13 @@ impl State {
 /// Render the current scene (minus cursor) offscreen, crop, save, copy to clipboard.
 pub fn take(renderer: &mut GlesRenderer, state: &mut State, region: Option<Rectangle<i32, Logical>>) {
     match capture(renderer, state, region) {
-        Ok((w, h, rgba)) => save(state, w, h, rgba),
+        Ok((w, h, rgba)) => {
+            let path = save(state, w, h, rgba);
+            // A region snip opens in Snip & Sketchy for marking up, like Windows does.
+            if let (true, Some(path), Some(app)) = (region.is_some(), path, crate::input::own_app("snip-and-sketchy")) {
+                state.spawn(&format!("{app} '{}'", path.display()));
+            }
+        }
         Err(e) => tracing::warn!("screenshot failed: {e}"),
     }
 }
@@ -124,7 +130,8 @@ fn capture(
     Ok((rect.size.w as u32, rect.size.h as u32, rgba))
 }
 
-fn save(state: &mut State, w: u32, h: u32, rgba: Vec<u8>) {
+/// Save to ~/Pictures/Screenshots and put it on the clipboard; returns where it went.
+fn save(state: &mut State, w: u32, h: u32, rgba: Vec<u8>) -> Option<PathBuf> {
     let mut png_bytes = Vec::new();
     {
         let mut enc = png::Encoder::new(&mut png_bytes, w, h);
@@ -133,18 +140,28 @@ fn save(state: &mut State, w: u32, h: u32, rgba: Vec<u8>) {
         enc.set_compression(png::Compression::Fast);
         match enc.write_header().and_then(|mut wr| wr.write_image_data(&rgba)) {
             Ok(()) => {}
-            Err(e) => return tracing::warn!("screenshot encode failed: {e}"),
+            Err(e) => {
+                tracing::warn!("screenshot encode failed: {e}");
+                return None;
+            }
         }
     }
 
     let dir = std::env::var("HOME").map(PathBuf::from).unwrap_or_default().join("Pictures/Screenshots");
     let path = dir.join(chrono::Local::now().format("Screenshot_%Y-%m-%d_%H-%M-%S.png").to_string());
     let res = std::fs::create_dir_all(&dir).and_then(|_| std::fs::File::create(&path)?.write_all(&png_bytes));
-    match res {
-        Ok(()) => tracing::info!("screenshot saved to {}", path.display()),
-        Err(e) => tracing::warn!("couldn't save screenshot to {}: {e}", path.display()),
-    }
+    let saved = match res {
+        Ok(()) => {
+            tracing::info!("screenshot saved to {}", path.display());
+            Some(path)
+        }
+        Err(e) => {
+            tracing::warn!("couldn't save screenshot to {}: {e}", path.display());
+            None
+        }
+    };
 
     // Also on the clipboard, so it can be pasted straight into a chat.
     set_data_device_selection(&state.dh, &state.seat, vec!["image/png".into()], Arc::new(png_bytes));
+    saved
 }

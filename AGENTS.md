@@ -40,6 +40,9 @@ the WM in `src/wm.rs` is deliberately our own.
   client on the background layer; the compositor starts it. Keep desktop features
   there, not in the compositor. Wallpapers: `assets/wallpapers/`, installed by
   `apps::install_builtin` to `~/.local/share/vide-de/wallpapers`.
+- `snip/`: `snip-and-sketchy`. The compositor only captures (`screenshot.rs`); markup,
+  saving and copying live in the app. `ipc.rs` is a control socket (`$VIDE_IPC`) for
+  things only the compositor can do: `snip`, `screenshot`, `copy-png <path>`.
 - `config/`: `vide-config`, the settings file shared by the compositor and Settings
   (`~/.config/vide-de/settings.conf`, polled once a second).
 

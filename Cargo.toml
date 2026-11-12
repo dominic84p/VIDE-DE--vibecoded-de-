@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "about", "config", "settings", "powerslop", "exploder", "mangler", "desktop"]
+members = [".", "about", "config", "settings", "powerslop", "exploder", "mangler", "desktop", "snip"]
 
 [package]
 name = "vibe-comp"

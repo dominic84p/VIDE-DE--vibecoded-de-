@@ -190,6 +190,8 @@ pub struct State {
     /// Where background threads deliver X11 window icons (class, icon).
     pub x11_icon_tx: Option<smithay::reexports::calloop::channel::Sender<(String, crate::icons::Icon)>>,
     pub socket_name: String,
+    /// Our control socket, handed to apps as $VIDE_IPC.
+    pub ipc_path: Option<std::path::PathBuf>,
     /// Command to launch once the session is fully up (`VIBE_STARTUP`).
     pub startup: Option<String>,
     pub running: bool,
@@ -270,6 +272,7 @@ impl State {
             x11_overrides: Vec::new(),
             x11_icon_tx: None,
             socket_name,
+            ipc_path: None,
             startup: None,
             running: true,
             tty: false,
@@ -474,6 +477,9 @@ impl State {
             .env("MOZ_ENABLE_WAYLAND", "1")
             .env("ELECTRON_OZONE_PLATFORM_HINT", "auto")
             .env("_JAVA_AWT_WM_NONREPARENTING", "1");
+        if let Some(p) = &self.ipc_path {
+            c.env("VIDE_IPC", p);
+        }
         // X11-only apps go through our Xwayland, never the host's X server.
         match self.xdisplay {
             Some(n) => c.env("DISPLAY", format!(":{n}")),

@@ -5,6 +5,7 @@ mod desktops;
 mod focus;
 mod icons;
 mod input;
+mod ipc;
 mod layers;
 mod menu;
 mod render;
@@ -83,6 +84,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Optional autostart, e.g. `VIBE_STARTUP=konsole cargo run`. Runs once Xwayland is up.
     state.startup = std::env::var("VIBE_STARTUP").ok();
+    ipc::start(&event_loop.handle(), &mut state);
     xwayland::start(&event_loop.handle(), &mut state);
 
     // App tray icons: a D-Bus thread feeding us through a channel.

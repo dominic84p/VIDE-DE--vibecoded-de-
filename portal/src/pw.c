@@ -1,5 +1,6 @@
 #include <pipewire/pipewire.h>
 #include <spa/param/video/format-utils.h>
+#include <spa/param/buffers.h>
 #include <spa/param/props.h>
 #include <pthread.h>
 #include <stdlib.h>
@@ -49,8 +50,31 @@ static void on_process(void *userdata) {
     buf->datas[0].chunk->offset = 0;
     buf->datas[0].chunk->stride = (int32_t)stride;
     buf->datas[0].chunk->size = size;
+    buf->datas[0].chunk->flags = SPA_CHUNK_FLAG_NONE;
 
     pw_stream_queue_buffer(ctx->stream, b);
+}
+
+static void on_param_changed(void *userdata, uint32_t id, const struct spa_pod *param) {
+    vide_pw_t *ctx = (vide_pw_t *)userdata;
+    if (!param || id != SPA_PARAM_Format) return;
+
+    uint8_t pod_buf[512];
+    struct spa_pod_builder b = SPA_POD_BUILDER_INIT(pod_buf, sizeof(pod_buf));
+    const struct spa_pod *params[1];
+    uint32_t stride = ctx->width * 4;
+    uint32_t size = stride * ctx->height;
+
+    params[0] = spa_pod_builder_add_object(
+        &b,
+        SPA_TYPE_OBJECT_ParamBuffers, SPA_PARAM_Buffers,
+        SPA_PARAM_BUFFERS_buffers, SPA_POD_CHOICE_RANGE_Int(4, 2, 8),
+        SPA_PARAM_BUFFERS_blocks, SPA_POD_Int(1),
+        SPA_PARAM_BUFFERS_size, SPA_POD_Int((int32_t)size),
+        SPA_PARAM_BUFFERS_stride, SPA_POD_Int((int32_t)stride),
+        SPA_PARAM_BUFFERS_dataType, SPA_POD_CHOICE_FLAGS_Int((1 << SPA_DATA_MemFd))
+    );
+    pw_stream_update_params(ctx->stream, params, 1);
 }
 
 static void on_state_changed(void *userdata, enum pw_stream_state old, enum pw_stream_state state, const char *error) {
@@ -71,6 +95,7 @@ static void on_state_changed(void *userdata, enum pw_stream_state old, enum pw_s
 static const struct pw_stream_events stream_events = {
     PW_VERSION_STREAM_EVENTS,
     .state_changed = on_state_changed,
+    .param_changed = on_param_changed,
     .process = on_process,
 };
 

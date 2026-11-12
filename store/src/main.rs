@@ -8,7 +8,7 @@ use backend::{
     StoreAction, featured_catalog, launch_app, spawn_action, spawn_refresh_library, spawn_search,
 };
 use eframe::egui::{self, Color32, CornerRadius, FontId, Margin, RichText, Stroke, Vec2};
-use icons::IconCache;
+use icons::{IconCache, IconLookup};
 
 const BG_MICA: Color32 = Color32::from_rgb(0xf3, 0xf3, 0xf3);
 const BG_SURFACE: Color32 = Color32::from_rgb(0xfb, 0xfb, 0xfb);
@@ -120,6 +120,9 @@ impl StoreApp {
     }
 
     fn poll_events(&mut self, ctx: &egui::Context) {
+        if self.icons.poll(ctx) || self.loading_library || self.searching || self.task_running {
+            ctx.request_repaint();
+        }
         while let Ok(ev) = self.rx.try_recv() {
             match ev {
                 BackendEvent::LibraryLoaded {
@@ -397,7 +400,8 @@ impl StoreApp {
                         self.show_activity_log = !self.show_activity_log;
                     }
                     if self.loading_library {
-                        ui.spinner();
+                        let (r, _) = ui.allocate_exact_size(Vec2::splat(22.0), egui::Sense::hover());
+                        draw_fluent_spinner(ui, r.center(), 7.5, 2.0);
                     }
                 });
             });
@@ -710,10 +714,7 @@ impl StoreApp {
         ui.add_space(12.0);
 
         if self.searching {
-            ui.horizontal(|ui| {
-                ui.spinner();
-                ui.label("Searching Flathub and system repositories...");
-            });
+            draw_centered_loading(ui, "Searching Flathub and system repositories...");
             return;
         }
 
@@ -764,10 +765,7 @@ impl StoreApp {
         ui.add_space(10.0);
 
         if self.loading_library && self.installed.is_empty() {
-            ui.horizontal(|ui| {
-                ui.spinner();
-                ui.label("Loading installed apps and packages...");
-            });
+            draw_centered_loading(ui, "Loading installed apps and packages...");
             return;
         }
 
@@ -843,10 +841,15 @@ impl StoreApp {
         });
         ui.add_space(12.0);
 
+        if self.loading_library && self.updates.is_empty() {
+            draw_centered_loading(ui, "Checking Flatpak and system repositories for updates...");
+            return;
+        }
         if self.loading_library {
             ui.horizontal(|ui| {
-                ui.spinner();
-                ui.label("Checking Flatpak and system repositories for updates...");
+                let (r, _) = ui.allocate_exact_size(Vec2::splat(18.0), egui::Sense::hover());
+                draw_fluent_spinner(ui, r.center(), 6.5, 1.8);
+                ui.label("Checking for updates...");
             });
             ui.add_space(8.0);
         }
@@ -1257,9 +1260,22 @@ impl StoreApp {
     }
 
     fn draw_app_icon(&mut self, ui: &mut egui::Ui, item: &AppItem, size: f32) {
-        if let Some(tex) = self.icons.get(ui.ctx(), &item.icon_name, &item.id) {
-            ui.add(egui::Image::new(tex).fit_to_exact_size(Vec2::splat(size)));
-            return;
+        match self.icons.get(ui.ctx(), &item.icon_name, &item.id) {
+            IconLookup::Ready(tex) => {
+                ui.add(egui::Image::new(tex).fit_to_exact_size(Vec2::splat(size)));
+                return;
+            }
+            IconLookup::Loading => {
+                let (rect, _) = ui.allocate_exact_size(Vec2::splat(size), egui::Sense::hover());
+                ui.painter().rect_filled(
+                    rect,
+                    CornerRadius::same((size * 0.2) as u8),
+                    Color32::from_rgb(0xee, 0xf2, 0xf6),
+                );
+                draw_fluent_spinner(ui, rect.center(), size * 0.24, (size * 0.055).max(1.8));
+                return;
+            }
+            IconLookup::Missing => {}
         }
         let (rect, _) = ui.allocate_exact_size(Vec2::splat(size), egui::Sense::hover());
         let bg = Color32::from_rgb(item.accent_rgb[0], item.accent_rgb[1], item.accent_rgb[2]);
@@ -1360,6 +1376,43 @@ fn draw_store_bag(painter: &egui::Painter, rect: egui::Rect) {
     for (pos, col) in tiles {
         painter.rect_filled(egui::Rect::from_min_size(pos, Vec2::splat(s)), 0.0, col);
     }
+}
+
+fn draw_fluent_spinner(ui: &egui::Ui, center: egui::Pos2, radius: f32, stroke_w: f32) {
+    let t = ui.ctx().input(|i| i.time) as f32;
+    let start = t * 4.4;
+    let sweep = 1.6 + 0.9 * (t * 2.3).sin();
+    let segments = 20;
+    let mut pts = Vec::with_capacity(segments + 1);
+    for i in 0..=segments {
+        let a = start + sweep * (i as f32 / segments as f32);
+        pts.push(egui::pos2(
+            center.x + radius * a.cos(),
+            center.y + radius * a.sin(),
+        ));
+    }
+    ui.painter().circle_stroke(
+        center,
+        radius,
+        Stroke::new(stroke_w, Color32::from_rgba_unmultiplied(0, 103, 192, 32)),
+    );
+    ui.painter()
+        .add(egui::Shape::line(pts, Stroke::new(stroke_w, ACCENT)));
+    ui.ctx().request_repaint();
+}
+
+fn draw_centered_loading(ui: &mut egui::Ui, label: &str) {
+    ui.add_space(48.0);
+    ui.vertical_centered(|ui| {
+        let (rect, _) = ui.allocate_exact_size(Vec2::splat(44.0), egui::Sense::hover());
+        draw_fluent_spinner(ui, rect.center(), 16.0, 3.0);
+        ui.add_space(12.0);
+        ui.label(
+            RichText::new(label)
+                .font(FontId::proportional(13.5))
+                .color(TEXT_MUTED),
+        );
+    });
 }
 
 fn truncate(s: &str, max_chars: usize) -> String {

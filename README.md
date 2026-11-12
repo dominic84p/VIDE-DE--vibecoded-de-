@@ -61,7 +61,10 @@ eats Super).
 | Super tap / Mod+Space | Start menu |
 | Mod+Enter | Terminal (konsole) |
 | Mod+Q | Close window |
-| Mod+Tab | Cycle windows |
+| Alt+Tab | Switch windows (live thumbnails; Shift goes back, Esc cancels) |
+| Win+Tab | Task View (desktops) |
+| Win+← / Win+→ | Snap window to the left / right half |
+| Drag to edge / corner / top | Snap half / quarter / maximize |
 | Mod+Up | Maximize / restore |
 | Mod+Down | Minimize (or restore if maximized) |
 | Mod+F | Fullscreen |

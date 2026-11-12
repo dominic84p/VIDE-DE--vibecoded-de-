@@ -148,6 +148,9 @@ pub struct State {
     pub taskbar: Option<Taskbar>,
     pub start: Start,
     pub menu: Option<crate::menu::Menu>,
+    /// Alt+Tab in progress.
+    pub switcher: Option<crate::switcher::Switcher>,
+    pub snap_buf: smithay::backend::renderer::element::solid::SolidColorBuffer,
     pub tray: crate::tray::Tray,
     /// Settings from ~/.config/vide-de/settings.conf (written by vide-settings).
     pub config: vide_config::Config,
@@ -246,6 +249,8 @@ impl State {
             taskbar: None,
             start: Start::default(),
             menu: None,
+            switcher: None,
+            snap_buf: Default::default(),
             tray: crate::tray::Tray::new(),
             config: vide_config::Config::load(),
             config_mtime: vide_config::Config::mtime(),
@@ -397,10 +402,11 @@ impl State {
     pub fn begin_move(&mut self, surface: &WlSurface) {
         let pos = self.pointer_loc;
         if let Some(w) = self.wm.find(surface) {
-            if let Some(restore) = w.maximized {
+            if let Some(restore) = w.maximized.or(w.snapped) {
                 let g = w.geometry();
                 let frac = ((pos.x - g.loc.x as f64) / g.size.w.max(1) as f64).clamp(0.0, 1.0);
                 self.wm.unmaximize(surface);
+                self.wm.unsnap(surface);
                 if let Some(w) = self.wm.find_mut(surface) {
                     // Keep the pointer at the same spot along the (now narrower) titlebar.
                     w.pos.x = (pos.x - frac * restore.size.w as f64) as i32;

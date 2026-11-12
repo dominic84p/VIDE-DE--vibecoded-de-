@@ -72,6 +72,8 @@ pub struct Window {
     pub minimized: bool,
     /// Geometry to restore to.
     pub maximized: Option<Rectangle<i32, Logical>>,
+    /// Snapped to half/quarter of the screen: the geometry to restore to.
+    pub snapped: Option<Rectangle<i32, Logical>>,
     pub fullscreen: Option<Rectangle<i32, Logical>>,
     /// Workspace this window belongs to (0-9).
     pub workspace: usize,
@@ -296,6 +298,8 @@ pub struct Wm {
     /// Bottom to top.
     pub windows: Vec<Window>,
     pub grab: Option<Grab>,
+    /// Where a dragged window would snap if released now (drawn as an outline).
+    pub snap_preview: Option<Rectangle<i32, Logical>>,
     next_id: u64,
     /// Current workspace (0-9).
     pub current_workspace: usize,
@@ -319,6 +323,7 @@ impl Wm {
             ssd,
             minimized: false,
             maximized: None,
+            snapped: None,
             fullscreen: None,
             workspace: self.current_workspace,
             anchor: None,
@@ -353,15 +358,6 @@ impl Wm {
             let w = self.windows.remove(i);
             self.windows.push(w);
         }
-    }
-
-    /// Bring the bottom-most visible window to the top. Alt+Tab.
-    pub fn cycle(&mut self) -> Option<WlSurface> {
-        let i = self.windows.iter().position(|w| !w.minimized && w.mapped && w.workspace == self.current_workspace)?;
-        let w = self.windows.remove(i);
-        let s = w.surface().clone();
-        self.windows.push(w);
-        Some(s)
     }
 
     /// Switch to workspace `ws` (0-9). Returns the new workspace index.
@@ -465,10 +461,11 @@ impl Wm {
     }
 
     /// Pointer moved during a grab. `top_limit` keeps titlebars below the screen top.
-    pub fn update_grab(&mut self, pointer: Point<f64, Logical>, top_limit: i32) {
+    pub fn update_grab(&mut self, pointer: Point<f64, Logical>, top_limit: i32, area: Rectangle<i32, Logical>) {
         let Some(grab) = &self.grab else { return };
         match grab {
             Grab::Move { surface, offset } => {
+                self.snap_preview = snap_zone(pointer, area);
                 let mut pos: Point<i32, Logical> = (pointer - *offset).to_i32_round();
                 let surface = surface.clone();
                 if let Some(w) = self.find_mut(&surface) {
@@ -512,12 +509,48 @@ impl Wm {
         }
     }
 
-    pub fn end_grab(&mut self) {
-        if let Some(Grab::Resize { surface, .. }) = self.grab.take() {
-            if let Some(w) = self.find(&surface) {
-                w.configure(None, &[(Flag::Resizing, false)]);
+    pub fn end_grab(&mut self, area: Rectangle<i32, Logical>) {
+        match self.grab.take() {
+            Some(Grab::Resize { surface, .. }) => {
+                if let Some(w) = self.find(&surface) {
+                    w.configure(None, &[(Flag::Resizing, false)]);
+                }
             }
+            Some(Grab::Move { surface, .. }) => {
+                if let Some(zone) = self.snap_preview.take() {
+                    self.snap(&surface, zone, area);
+                }
+            }
+            None => {}
         }
+    }
+
+    /// Fill `zone` (a half or quarter of `area`; all of it means maximize).
+    pub fn snap(&mut self, surface: &WlSurface, zone: Rectangle<i32, Logical>, area: Rectangle<i32, Logical>) {
+        if zone == area {
+            return self.maximize(surface, area);
+        }
+        let Some(w) = self.find_mut(surface) else { return };
+        if w.fullscreen.is_some() {
+            return;
+        }
+        if w.maximized.is_some() {
+            w.maximized = None;
+            w.configure(None, &[(Flag::Maximized, false)]);
+        }
+        let restore = w.snapped.unwrap_or_else(|| restorable(w.geometry()));
+        w.snapped = Some(restore);
+        w.anchor = None;
+        let title = if w.ssd { TITLE_H } else { 0 };
+        w.pos = zone.loc + Point::from((0, title));
+        w.configure(Some(Size::from((zone.size.w, zone.size.h - title))), &[]);
+    }
+
+    pub fn unsnap(&mut self, surface: &WlSurface) {
+        let Some(w) = self.find_mut(surface) else { return };
+        let Some(r) = w.snapped.take() else { return };
+        w.pos = r.loc;
+        w.configure(Some(r.size), &[]);
     }
 
     pub fn maximize(&mut self, surface: &WlSurface, area: Rectangle<i32, Logical>) {
@@ -525,7 +558,8 @@ impl Wm {
         if w.maximized.is_some() || w.fullscreen.is_some() {
             return;
         }
-        w.maximized = Some(restorable(w.geometry()));
+        // Restore to the pre-snap size, not the snapped one.
+        w.maximized = Some(w.snapped.take().unwrap_or_else(|| restorable(w.geometry())));
         w.anchor = None;
         let (pos, size) = if w.ssd {
             (area.loc + Point::from((0, TITLE_H)), Size::from((area.size.w, area.size.h - TITLE_H)))
@@ -570,6 +604,32 @@ impl Wm {
         }
         w.configure(size, &[(Flag::Fullscreen, false)]);
     }
+}
+
+/// Aero-style snap zones: screen edges give halves, corners quarters, the top maximize.
+fn snap_zone(p: Point<f64, Logical>, area: Rectangle<i32, Logical>) -> Option<Rectangle<i32, Logical>> {
+    const EDGE: f64 = 2.0;
+    const CORNER_ZONE: f64 = 120.0;
+    let (x0, y0) = (area.loc.x as f64, area.loc.y as f64);
+    let (x1, y1) = (x0 + area.size.w as f64, y0 + area.size.h as f64);
+    let (hw, hh) = (area.size.w / 2, area.size.h / 2);
+    let left = p.x <= x0 + EDGE;
+    let right = p.x >= x1 - EDGE;
+    let r = |x: i32, y: i32, w: i32, h: i32| Some(Rectangle::new((area.loc.x + x, area.loc.y + y).into(), (w, h).into()));
+    if left || right {
+        let x = if left { 0 } else { area.size.w - hw };
+        if p.y <= y0 + CORNER_ZONE {
+            return r(x, 0, hw, hh);
+        }
+        if p.y >= y1 - CORNER_ZONE {
+            return r(x, area.size.h - hh, hw, hh);
+        }
+        return r(x, 0, hw, area.size.h);
+    }
+    if p.y <= y0 + EDGE {
+        return Some(area);
+    }
+    None
 }
 
 /// A geometry worth restoring to: unmapped windows report 0×0.

@@ -11,6 +11,7 @@ mod menu;
 mod render;
 mod screenshot;
 mod sni;
+mod switcher;
 mod state;
 mod tray;
 #[cfg(feature = "tty")]
@@ -119,6 +120,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     if std::env::var_os("VIBE_DEBUG_DESKTOPS").is_some() {
         state.toggle_desktops();
+    }
+    if std::env::var_os("VIBE_DEBUG_SWITCHER").is_some() {
+        event_loop.handle().insert_source(Timer::from_duration(Duration::from_secs(5)), |_, _, state| {
+            state.switcher_step(false);
+            TimeoutAction::Drop
+        })?;
     }
     if std::env::var_os("VIBE_DEBUG_SHOT").is_some() {
         event_loop.handle().insert_source(Timer::from_duration(Duration::from_secs(6)), |_, _, state| {

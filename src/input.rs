@@ -55,7 +55,11 @@ enum Action {
     Files,
     TaskManager,
     Close,
-    Cycle,
+    SwitcherStep { back: bool },
+    SwitcherCommit,
+    SwitcherCancel,
+    TaskView,
+    Snap { right: bool },
     Maximize,
     Minimize,
     Fullscreen,
@@ -112,6 +116,10 @@ fn bind(super_mod: bool, mods: &ModifiersState, sym: Keysym) -> Option<Action> {
     if mods.alt && !mods.ctrl && sym == Keysym::F4 {
         return Some(Action::Close);
     }
+    // Alt+Tab is always the window switcher, whatever our modifier is.
+    if mods.alt && !mods.ctrl && matches!(sym, Keysym::Tab | Keysym::ISO_Left_Tab) {
+        return Some(Action::SwitcherStep { back: mods.shift });
+    }
     if super_mod && mods.alt && !mods.logo && sym == Keysym::space {
         return Some(Action::WindowMenu);
     }
@@ -128,9 +136,12 @@ fn bind(super_mod: bool, mods: &ModifiersState, sym: Keysym) -> Option<Action> {
         Keysym::Return => Some(Action::Terminal),
         Keysym::e if !mods.shift => Some(Action::Files),
         Keysym::q => Some(Action::Close),
-        Keysym::Tab => Some(Action::Cycle),
+        // Win+Tab: Task View (on the TTY; nested, Alt+Tab above wins).
+        Keysym::Tab => Some(Action::TaskView),
         Keysym::Up => Some(Action::Maximize),
         Keysym::Down => Some(Action::Minimize),
+        Keysym::Left if !mods.ctrl => Some(Action::Snap { right: false }),
+        Keysym::Right if !mods.ctrl => Some(Action::Snap { right: true }),
         Keysym::f => Some(Action::Fullscreen),
         Keysym::space => Some(Action::StartMenu),
         Keysym::e if mods.shift => Some(Action::Quit),
@@ -321,6 +332,15 @@ impl State {
             let raw = handle.raw_syms().first().copied().unwrap_or(Keysym::from(KEY_NoSymbol));
 
             // Super tap (press + release with nothing in between) toggles the start menu.
+            // Alt+Tab in progress: letting go of Alt picks, Esc backs out.
+            if state.switcher.is_some() {
+                if !pressed && matches!(raw, Keysym::Alt_L | Keysym::Alt_R) {
+                    return FilterResult::Intercept(Action::SwitcherCommit);
+                }
+                if pressed && modified == Keysym::Escape {
+                    return FilterResult::Intercept(Action::SwitcherCancel);
+                }
+            }
             if matches!(raw, Keysym::Super_L | Keysym::Super_R) {
                 if pressed {
                     state.super_tap = true;
@@ -368,9 +388,18 @@ impl State {
                     w.close();
                 }
             }
-            Action::Cycle => {
-                let s = self.wm.cycle();
-                self.focus(s, SERIAL_COUNTER.next_serial());
+            Action::SwitcherStep { back } => self.switcher_step(back),
+            Action::SwitcherCommit => self.switcher_commit(),
+            Action::SwitcherCancel => self.switcher_cancel(),
+            Action::TaskView => self.toggle_desktops(),
+            Action::Snap { right } => {
+                if let Some(s) = focused {
+                    let a = self.work_area();
+                    let half = a.size.w / 2;
+                    let x = if right { a.loc.x + a.size.w - half } else { a.loc.x };
+                    let zone = Rectangle::new((x, a.loc.y).into(), (half, a.size.h).into());
+                    self.wm.snap(&s, zone, a);
+                }
             }
             Action::Maximize => {
                 if let Some(s) = focused {
@@ -382,6 +411,8 @@ impl State {
                 if let Some(s) = focused {
                     if self.wm.find(&s).is_some_and(|w| w.maximized.is_some()) {
                         self.wm.unmaximize(&s);
+                    } else if self.wm.find(&s).is_some_and(|w| w.snapped.is_some()) {
+                        self.wm.unsnap(&s);
                     } else {
                         self.minimize(&s);
                     }
@@ -566,7 +597,8 @@ impl State {
 
         let mut focus = None;
         if self.wm.grab.is_some() {
-            self.wm.update_grab(pos, 0);
+            let area = self.work_area();
+            self.wm.update_grab(pos, 0, area);
         } else {
             let mut cursor = CursorIcon::Default;
             let target = self.target(pos);
@@ -660,7 +692,8 @@ impl State {
 
         if state == ButtonState::Released {
             if self.wm.grab.is_some() && button == BTN_LEFT {
-                self.wm.end_grab();
+                let area = self.work_area();
+                self.wm.end_grab(area);
             }
             return forward(self);
         }

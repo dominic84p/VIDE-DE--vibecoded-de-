@@ -7,6 +7,7 @@ use smithay::{
     backend::renderer::{
         element::{
             memory::{MemoryRenderBuffer, MemoryRenderBufferRenderElement},
+            utils::RescaleRenderElement,
             render_elements,
             solid::{SolidColorBuffer, SolidColorRenderElement},
             surface::{render_elements_from_surface_tree, WaylandSurfaceRenderElement},
@@ -39,6 +40,8 @@ render_elements! {
     Solid=SolidColorRenderElement,
     /// CPU-painted pictures: cursor, taskbar, start menu, titlebars, wallpaper.
     Image=MemoryRenderBufferRenderElement<GlesRenderer>,
+    /// A window drawn shrunk (Alt+Tab thumbnails).
+    Thumb=RescaleRenderElement<WaylandSurfaceRenderElement<GlesRenderer>>,
 }
 
 pub type BorderPiece<'a> = (&'a SolidColorBuffer, Point<i32, Logical>);
@@ -82,6 +85,33 @@ pub fn elements_with(renderer: &mut GlesRenderer, state: &mut State, cursor: boo
             let (buf, hot) = state.cursors.get(*icon);
             out.extend(image(renderer, buf, ptr - *hot, Kind::Cursor));
         }
+    }
+
+    // Alt+Tab: live window thumbnails on top of the panel picture.
+    if let (Some(origin), Some(panel)) = (state.switcher_origin(), state.switcher_picture()) {
+        let sw = state.switcher.as_ref().unwrap();
+        for (i, s) in sw.order.iter().enumerate() {
+            let Some(w) = state.wm.find(s) else { continue };
+            let g = w.geometry();
+            if g.size.w <= 0 || g.size.h <= 0 {
+                continue;
+            }
+            let tile = sw.tile(i);
+            let area = (crate::switcher::TILE_W - 20, crate::switcher::THUMB_H);
+            let scale = (area.0 as f64 / g.size.w as f64).min(area.1 as f64 / g.size.h as f64).min(1.0);
+            let (tw, th) = ((g.size.w as f64 * scale) as i32, (g.size.h as f64 * scale) as i32);
+            // Centre the thumbnail; shift by the geometry offset so client shadows sit outside.
+            let off = w.surface_loc() - w.pos;
+            let at = origin + tile.loc + Point::from(((tile.size.w - tw) / 2, 30 + (area.1 - th) / 2));
+            // Draw at full size anchored at `at`, then shrink everything around that point.
+            let origin_px = at.to_physical(1);
+            out.extend(
+                render_elements_from_surface_tree(renderer, s, (at + off).to_physical(1), 1.0, 1.0, Kind::Unspecified)
+                    .into_iter()
+                    .map(|e| Elem::Thumb(RescaleRenderElement::from_element(e, origin_px, scale))),
+            );
+        }
+        out.extend(image(renderer, &panel, origin, Kind::Unspecified));
     }
 
     // Overlay-layer clients (lock screens, notifications) above all our chrome.
@@ -197,6 +227,12 @@ pub fn elements_with(renderer: &mut GlesRenderer, state: &mut State, cursor: boo
     // Top-layer clients (panels, docks) above windows.
     for (s, at) in state.layer_surfaces(&[Layer::Top]) {
         out.extend(surface_tree(renderer, &s, at, Kind::Unspecified));
+    }
+
+    // Where a dragged window will snap.
+    if let Some(z) = state.wm.snap_preview {
+        state.snap_buf.update(z.size, Color32F::new(0.46, 0.73, 0.93, 0.28));
+        out.push(Elem::Solid(SolidColorRenderElement::from_buffer(&state.snap_buf, z.loc.to_physical(1), 1.0, 1.0, Kind::Unspecified)));
     }
 
     // Windows, top to bottom (only current workspace).

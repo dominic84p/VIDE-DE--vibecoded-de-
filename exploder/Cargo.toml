@@ -6,7 +6,9 @@ description = "File Exploder: VIDE-DE's file manager. Like File Explorer, but it
 
 [dependencies]
 eframe = "0.37"
+egui = "0.37"
 egui_extras = { version = "0.37", features = ["image", "svg", "file"] }
-image = { version = "0.25", default-features = false, features = ["png"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp", "bmp"] }
+libc = "0.2"
 mime_guess = "2"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }

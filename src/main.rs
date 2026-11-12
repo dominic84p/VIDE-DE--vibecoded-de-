@@ -8,6 +8,7 @@ mod input;
 mod menu;
 mod render;
 mod screenshot;
+mod sni;
 mod state;
 mod tray;
 #[cfg(feature = "tty")]
@@ -80,6 +81,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Optional autostart, e.g. `VIBE_STARTUP=konsole cargo run`. Runs once Xwayland is up.
     state.startup = std::env::var("VIBE_STARTUP").ok();
     xwayland::start(&event_loop.handle(), &mut state);
+
+    // App tray icons: a D-Bus thread feeding us through a channel.
+    let (tray_tx, tray_rx) = smithay::reexports::calloop::channel::channel();
+    event_loop.handle().insert_source(tray_rx, |event, _, state| {
+        if let smithay::reexports::calloop::channel::Event::Msg(ev) = event {
+            match ev {
+                sni::Event::Items(items) => state.sni_items = items,
+                sni::Event::Menu { id, entries } => state.open_tray_menu(id, entries),
+            }
+            state.needs_redraw = true;
+        }
+    })?;
+    state.sni_tx = Some(sni::start(tray_tx));
 
     // Testing aids: open the start menu or Task View at launch, and/or have the
     // compositor screenshot itself after a few seconds (lands in ~/Pictures/Screenshots).

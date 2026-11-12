@@ -29,6 +29,8 @@ the WM in `src/wm.rs` is deliberately our own.
 - `xwayland.rs`, `focus.rs`: X11 support and the keyboard focus enum.
 - `apps.rs`, `icons.rs`, `cursor.rs`: desktop entries, icon themes, xcursor themes.
 - `menu.rs`: right-click menus. `tray.rs`: volume/brightness. `screenshot.rs`: PrtSc and snip.
+- `sni.rs`: app tray icons. We are the StatusNotifierWatcher + host, on a D-Bus thread
+  talking to the main loop over channels. `desktops.rs`: Task View panel.
 - `about/`: `vide-about`, a separate egui app (workspace member), launched from the desktop menu.
 
 ## Conventions

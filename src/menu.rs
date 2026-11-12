@@ -33,6 +33,10 @@ pub enum Action {
     Spawn(String),
     Screenshot,
     About,
+    /// A tray app's own menu entry: (tray item id, dbusmenu entry id).
+    TrayMenu(String, i32),
+    /// Shown but not clickable (disabled entries in app menus).
+    Inert,
     /// A separator line.
     Separator,
 }
@@ -57,7 +61,7 @@ impl Menu {
             return None;
         }
         let i = ((local.y as i32 - PAD) / ROW) as usize;
-        self.items.get(i).filter(|(_, a)| *a != Action::Separator).map(|_| i)
+        self.items.get(i).filter(|(_, a)| !matches!(a, Action::Separator | Action::Inert)).map(|_| i)
     }
 
     pub fn picture(&mut self, font: Option<&fontdue::Font>) -> &MemoryRenderBuffer {
@@ -77,7 +81,8 @@ impl Menu {
                 if let Some(f) = font {
                     // "Label\tShortcut": shortcut right-aligned and dimmed, like Windows menus.
                     let (text, shortcut) = label.split_once('\t').unwrap_or((label, ""));
-                    c.text(f, 13.0, 16, y, ROW, TEXT, text);
+                    let color = if *action == Action::Inert { TEXT_DIM } else { TEXT };
+                    c.text(f, 13.0, 16, y, ROW, color, text);
                     if !shortcut.is_empty() {
                         let sw = measure(f, 13.0, shortcut);
                         c.text(f, 13.0, self.size.w - 16 - sw, y, ROW, TEXT_DIM, shortcut);
@@ -162,6 +167,27 @@ impl State {
         self.open_menu((x - MIN_W / 2, self.output_size.h - TASKBAR_H - h).into(), items);
     }
 
+    /// A tray app sent us its menu: show it above the taskbar, under its icon.
+    pub fn open_tray_menu(&mut self, id: String, entries: Vec<crate::sni::MenuEntry>) {
+        let items: Vec<(String, Action)> = entries
+            .into_iter()
+            .map(|e| {
+                if e.separator {
+                    (String::new(), Action::Separator)
+                } else {
+                    let label = format!("{}{}", "    ".repeat(e.depth), e.label);
+                    (label, if e.enabled { Action::TrayMenu(id.clone(), e.id) } else { Action::Inert })
+                }
+            })
+            .collect();
+        if items.is_empty() {
+            return;
+        }
+        let h = items.len() as i32 * ROW + PAD * 2;
+        let x = self.tray_menu_x;
+        self.open_menu((x - MIN_W / 2, self.output_size.h - TASKBAR_H - h).into(), items);
+    }
+
     pub fn open_desktop_menu(&mut self, at: Point<i32, Logical>) {
         let items = vec![
             ("Open terminal".into(), Action::Spawn(crate::input::TERMINAL.into())),
@@ -213,7 +239,12 @@ impl State {
                     .unwrap_or_else(|| "vide-about".into());
                 self.spawn(&format!("'{about}'"));
             }
-            Action::Separator => {}
+            Action::TrayMenu(id, entry) => {
+                if let Some(tx) = &self.sni_tx {
+                    let _ = tx.send(crate::sni::Cmd::MenuClick { id, entry });
+                }
+            }
+            Action::Separator | Action::Inert => {}
         }
         self.needs_redraw = true;
     }

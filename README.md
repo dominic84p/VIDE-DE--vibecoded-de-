@@ -31,7 +31,8 @@ taskbar, start menu and titlebars are all our own code.
 - **Virtual desktops**: 10 of them, behind a Task View button next to search
   (click for a panel of desktops with their apps; scroll over it to flip)
 - **Right-click menus** on taskbar buttons, titlebars and the desktop
-- **Tray** with volume (PipeWire) and brightness sliders
+- **Tray** with volume (PipeWire) and brightness sliders, plus app tray icons
+  (Discord, Steam, ...): click to open, right-click for the app's menu
 - **Screenshots** and a Windows-style snipping tool
 - **Keyring**: starts KWallet's Secret Service so browsers and Electron apps can save logins
 - **About VIDE-DE** (`vide-about`), a separate app showing your system info via fastfetch

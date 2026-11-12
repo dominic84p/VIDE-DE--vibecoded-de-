@@ -21,9 +21,25 @@ pub struct Icons {
 
 impl Icons {
     pub fn new() -> Self {
+        Self::with_first(None)
+    }
+
+    /// For things drawn on a dark background (the tray): prefer the dark theme
+    /// variant, whose monochrome status icons are light.
+    pub fn dark() -> Self {
+        let dark = kde_icon_theme().map(|t| format!("{}-dark", t.trim_end_matches("-dark"))).filter(|t| {
+            std::path::Path::new("/usr/share/icons").join(t).exists()
+        });
+        Self::with_first(Some(dark.unwrap_or_else(|| "breeze-dark".into())))
+    }
+
+    fn with_first(first: Option<String>) -> Self {
         let mut themes = Vec::new();
+        themes.extend(first);
         if let Some(t) = kde_icon_theme() {
-            themes.push(t);
+            if !themes.contains(&t) {
+                themes.push(t);
+            }
         }
         for t in ["breeze", "breeze-dark", "Adwaita", "hicolor"] {
             if !themes.iter().any(|x| x == t) {
@@ -188,6 +204,11 @@ fn decode_png(r: impl std::io::BufRead + std::io::Seek) -> Option<Icon> {
         }
     }
     Some(Icon { w: info.width, h: info.height, rgba })
+}
+
+/// Wrap raw premultiplied RGBA (e.g. a tray app's pixmap) as an icon of `size`×`size`.
+pub fn from_rgba(w: u32, h: u32, rgba: Vec<u8>, size: u32) -> Icon {
+    scale(&Icon { w, h, rgba }, size)
 }
 
 fn scale(src: &Icon, size: u32) -> Icon {

@@ -140,6 +140,15 @@ pub struct State {
     pub start: Start,
     pub menu: Option<crate::menu::Menu>,
     pub tray: crate::tray::Tray,
+    /// App tray icons (StatusNotifierItem), and the channel to the tray thread.
+    pub sni_items: Vec<crate::sni::TrayItem>,
+    pub sni_tx: Option<std::sync::mpsc::Sender<crate::sni::Cmd>>,
+    /// Where the last tray icon right-click was, to place its menu.
+    pub tray_menu_x: i32,
+    /// Tray icons by fingerprint, so pixmaps aren't rescaled every frame.
+    /// Icon lookup that prefers the dark theme, for the dark taskbar tray.
+    pub tray_theme: crate::icons::Icons,
+    pub tray_icon_cache: std::collections::HashMap<String, Option<std::rc::Rc<crate::icons::Icon>>>,
     pub desktops: crate::desktops::Desktops,
     /// Full-screen black at partial alpha: our software brightness.
     pub dim: smithay::backend::renderer::element::solid::SolidColorBuffer,
@@ -215,6 +224,11 @@ impl State {
             start: Start::default(),
             menu: None,
             tray: crate::tray::Tray::new(),
+            sni_items: Vec::new(),
+            sni_tx: None,
+            tray_menu_x: 0,
+            tray_icon_cache: Default::default(),
+            tray_theme: crate::icons::Icons::dark(),
             desktops: Default::default(),
             dim: Default::default(),
             screenshot_requested: None,

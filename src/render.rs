@@ -177,9 +177,11 @@ pub fn elements_with(renderer: &mut GlesRenderer, state: &mut State, cursor: boo
             flyout: state.tray.flyout,
             current_workspace: state.wm.current_workspace,
             taskview_open: state.desktops.open,
+            tray_apps: state.sni_items.iter().map(|i| (i.id.clone(), tray_fingerprint(i))).collect(),
         };
         if state.taskbar.as_ref().is_none_or(|t| t.key != key) {
-            state.taskbar = Some(ui::draw_taskbar(state.font.as_ref(), &mut state.icons, state.logo.as_ref(), key));
+            let tray_icons = tray_icons(state);
+            state.taskbar = Some(ui::draw_taskbar(state.font.as_ref(), &mut state.icons, state.logo.as_ref(), &tray_icons, key));
         }
         let bar = state.taskbar.as_ref().unwrap();
         out.extend(image(renderer, &bar.buffer, (0, oh - TASKBAR_H).into(), Kind::Unspecified));
@@ -219,6 +221,45 @@ pub fn elements_with(renderer: &mut GlesRenderer, state: &mut State, cursor: boo
     let (_, wp) = state.wallpaper.as_ref().unwrap();
     out.extend(image(renderer, wp, (0, 0).into(), Kind::Unspecified));
 
+    out
+}
+
+const TRAY_ICON: u32 = 20;
+
+fn tray_fingerprint(i: &crate::sni::TrayItem) -> String {
+    match &i.pixmap {
+        // Cheap content hash: size plus a sparse sample of the pixels.
+        Some((w, h, px)) => {
+            let sample: u64 = px.iter().step_by(37).map(|&b| b as u64).sum();
+            format!("px:{w}x{h}:{sample}")
+        }
+        None => format!("{}|{}", i.theme_path, i.icon_name),
+    }
+}
+
+/// Load each app tray icon: from the app's own icon folder, the theme, or its raw pixels.
+fn tray_icons(state: &mut State) -> Vec<Option<std::rc::Rc<crate::icons::Icon>>> {
+    let mut out = Vec::new();
+    for item in &state.sni_items {
+        let fp = tray_fingerprint(item);
+        if !state.tray_icon_cache.contains_key(&fp) {
+            let icon = match &item.pixmap {
+                Some((w, h, px)) => Some(std::rc::Rc::new(crate::icons::from_rgba(*w, *h, px.clone(), TRAY_ICON))),
+                None => {
+                    let in_app_dir = (!item.theme_path.is_empty())
+                        .then(|| {
+                            ["png", "svg"].iter().find_map(|ext| {
+                                state.tray_theme.get(&format!("{}/{}.{ext}", item.theme_path, item.icon_name), TRAY_ICON)
+                            })
+                        })
+                        .flatten();
+                    in_app_dir.or_else(|| state.tray_theme.get(&item.icon_name, TRAY_ICON))
+                }
+            };
+            state.tray_icon_cache.insert(fp.clone(), icon);
+        }
+        out.push(state.tray_icon_cache[&fp].clone());
+    }
     out
 }
 

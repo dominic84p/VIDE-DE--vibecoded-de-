@@ -61,6 +61,8 @@ pub enum TaskbarHit {
     Search,
     Volume,
     Brightness,
+    /// An app's tray icon, by its tray id.
+    TrayApp(String),
     Window(WlSurface),
     TaskView,
     ShowDesktop,
@@ -88,6 +90,8 @@ pub struct TaskbarKey {
     pub flyout: Option<crate::tray::Flyout>,
     pub current_workspace: usize,
     pub taskview_open: bool,
+    /// App tray icons: (tray id, something that changes when the icon does).
+    pub tray_apps: Vec<(String, String)>,
 }
 
 pub struct Taskbar {
@@ -97,7 +101,13 @@ pub struct Taskbar {
     pub hits: Vec<(Rectangle<i32, Logical>, TaskbarHit)>,
 }
 
-pub fn draw_taskbar(font: Option<&Font>, icons: &mut Icons, logo: Option<&crate::icons::Icon>, key: TaskbarKey) -> Taskbar {
+pub fn draw_taskbar(
+    font: Option<&Font>,
+    icons: &mut Icons,
+    logo: Option<&crate::icons::Icon>,
+    tray_icons: &[Option<std::rc::Rc<crate::icons::Icon>>],
+    key: TaskbarKey,
+) -> Taskbar {
     let w = key.width;
     let mut c = Canvas::new(w, TASKBAR_H);
     let mut hits = Vec::new();
@@ -147,7 +157,8 @@ pub fn draw_taskbar(font: Option<&Font>, icons: &mut Icons, logo: Option<&crate:
 
     // Window buttons.
     let right_edge = w - CLOCK_W - SHOW_DESKTOP_W;
-    let tray_x = right_edge - TRAY_W * 2;
+    let apps_x = right_edge - TRAY_W * 2 - TRAY_W * key.tray_apps.len() as i32;
+    let tray_x = apps_x;
     let mut x = tv_x + TASK_W + 4;
     for item in &key.items {
         if x + TASK_W > tray_x {
@@ -177,6 +188,21 @@ pub fn draw_taskbar(font: Option<&Font>, icons: &mut Icons, logo: Option<&crate:
         hits.push((rect(x, 0, TASK_W, TASKBAR_H), hit));
         x += TASK_W;
     }
+
+    // App tray icons (Discord, Steam, ...), left of our own.
+    for (i, (id, _)) in key.tray_apps.iter().enumerate() {
+        let bx = apps_x + i as i32 * TRAY_W;
+        let hit = TaskbarHit::TrayApp(id.clone());
+        if hovered(&hit) {
+            c.rect(bx, 0, TRAY_W, TASKBAR_H, TASK_HOVER);
+        }
+        match tray_icons.get(i).and_then(|o| o.as_ref()) {
+            Some(icon) => c.icon(icon, bx + (TRAY_W - icon.w as i32) / 2, (TASKBAR_H - icon.h as i32) / 2),
+            None => c.round_rect(bx + 9, 12, 16, 16, 3, ACCENT),
+        }
+        hits.push((rect(bx, 0, TRAY_W, TASKBAR_H), hit));
+    }
+    let tray_x = apps_x + TRAY_W * key.tray_apps.len() as i32;
 
     // Tray: brightness, then volume, just left of the clock.
     use crate::tray::{speaker, sun, Flyout};

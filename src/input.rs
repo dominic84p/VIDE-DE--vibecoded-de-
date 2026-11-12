@@ -663,10 +663,25 @@ impl State {
                         TaskbarHit::ShowDesktop => self.show_desktop(),
                         TaskbarHit::Volume => self.toggle_flyout(crate::tray::Flyout::Volume),
                         TaskbarHit::Brightness => self.toggle_flyout(crate::tray::Flyout::Brightness),
+                        TaskbarHit::TrayApp(id) => {
+                            self.tray_menu_x = pos.x as i32;
+                            if let Some(tx) = &self.sni_tx {
+                                let _ = tx.send(crate::sni::Cmd::Activate { id, x: pos.x as i32, y: pos.y as i32 });
+                            }
+                        }
                         TaskbarHit::Nothing => {}
                     }
-                } else if let (true, TaskbarHit::Window(s)) = (right, hit) {
-                    self.open_taskbar_menu(&s, pos.x as i32);
+                } else if right {
+                    match hit {
+                        TaskbarHit::Window(s) => self.open_taskbar_menu(&s, pos.x as i32),
+                        TaskbarHit::TrayApp(id) => {
+                            self.tray_menu_x = pos.x as i32;
+                            if let Some(tx) = &self.sni_tx {
+                                let _ = tx.send(crate::sni::Cmd::OpenMenu { id, x: pos.x as i32, y: pos.y as i32 });
+                            }
+                        }
+                        _ => {}
+                    }
                 }
             }
             Target::Window(Hit::Button(s, b)) => {

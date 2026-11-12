@@ -212,11 +212,11 @@ impl StoreApp {
             )
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
-                    // Microsoft Store branding
+                    // Macrohard Store branding
                     let (rect, _) = ui.allocate_exact_size(Vec2::new(24.0, 24.0), egui::Sense::hover());
                     draw_ms_store_bag(ui.painter(), rect);
                     ui.label(
-                        RichText::new("Microsoft Store")
+                        RichText::new("Macrohard Store")
                             .font(FontId::proportional(16.0))
                             .strong()
                             .color(TEXT),
@@ -484,7 +484,7 @@ impl StoreApp {
                 ui.horizontal(|ui| {
                     ui.vertical(|ui| {
                         ui.label(
-                            RichText::new("Welcome to Microsoft Store")
+                            RichText::new("Welcome to Macrohard Store")
                                 .font(FontId::proportional(26.0))
                                 .strong()
                                 .color(Color32::WHITE),
@@ -1120,7 +1120,7 @@ fn draw_ms_store_bag(painter: &egui::Painter, rect: egui::Rect) {
         Stroke::new(1.2, Color32::from_rgb(0x88, 0x88, 0x88)),
         egui::StrokeKind::Inside,
     );
-    // 4-color Microsoft grid inside bag
+    // 4-color Macrohard grid inside bag
     let cx = body.center().x;
     let cy = body.center().y + 1.0;
     let s = 3.8;
@@ -1149,14 +1149,14 @@ fn truncate(s: &str, max_chars: usize) -> String {
 fn main() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_title("Microsoft Store")
-            .with_app_id("microsoft-store")
+            .with_title("Macrohard Store")
+            .with_app_id("macrohard-store")
             .with_inner_size([1060.0, 720.0])
             .with_min_inner_size([720.0, 500.0]),
         ..Default::default()
     };
     eframe::run_native(
-        "Microsoft Store",
+        "Macrohard Store",
         options,
         Box::new(|cc| Ok(Box::new(StoreApp::new(cc)))),
     )

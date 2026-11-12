@@ -1,8 +1,8 @@
 [package]
-name = "microsoft-store"
+name = "macrohard-store"
 version = "0.1.0"
 edition = "2024"
-description = "Microsoft Store - Software Center for VIDE-DE"
+description = "Macrohard Store - Software Center for VIDE-DE"
 
 [dependencies]
 eframe = "0.37"

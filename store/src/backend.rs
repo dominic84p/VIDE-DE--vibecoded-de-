@@ -1031,7 +1031,7 @@ pub fn featured_catalog(backends: &DetectedBackends, installed_ids: &HashSet<Str
             name: "Visual Studio Code",
             summary: "Code editing. Redefined. Built on open source with extensions",
             category: "Apps",
-            publisher: "Microsoft Corporation",
+            publisher: "Macrohard",
             rgb: [0, 122, 204],
             rating: "4.8",
         },

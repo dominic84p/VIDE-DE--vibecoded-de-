@@ -619,6 +619,51 @@ impl State {
         Rectangle::new((0, self.output_size.h - TASKBAR_H - h).into(), (w, h).into())
     }
 
+    /// Right-click on a Start tile, as on Windows: unpin, or pin to the taskbar.
+    fn open_tile_menu(&mut self, t: usize, at: Point<i32, Logical>) {
+        let Some(&(idx, group)) = self.start_tiles().get(t) else { return };
+        let id = self.apps[idx].id.clone();
+        let start = if group == 0 { "Unpin from Start" } else { "Pin to Start" };
+        let bar = if self.pins.taskbar.contains(&id) { "Unpin from taskbar" } else { "Pin to taskbar" };
+        let items = vec![
+            ("Open".into(), crate::menu::Action::Launch(idx)),
+            (String::new(), crate::menu::Action::Separator),
+            (start.into(), crate::menu::Action::PinStart(id.clone())),
+            (bar.into(), crate::menu::Action::PinTaskbar(id)),
+        ];
+        self.open_menu(at, items);
+    }
+
+    fn rail_click(&mut self, r: ui::RailItem, at: Point<i32, Logical>) {
+        use ui::RailItem;
+        let home = std::env::var("HOME").unwrap_or_default();
+        let folder = |state: &mut Self, sub: &str| {
+            let fe = own_app("file-exploder").unwrap_or_else(|| "xdg-open".into());
+            state.spawn(&format!("{fe} '{home}/{sub}'"));
+            state.toggle_start();
+        };
+        match r {
+            RailItem::Expand => self.start.rail_open = !self.start.rail_open,
+            RailItem::Account => {
+                let settings = own_app("vide-settings").unwrap_or_default();
+                let items = vec![
+                    ("Change account settings".into(), crate::menu::Action::Spawn(format!("{settings} --page about"))),
+                    ("Sign out".into(), crate::menu::Action::SignOut),
+                ];
+                self.open_menu(at, items);
+            }
+            RailItem::Documents => folder(self, "Documents"),
+            RailItem::Pictures => folder(self, "Pictures"),
+            RailItem::Settings => {
+                if let Some(s) = own_app("vide-settings") {
+                    self.spawn(&s);
+                }
+                self.toggle_start();
+            }
+        }
+        self.needs_redraw = true;
+    }
+
     /// A click on an action in the search pane's preview.
     fn start_action(&mut self, id: u8) {
         use crate::search::Entry;
@@ -941,8 +986,10 @@ impl State {
         match target {
             Target::Start(hit) => {
                 if right {
-                    if let StartHit::Item(i) = hit {
-                        self.open_start_item_menu(i, pos.to_i32_round());
+                    match hit {
+                        StartHit::Item(i) => self.open_start_item_menu(i, pos.to_i32_round()),
+                        StartHit::Tile(t) => self.open_tile_menu(t, pos.to_i32_round()),
+                        _ => {}
                     }
                 } else if left {
                     match hit {
@@ -952,6 +999,14 @@ impl State {
                             self.refresh_start();
                         }
                         StartHit::Action(a) => self.start_action(a),
+                        StartHit::Tile(t) => {
+                            if let Some(&(i, _)) = self.start_tiles().get(t) {
+                                let app = self.apps[i].clone();
+                                self.launch(&app);
+                                self.toggle_start();
+                            }
+                        }
+                        StartHit::Rail(r) => self.rail_click(r, pos.to_i32_round()),
                         StartHit::Power => self.start.power_open = !self.start.power_open,
                         StartHit::PowerAction(a) => self.power(a),
                         StartHit::Nothing => self.start.power_open = false,
@@ -1058,7 +1113,7 @@ impl State {
         }
     }
 
-    fn power(&mut self, a: PowerAction) {
+    pub fn power(&mut self, a: PowerAction) {
         match a {
             PowerAction::SignOut => self.running = false,
             PowerAction::Restart => self.spawn("systemctl reboot"),

@@ -50,9 +50,12 @@ pub const TASK_BUTTONS_X: i32 = SEARCH_END + TASK_W + 4;
 const CLOCK_W: i32 = 88;
 const TRAY_W: i32 = 34;
 const SHOW_DESKTOP_W: i32 = 6;
-pub const MENU_W: i32 = 360;
+pub const MENU_W: i32 = 680;
 const MENU_ROW: i32 = 36;
-const MENU_TOP: i32 = 52;
+const MENU_TOP: i32 = 8;
+/// Start's app list column, between the rail and the tiles.
+const LIST_W: i32 = 284;
+const TILE: i32 = 100;
 const RAIL_W: i32 = 48;
 
 // ---------------------------------------------------------------- taskbar
@@ -394,9 +397,22 @@ pub enum StartHit {
     Filter(usize),
     /// An action in the search pane's preview, by id (see State::start_preview).
     Action(u8),
+    /// A Start tile (index into StartKey::tiles).
+    Tile(usize),
+    /// The left rail: hamburger, account, Documents, Pictures, Settings.
+    Rail(RailItem),
     Power,
     PowerAction(PowerAction),
     Nothing,
+}
+
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum RailItem {
+    Expand,
+    Account,
+    Documents,
+    Pictures,
+    Settings,
 }
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -441,6 +457,10 @@ pub struct StartKey {
     /// Per item, what kind of thing it is ("App"...), for the search pane.
     pub kinds: Vec<String>,
     pub preview: Option<Preview>,
+    /// Tiles: (name, icon, group: 0 Productivity, 1 Explore).
+    pub tiles: Vec<(String, String, u8)>,
+    pub user: String,
+    pub rail_open: bool,
 }
 
 /// The search pane's right side: the highlighted result, big, and its actions.
@@ -475,75 +495,120 @@ pub fn draw_start_menu(font: Option<&Font>, icons: &mut Icons, key: StartKey) ->
     let h = key.height;
     let mut c = Canvas::new(MENU_W, h);
     let mut hits = vec![(rect(0, 0, MENU_W, h), StartHit::Nothing)];
-    c.rect(0, 0, RAIL_W, h, MENU_RAIL);
-    c.rect(RAIL_W, 0, MENU_W - RAIL_W, h, MENU_BG);
+    c.rect(0, 0, MENU_W, h, MENU_BG);
+    let Some(f) = font else { return StartMenu { key, buffer: c.into_buffer(), hits } };
 
-    // Power at the bottom of the rail; it opens a list rather than acting straight away.
-    let (px, py) = (RAIL_W / 2, h - 26);
-    if key.power_open {
-        c.rect(0, py - 18, RAIL_W, 36, TASK_ACTIVE);
-    } else if key.hover == Some(StartHit::Power) {
-        c.rect(0, py - 18, RAIL_W, 36, TASK_HOVER);
-    }
-    c.circle(px as f32, py as f32 + 1.0, 7.5, WHITE);
-    c.circle(px as f32, py as f32 + 1.0, 6.2, MENU_RAIL);
-    c.rect(px - 3, py - 9, 6, 6, MENU_RAIL);
-    c.rect(px - 1, py - 9, 2, 9, WHITE);
-    hits.push((rect(0, py - 18, RAIL_W, 36), StartHit::Power));
-
-    // Search line.
-    let lx = RAIL_W + 16;
-    magnifier(&mut c, lx as f32 + 6.0, 26.0, WHITE, MENU_BG);
-    if let Some(f) = font {
-        let (t, col) = if key.query.is_empty() { ("Type to search apps, settings and files".to_string(), TEXT_DIM) } else { (format!("{}|", key.query), WHITE) };
-        c.text(f, 14.0, lx + 22, 8, 36, col, &t);
-    }
-    c.rect(lx, 46, MENU_W - lx - 16, 1, hex(0x505050));
-
-    // App list.
+    // App list: Most used, then A-Z under letter headers.
+    let lx = RAIL_W;
     let rows = start_menu_rows(h);
     for (row, (i, item)) in key.items.iter().enumerate().skip(key.scroll).take(rows).enumerate() {
         let y = MENU_TOP + row as i32 * MENU_ROW;
-        let (name, icon, detail) = match item {
-            StartRow::Header(h) => {
-                if let Some(f) = font {
-                    c.text(f, 12.0, RAIL_W + 16, y + 6, MENU_ROW - 6, TEXT_DIM, h);
-                }
+        let (name, icon) = match item {
+            StartRow::Header(t) => {
+                // Single letters sit on the left like Windows' jump headers; others are titles.
+                let size = if t.chars().count() == 1 { 15.0 } else { 13.0 };
+                c.text(f, size, lx + 14, y + 4, MENU_ROW - 4, WHITE, t);
                 continue;
             }
-            StartRow::Item(n, i, d) => (n, i, d),
+            StartRow::Item(n, i, _) => (n, i),
         };
         let hit = StartHit::Item(i);
-        if i == key.selected {
-            c.rect(RAIL_W, y, MENU_W - RAIL_W, MENU_ROW, TASK_ACTIVE);
-        } else if key.hover.as_ref() == Some(&hit) {
-            c.rect(RAIL_W, y, MENU_W - RAIL_W, MENU_ROW, TASK_HOVER);
+        if key.hover.as_ref() == Some(&hit) {
+            c.rect(lx, y, LIST_W, MENU_ROW, TASK_HOVER);
         }
         match icons.get(icon, 24).or_else(|| app_icon(icons, icon, 24)) {
-            Some(ic) => c.icon(&ic, RAIL_W + 12, y + (MENU_ROW - 24) / 2),
-            None => c.round_rect(RAIL_W + 12, y + 6, 24, 24, 4, ACCENT),
+            Some(ic) => c.icon(&ic, lx + 12, y + (MENU_ROW - 24) / 2),
+            None => c.rect(lx + 12, y + 6, 24, 24, ACCENT),
         }
-        if let Some(f) = font {
-            let dw = if detail.is_empty() { 0 } else { measure(f, 11.0, detail).min(120) + 12 };
-            let t = ellipsize(f, 13.0, name, MENU_W - RAIL_W - 60 - dw);
-            c.text(f, 13.0, RAIL_W + 48, y, MENU_ROW, WHITE, &t);
-            if !detail.is_empty() {
-                let d = ellipsize(f, 11.0, detail, 120);
-                c.text(f, 11.0, MENU_W - 12 - measure(f, 11.0, &d), y, MENU_ROW, TEXT_DIM, &d);
-            }
-        }
-        hits.push((rect(RAIL_W, y, MENU_W - RAIL_W, MENU_ROW), hit));
+        c.text(f, 13.0, lx + 48, y, MENU_ROW, WHITE, &ellipsize(f, 13.0, name, LIST_W - 60));
+        hits.push((rect(lx, y, LIST_W, MENU_ROW), hit));
     }
-    if key.items.is_empty() {
-        if let Some(f) = font {
-            c.text(f, 13.0, RAIL_W + 16, MENU_TOP, MENU_ROW, TEXT_DIM, "No matches");
+
+    // Tiles: group titles, then medium tiles three to a row.
+    let tx0 = RAIL_W + LIST_W + 12;
+    let mut y = 8;
+    let mut group = None;
+    let mut col = 0;
+    for (i, (name, icon, g)) in key.tiles.iter().enumerate() {
+        if group != Some(*g) {
+            if group.is_some() {
+                y += TILE + 12;
+            }
+            group = Some(*g);
+            col = 0;
+            c.text(f, 13.0, tx0, y, 32, WHITE, if *g == 0 { "Productivity" } else { "Explore" });
+            y += 36;
+        } else if col == 3 {
+            col = 0;
+            y += TILE + 4;
         }
+        if y + TILE > h - 8 {
+            break;
+        }
+        let x = tx0 + col * (TILE + 4);
+        let hit = StartHit::Tile(i);
+        let hover = key.hover.as_ref() == Some(&hit);
+        c.rect(x, y, TILE, TILE, if hover { hex(0x1a86dd) } else { ACCENT });
+        if hover {
+            c.outline(x, y, TILE, TILE, rgba(0xffffff, 0x99));
+            c.outline(x + 1, y + 1, TILE - 2, TILE - 2, rgba(0xffffff, 0x99));
+        }
+        match icons.get(icon, 40).or_else(|| app_icon(icons, icon, 40)) {
+            Some(ic) => c.icon(&ic, x + (TILE - ic.w as i32) / 2, y + 22),
+            None => c.rect(x + 30, y + 22, 40, 40, hex(0x005a9e)),
+        }
+        c.text(f, 12.0, x + 8, y + TILE - 26, 20, WHITE, &ellipsize(f, 12.0, name, TILE - 14));
+        hits.push((rect(x, y, TILE, TILE), hit));
+        col += 1;
+    }
+
+    // Left rail, drawn last so its expanded form covers the list.
+    let rail_w = if key.rail_open { 256 } else { RAIL_W };
+    c.rect(0, 0, rail_w, h, MENU_RAIL);
+    if key.rail_open {
+        c.rect(rail_w, 0, 1, h, hex(0x3a3a3a));
+    }
+    let items: [(Option<RailItem>, i32, String); 6] = [
+        (Some(RailItem::Expand), 6, "START".into()),
+        (Some(RailItem::Account), h - 206, key.user.clone()),
+        (Some(RailItem::Documents), h - 166, "Documents".into()),
+        (Some(RailItem::Pictures), h - 126, "Pictures".into()),
+        (Some(RailItem::Settings), h - 86, "Settings".into()),
+        (None, h - 46, "Power".into()),
+    ];
+    for (item, y, label) in items {
+        let hit = item.map(StartHit::Rail).unwrap_or(StartHit::Power);
+        let active = item.is_none() && key.power_open;
+        if active {
+            c.rect(0, y, rail_w, 40, TASK_ACTIVE);
+        } else if key.hover.as_ref() == Some(&hit) {
+            c.rect(0, y, rail_w, 40, TASK_HOVER);
+        }
+        let (gx, gy) = (RAIL_W as f32 / 2.0, y as f32 + 20.0);
+        let body = match item {
+            Some(RailItem::Expand) => r##"<path d="M3 5.5h14M3 10h14M3 14.5h14" stroke="#fff" stroke-width="1.3" stroke-linecap="round"/>"##,
+            Some(RailItem::Account) => r##"<circle cx="10" cy="10" r="8" fill="none" stroke="#fff" stroke-width="1.2"/><circle cx="10" cy="8" r="2.8" fill="none" stroke="#fff" stroke-width="1.2"/><path d="M4.8 15.5c1.2-2.4 3-3.5 5.2-3.5s4 1.1 5.2 3.5" fill="none" stroke="#fff" stroke-width="1.2"/>"##,
+            Some(RailItem::Documents) => r##"<path d="M5 2.5h6.5L15 6v11.5H5zM11.5 2.5V6H15" fill="none" stroke="#fff" stroke-width="1.2" stroke-linejoin="round"/>"##,
+            Some(RailItem::Pictures) => r##"<rect x="2.5" y="4" width="15" height="12" fill="none" stroke="#fff" stroke-width="1.2"/><path d="M2.5 13.5l4-4 3.5 3.5 2.5-2.5 5 5" fill="none" stroke="#fff" stroke-width="1.2" stroke-linejoin="round"/><circle cx="13" cy="7.5" r="1.2" fill="#fff"/>"##,
+            Some(RailItem::Settings) => r##"<circle cx="10" cy="10" r="2.6" fill="none" stroke="#fff" stroke-width="1.2"/><circle cx="10" cy="10" r="5.4" fill="none" stroke="#fff" stroke-width="1.2"/><path d="M10 2.5v2.2M10 15.3v2.2M2.5 10h2.2M15.3 10h2.2M4.7 4.7l1.6 1.6M13.7 13.7l1.6 1.6M4.7 15.3l1.6-1.6M13.7 6.3l1.6-1.6" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/>"##,
+            None => r##"<path d="M6.2 5.2a6.5 6.5 0 1 0 7.6 0" fill="none" stroke="#fff" stroke-width="1.3" stroke-linecap="round"/><path d="M10 2.5v7" stroke="#fff" stroke-width="1.3" stroke-linecap="round"/>"##,
+        };
+        crate::tray::glyph(&mut c, body.into(), gx, gy, 18);
+        if key.rail_open {
+            let size = if item == Some(RailItem::Expand) { 12.0 } else { 13.0 };
+            c.text(f, size, RAIL_W + 4, y, 40, WHITE, &ellipsize(f, size, &label, rail_w - RAIL_W - 16));
+        }
+        hits.push((rect(0, y, rail_w, 40), hit));
+    }
+    if key.rail_open {
+        // Clicks beside the expanded rail just fold it away.
+        hits.push((rect(rail_w, 0, MENU_W - rail_w, h), StartHit::Rail(RailItem::Expand)));
     }
 
     if key.power_open {
         let (lw, row) = (170, 36);
-        let ly = py + 18 - row * PowerAction::ALL.len() as i32 - 4;
-        c.round_rect(RAIL_W - 4, ly - 4, lw + 8, row * PowerAction::ALL.len() as i32 + 8, 4, hex(0x1b1b1b));
+        let ly = h - 46 - row * PowerAction::ALL.len() as i32 - 4;
+        c.rect(RAIL_W - 4, ly - 4, lw + 8, row * PowerAction::ALL.len() as i32 + 8, hex(0x2b2b2b));
         c.outline(RAIL_W - 4, ly - 4, lw + 8, row * PowerAction::ALL.len() as i32 + 8, hex(0x3c3c3c));
         for (i, a) in PowerAction::ALL.into_iter().enumerate() {
             let y = ly + i as i32 * row;
@@ -551,9 +616,7 @@ pub fn draw_start_menu(font: Option<&Font>, icons: &mut Icons, key: StartKey) ->
             if key.hover.as_ref() == Some(&hit) {
                 c.rect(RAIL_W, y, lw, row, TASK_HOVER);
             }
-            if let Some(f) = font {
-                c.text(f, 13.0, RAIL_W + 14, y, row, WHITE, a.label());
-            }
+            c.text(f, 13.0, RAIL_W + 14, y, row, WHITE, a.label());
             hits.push((rect(RAIL_W, y, lw, row), hit));
         }
     }

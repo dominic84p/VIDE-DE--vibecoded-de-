@@ -129,6 +129,21 @@ impl State {
             .collect()
     }
 
+    /// Start's tiles: pinned apps under "Productivity" (group 0), then our own apps
+    /// that aren't pinned under "Explore" (group 1), like Windows' default layout.
+    pub fn start_tiles(&self) -> Vec<(usize, u8)> {
+        let find = |id: &str| self.apps.iter().position(|a| a.id == id);
+        let mut out: Vec<(usize, u8)> = self.pins.start.iter().filter_map(|id| find(id)).map(|i| (i, 0)).collect();
+        for id in ["vide-settings", "file-exploder", "task-mangler", "powerslop", "snip-and-sketchy", "vide-about"] {
+            if let Some(i) = find(id)
+                && !out.iter().any(|(j, _)| *j == i)
+            {
+                out.push((i, 1));
+            }
+        }
+        out
+    }
+
     /// What kind of thing a result is, for the search pane ("App", "File folder"...).
     pub fn result_kind(&self, e: &Entry) -> String {
         match e {

@@ -147,11 +147,8 @@ pub fn results(query: &str, apps: &[App], hide_kde: bool, pins: &Pins, files: &F
     let q = query.trim();
 
     if q.is_empty() {
-        let pinned: Vec<usize> = pins.start.iter().filter_map(|id| find(id)).collect();
-        if !pinned.is_empty() {
-            out.push(Entry::Header("Pinned".into()));
-            out.extend(pinned.iter().map(|&i| Entry::App(i)));
-        }
+        // Pinned apps are Start's tiles, as in Windows 10, so the list leaves them in A-Z only.
+        let pinned: Vec<usize> = Vec::new();
         let mut used: Vec<(usize, u32)> = pins
             .launches
             .iter()

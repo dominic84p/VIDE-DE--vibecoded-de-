@@ -44,6 +44,8 @@ pub enum Action {
     /// Pin or unpin an app (by desktop-file id).
     PinStart(String),
     PinTaskbar(String),
+    /// Start's account button: Sign out.
+    SignOut,
 }
 
 pub struct Menu {
@@ -277,6 +279,7 @@ impl State {
             Action::Kill(s) => self.kill_window_process(&s),
             Action::Spawn(cmd) => self.spawn(&cmd),
             Action::Screenshot => self.screenshot_requested = Some(None),
+            Action::SignOut => self.power(crate::ui::PowerAction::SignOut),
             Action::About => {
                 // The About app ships next to our own binary.
                 let about = std::env::current_exe()

@@ -111,12 +111,14 @@ pub struct Start {
     pub search_mode: bool,
     /// The search pane's tab (index into search::FILTERS).
     pub filter: usize,
+    /// Start's left rail is expanded to show its labels (the hamburger button).
+    pub rail_open: bool,
 }
 
 impl Start {
     /// Typing in Start, or opening search, turns it into Windows' search pane.
     pub fn searching(&self) -> bool {
-        self.search_mode || !self.query.is_empty()
+        self.search_mode || !self.query.trim().is_empty()
     }
 }
 
@@ -573,6 +575,7 @@ impl State {
         self.start.power_open = false;
         self.start.search_mode = false;
         self.start.filter = 0;
+        self.start.rail_open = false;
         self.refresh_start();
         self.needs_redraw = true;
     }

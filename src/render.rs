@@ -185,6 +185,9 @@ pub fn elements_with(renderer: &mut GlesRenderer, state: &mut State, cursor: boo
             searching: state.start.searching(),
             filter: state.start.filter,
             kinds: state.start.results.iter().map(|e| state.result_kind(e)).collect(),
+            tiles: state.start_tiles().into_iter().map(|(i, g)| (state.apps[i].name.clone(), state.apps[i].icon.clone(), g)).collect(),
+            user: std::env::var("USER").unwrap_or_else(|_| "User".into()),
+            rail_open: state.start.rail_open,
             preview: if state.start.searching() && !state.start.query.trim().is_empty() { state.start_preview() } else { None },
         };
         if state.start.menu.as_ref().is_none_or(|m| m.key != key) {

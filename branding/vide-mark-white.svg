@@ -1,0 +1,29 @@
+<!-- branding/vide-mark-white.svg -->
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 512 512"
+  width="512"
+  height="512"
+  role="img"
+  aria-label="VIDE-DE mark, white"
+>
+  <title>VIDE-DE mark, white</title>
+
+  <g
+    fill="#FFFFFF"
+    stroke="#FFFFFF"
+    stroke-width="10"
+    stroke-linejoin="round"
+  >
+    <!-- upper left pane -->
+    <polygon points="62,84 174,84 246,234 137.8,234" />
+    <!-- upper right pane -->
+    <polygon points="450,84 338,84 266,234 374.2,234" />
+    <!-- lower left pane -->
+    <polygon points="147.9,254 246,254 246,448.2" />
+    <!-- lower right pane -->
+    <polygon points="364.1,254 266,254 266,448.2" />
+    <!-- spark -->
+    <path d="M256 54 Q264 96 306 104 Q264 112 256 154 Q248 112 206 104 Q248 96 256 54Z" />
+  </g>
+</svg>

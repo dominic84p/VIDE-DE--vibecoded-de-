@@ -15,7 +15,7 @@ use smithay::{
             compositor::FrameFlags,
             exporter::gbm::GbmFramebufferExporter,
             output::{DrmOutput, DrmOutputManager, DrmOutputRenderElements},
-            DrmDevice, DrmDeviceFd, DrmEvent,
+            DrmDevice, DrmDeviceFd, DrmEvent, DrmNode, NodeType,
         },
         egl::{EGLContext, EGLDisplay},
         libinput::{LibinputInputBackend, LibinputSessionInterface},
@@ -72,6 +72,10 @@ pub fn run(event_loop: &mut EventLoop<'static, State>, state: &mut State) -> Res
     let ctx = EGLContext::new(&egl)?;
     let render_formats = ctx.dmabuf_render_formats().clone();
     let mut renderer = unsafe { GlesRenderer::new(ctx)? };
+    let render_node = DrmNode::from_file(&fd)
+        .ok()
+        .and_then(|n| n.node_with_type(NodeType::Render).and_then(|r| r.ok()).or(Some(n)));
+    state.init_dmabuf(&renderer, render_node);
 
     let mut manager: Manager = DrmOutputManager::new(
         drm,
@@ -196,6 +200,11 @@ pub fn run(event_loop: &mut EventLoop<'static, State>, state: &mut State) -> Res
         event_loop.dispatch(None, state)?;
 
         let mut t = tty.borrow_mut();
+        if let Some(region) = state.screenshot_requested.take() {
+            if t.active {
+                crate::screenshot::take(&mut t.renderer, state, region);
+            }
+        }
         if let Some(vt) = state.pending_vt.take() {
             if let Err(e) = t.session.change_vt(vt) {
                 tracing::warn!("change_vt({vt}): {e}");

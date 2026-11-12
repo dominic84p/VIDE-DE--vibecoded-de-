@@ -44,6 +44,7 @@ pub const START_W: i32 = 48;
 const SEARCH_W: i32 = 300;
 const TASK_W: i32 = 48;
 const CLOCK_W: i32 = 88;
+const TRAY_W: i32 = 34;
 const SHOW_DESKTOP_W: i32 = 6;
 pub const MENU_W: i32 = 360;
 const MENU_ROW: i32 = 36;
@@ -56,6 +57,8 @@ const RAIL_W: i32 = 48;
 pub enum TaskbarHit {
     Start,
     Search,
+    Volume,
+    Brightness,
     Window(WlSurface),
     ShowDesktop,
     Nothing,
@@ -77,6 +80,9 @@ pub struct TaskbarKey {
     pub date: String,
     pub hover: Option<TaskbarHit>,
     pub start_open: bool,
+    /// Volume percent and mute, for the tray icon.
+    pub volume: (u32, bool),
+    pub flyout: Option<crate::tray::Flyout>,
 }
 
 pub struct Taskbar {
@@ -117,9 +123,10 @@ pub fn draw_taskbar(font: Option<&Font>, icons: &mut Icons, logo: Option<&crate:
 
     // Window buttons.
     let right_edge = w - CLOCK_W - SHOW_DESKTOP_W;
+    let tray_x = right_edge - TRAY_W * 2;
     let mut x = sx + SEARCH_W + 4;
     for item in &key.items {
-        if x + TASK_W > right_edge {
+        if x + TASK_W > tray_x {
             break;
         }
         let hit = TaskbarHit::Window(item.surface.clone());
@@ -145,6 +152,29 @@ pub fn draw_taskbar(font: Option<&Font>, icons: &mut Icons, logo: Option<&crate:
         }
         hits.push((rect(x, 0, TASK_W, TASKBAR_H), hit));
         x += TASK_W;
+    }
+
+    // Tray: brightness, then volume, just left of the clock.
+    use crate::tray::{speaker, sun, Flyout};
+    for (i, (hit, open)) in [
+        (TaskbarHit::Brightness, key.flyout == Some(Flyout::Brightness)),
+        (TaskbarHit::Volume, key.flyout == Some(Flyout::Volume)),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let bx = tray_x + i as i32 * TRAY_W;
+        if open {
+            c.rect(bx, 0, TRAY_W, TASKBAR_H, TASK_ACTIVE);
+        } else if hovered(&hit) {
+            c.rect(bx, 0, TRAY_W, TASKBAR_H, TASK_HOVER);
+        }
+        let (cx, cy) = (bx as f32 + TRAY_W as f32 / 2.0, TASKBAR_H as f32 / 2.0);
+        match hit {
+            TaskbarHit::Volume => speaker(&mut c, cx - 5.0, cy, key.volume.1, key.volume.0 as f32 / 100.0, WHITE),
+            _ => sun(&mut c, cx, cy, WHITE),
+        }
+        hits.push((rect(bx, 0, TRAY_W, TASKBAR_H), hit));
     }
 
     // Clock.
@@ -270,7 +300,27 @@ pub enum StartHit {
     /// Index into the filtered list.
     Item(usize),
     Power,
+    PowerAction(PowerAction),
     Nothing,
+}
+
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum PowerAction {
+    SignOut,
+    Restart,
+    ShutDown,
+}
+
+impl PowerAction {
+    const ALL: [PowerAction; 3] = [PowerAction::SignOut, PowerAction::Restart, PowerAction::ShutDown];
+
+    fn label(self) -> &'static str {
+        match self {
+            PowerAction::SignOut => "Sign out",
+            PowerAction::Restart => "Restart",
+            PowerAction::ShutDown => "Shut down",
+        }
+    }
 }
 
 #[derive(Clone, PartialEq)]
@@ -282,6 +332,8 @@ pub struct StartKey {
     pub selected: usize,
     pub scroll: usize,
     pub hover: Option<StartHit>,
+    /// The power button's Sign out / Restart / Shut down list is showing.
+    pub power_open: bool,
 }
 
 pub struct StartMenu {
@@ -301,9 +353,11 @@ pub fn draw_start_menu(font: Option<&Font>, icons: &mut Icons, key: StartKey) ->
     c.rect(0, 0, RAIL_W, h, MENU_RAIL);
     c.rect(RAIL_W, 0, MENU_W - RAIL_W, h, MENU_BG);
 
-    // Power (quits the session) at the bottom of the rail.
+    // Power at the bottom of the rail; it opens a list rather than acting straight away.
     let (px, py) = (RAIL_W / 2, h - 26);
-    if key.hover == Some(StartHit::Power) {
+    if key.power_open {
+        c.rect(0, py - 18, RAIL_W, 36, TASK_ACTIVE);
+    } else if key.hover == Some(StartHit::Power) {
         c.rect(0, py - 18, RAIL_W, 36, TASK_HOVER);
     }
     c.circle(px as f32, py as f32 + 1.0, 7.5, WHITE);
@@ -344,6 +398,24 @@ pub fn draw_start_menu(font: Option<&Font>, icons: &mut Icons, key: StartKey) ->
     if key.items.is_empty() {
         if let Some(f) = font {
             c.text(f, 13.0, RAIL_W + 16, MENU_TOP, MENU_ROW, TEXT_DIM, "No matches");
+        }
+    }
+
+    if key.power_open {
+        let (lw, row) = (170, 36);
+        let ly = py + 18 - row * PowerAction::ALL.len() as i32 - 4;
+        c.round_rect(RAIL_W - 4, ly - 4, lw + 8, row * PowerAction::ALL.len() as i32 + 8, 4, hex(0x1b1b1b));
+        c.outline(RAIL_W - 4, ly - 4, lw + 8, row * PowerAction::ALL.len() as i32 + 8, hex(0x3c3c3c));
+        for (i, a) in PowerAction::ALL.into_iter().enumerate() {
+            let y = ly + i as i32 * row;
+            let hit = StartHit::PowerAction(a);
+            if key.hover.as_ref() == Some(&hit) {
+                c.rect(RAIL_W, y, lw, row, TASK_HOVER);
+            }
+            if let Some(f) = font {
+                c.text(f, 13.0, RAIL_W + 14, y, row, WHITE, a.label());
+            }
+            hits.push((rect(RAIL_W, y, lw, row), hit));
         }
     }
 

@@ -18,7 +18,7 @@ use smithay::{
     desktop::PopupManager,
     input::pointer::{CursorImageAttributes, CursorImageStatus},
     reexports::wayland_server::protocol::wl_surface::WlSurface,
-    utils::{Logical, Point},
+    utils::{Logical, Point, Rectangle},
     wayland::compositor::{with_states, with_surface_tree_downward, SurfaceAttributes, TraversalAction},
 };
 
@@ -56,13 +56,19 @@ fn surface_tree(renderer: &mut GlesRenderer, s: &WlSurface, at: Point<i32, Logic
 
 /// Everything on screen, front to back.
 pub fn elements(renderer: &mut GlesRenderer, state: &mut State) -> Vec<Elem> {
+    elements_with(renderer, state, true)
+}
+
+/// Like `elements`, optionally without the cursor (screenshots leave it out).
+pub fn elements_with(renderer: &mut GlesRenderer, state: &mut State, cursor: bool) -> Vec<Elem> {
     let mut out = Vec::new();
     let (ow, oh) = (state.output_size.w, state.output_size.h);
     let focused = state.focused();
 
     // Cursor on top of everything.
     let ptr = state.pointer_loc.to_i32_round();
-    match &state.cursor_status {
+    let status = if cursor { state.cursor_status.clone() } else { CursorImageStatus::Hidden };
+    match &status {
         CursorImageStatus::Hidden => {}
         CursorImageStatus::Surface(surface) => {
             let hotspot = with_states(surface, |s| {
@@ -74,6 +80,34 @@ pub fn elements(renderer: &mut GlesRenderer, state: &mut State) -> Vec<Elem> {
             let (buf, hot) = state.cursors.get(*icon);
             out.extend(image(renderer, buf, ptr - *hot, Kind::Cursor));
         }
+    }
+
+    // Software brightness: everything below the cursor seen through a black veil.
+    if state.tray.brightness < 0.999 {
+        let alpha = (1.0 - state.tray.brightness) * 0.85;
+        state.dim.update(state.output_size, Color32F::new(0.0, 0.0, 0.0, alpha));
+        out.push(Elem::Solid(SolidColorRenderElement::from_buffer(&state.dim, (0, 0), 1.0, 1.0, Kind::Unspecified)));
+    }
+
+    // Tray flyout (volume/brightness slider), above the taskbar.
+    let flyout_at = state.flyout_rect().loc;
+    if let Some(buf) = state.flyout_picture().cloned() {
+        out.extend(image(renderer, &buf, flyout_at, Kind::Unspecified));
+    }
+
+    // Snipping overlay: everything dimmed except the selection.
+    if let Some(snip) = state.snip.as_mut() {
+        let sel = snip.selection(state.pointer_loc);
+        for (buf, at) in snip.overlay(Rectangle::from_size(state.output_size), sel) {
+            out.push(Elem::Solid(SolidColorRenderElement::from_buffer(buf, at.to_physical(1), 1.0, 1.0, Kind::Unspecified)));
+        }
+    }
+
+    // Our right-click menu.
+    if let Some(m) = state.menu.as_mut() {
+        let pos = m.pos;
+        let buf = m.picture(state.font.as_ref()).clone();
+        out.extend(image(renderer, &buf, pos, Kind::Unspecified));
     }
 
     // X11 menus and tooltips, above everything but the cursor.
@@ -99,6 +133,7 @@ pub fn elements(renderer: &mut GlesRenderer, state: &mut State) -> Vec<Elem> {
             selected: state.start.selected,
             scroll: state.start.scroll,
             hover,
+            power_open: state.start.power_open,
         };
         if state.start.menu.as_ref().is_none_or(|m| m.key != key) {
             state.start.menu = Some(ui::draw_start_menu(state.font.as_ref(), &mut state.icons, key));
@@ -109,8 +144,9 @@ pub fn elements(renderer: &mut GlesRenderer, state: &mut State) -> Vec<Elem> {
     }
 
     // Taskbar, unless a fullscreen window is in front.
+    // Fullscreen apps cover it, unless the start menu is up (Super over a game shows it, like Windows).
     let fullscreen_top = state.wm.top().is_some_and(|w| w.fullscreen.is_some() && Some(w.surface()) == focused.as_ref());
-    if !fullscreen_top {
+    if !fullscreen_top || state.start.open {
         let mut items: Vec<_> = state.wm.windows.iter().filter(|w| w.mapped).collect();
         items.sort_by_key(|w| w.id);
         let key = TaskbarKey {
@@ -131,6 +167,8 @@ pub fn elements(renderer: &mut GlesRenderer, state: &mut State) -> Vec<Elem> {
                 _ => None,
             },
             start_open: state.start.open,
+            volume: ((state.tray.volume * 100.0).round() as u32, state.tray.muted),
+            flyout: state.tray.flyout,
         };
         if state.taskbar.as_ref().is_none_or(|t| t.key != key) {
             state.taskbar = Some(ui::draw_taskbar(state.font.as_ref(), &mut state.icons, state.logo.as_ref(), key));

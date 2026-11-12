@@ -1,6 +1,6 @@
 //! Compositor state and the protocol handlers Smithay asks us to implement.
 
-use std::{os::unix::io::OwnedFd, time::Instant};
+use std::{os::unix::io::OwnedFd, sync::Arc, time::Instant};
 
 use fontdue::Font;
 use smithay::{
@@ -36,7 +36,7 @@ use smithay::{
                 set_data_device_focus, ClientDndGrabHandler, DataDeviceHandler, DataDeviceState, ServerDndGrabHandler,
             },
             primary_selection::{set_primary_focus, PrimarySelectionHandler, PrimarySelectionState},
-            SelectionHandler,
+            SelectionHandler, SelectionTarget,
         },
         shell::xdg::{
             decoration::{XdgDecorationHandler, XdgDecorationState},
@@ -44,6 +44,20 @@ use smithay::{
         },
         shm::{ShmHandler, ShmState},
     },
+};
+
+use smithay::{
+    backend::{
+        allocator::{
+            dmabuf::Dmabuf,
+            format::FormatSet,
+            Buffer as _,
+        },
+        drm::DrmNode,
+        renderer::{gles::GlesRenderer, ImportDma},
+    },
+    delegate_dmabuf,
+    wayland::dmabuf::{DmabufFeedbackBuilder, DmabufGlobal, DmabufHandler, DmabufState, ImportNotifier},
 };
 
 use crate::{
@@ -81,6 +95,7 @@ pub struct Start {
     pub query: String,
     pub selected: usize,
     pub scroll: usize,
+    pub power_open: bool,
     pub menu: Option<StartMenu>,
 }
 
@@ -95,6 +110,9 @@ pub struct State {
     pub primary_selection_state: PrimarySelectionState,
     pub _output_manager_state: OutputManagerState,
     pub popups: PopupManager,
+    pub dmabuf_state: DmabufState,
+    /// What the renderer can import; checked when clients hand us GPU buffers.
+    pub dmabuf_formats: Option<FormatSet>,
 
     pub seat: Seat<Self>,
     pub keyboard: KeyboardHandle<Self>,
@@ -111,6 +129,14 @@ pub struct State {
     pub apps: Vec<App>,
     pub taskbar: Option<Taskbar>,
     pub start: Start,
+    pub menu: Option<crate::menu::Menu>,
+    pub tray: crate::tray::Tray,
+    /// Full-screen black at partial alpha: our software brightness.
+    pub dim: smithay::backend::renderer::element::solid::SolidColorBuffer,
+    /// A screenshot to take on the next frame: `Some(None)` = whole screen, else a region.
+    pub screenshot_requested: Option<Option<Rectangle<i32, Logical>>>,
+    /// Win+Shift+S region selection in progress.
+    pub snip: Option<crate::screenshot::Snip>,
     pub wallpaper: Option<(Size<i32, Logical>, MemoryRenderBuffer)>,
     pub hover: Hover,
     pub clock: (String, String),
@@ -159,6 +185,8 @@ impl State {
             primary_selection_state: PrimarySelectionState::new::<Self>(&dh),
             _output_manager_state: OutputManagerState::new_with_xdg_output::<Self>(&dh),
             popups: PopupManager::default(),
+            dmabuf_state: DmabufState::new(),
+            dmabuf_formats: None,
             seat_state,
             seat,
             keyboard,
@@ -173,6 +201,11 @@ impl State {
             apps: apps::scan(),
             taskbar: None,
             start: Start::default(),
+            menu: None,
+            tray: crate::tray::Tray::new(),
+            dim: Default::default(),
+            screenshot_requested: None,
+            snip: None,
             wallpaper: None,
             hover: Hover::None,
             clock: clock_now(),
@@ -194,6 +227,24 @@ impl State {
             start_time: Instant::now(),
             dh,
         }
+    }
+
+    /// Offer clients GPU buffer sharing (linux-dmabuf). Without it, GPU apps and
+    /// Xwayland copy every frame through RAM: games crawl. `render_node` tells clients
+    /// (Xwayland especially) which GPU to render on.
+    pub fn init_dmabuf(&mut self, renderer: &GlesRenderer, render_node: Option<DrmNode>) {
+        let formats = renderer.dmabuf_formats();
+        match render_node.and_then(|n| DmabufFeedbackBuilder::new(n.dev_id(), formats.clone()).build().ok()) {
+            Some(feedback) => {
+                self.dmabuf_state.create_global_with_default_feedback::<Self>(&self.dh, &feedback);
+                tracing::info!("linux-dmabuf v4 on {:?}", render_node.unwrap().dev_path());
+            }
+            None => {
+                self.dmabuf_state.create_global::<Self>(&self.dh, formats.clone());
+                tracing::warn!("linux-dmabuf without a render node; Xwayland may fall back to software GL");
+            }
+        }
+        self.dmabuf_formats = Some(formats);
     }
 
     pub fn output_rect(&self) -> Rectangle<i32, Logical> {
@@ -307,7 +358,22 @@ impl State {
         }
     }
 
+    /// Session is up (Xwayland ready or failed): wire up desktop services, then autostart.
     pub fn run_startup(&mut self) {
+        // D-Bus starts portals and the keyring's password prompt on demand; they need
+        // to know our display, or they can't show file pickers and dialogs.
+        self.spawn(
+            "dbus-update-activation-environment WAYLAND_DISPLAY DISPLAY XDG_CURRENT_DESKTOP \
+             XDG_SESSION_TYPE XDG_SESSION_DESKTOP DESKTOP_SESSION QT_QPA_PLATFORM",
+        );
+        // Keyring: KWallet's ksecretd provides the Secret Service that browsers, Electron
+        // apps and libsecret store passwords in. Nothing D-Bus-activates it, so start it
+        // ourselves unless something on this bus already owns the name.
+        self.spawn(
+            "dbus-send --session --print-reply --dest=org.freedesktop.DBus /org/freedesktop/DBus \
+             org.freedesktop.DBus.NameHasOwner string:org.freedesktop.secrets | grep -q true \
+             || exec ksecretd",
+        );
         if let Some(cmd) = self.startup.take() {
             self.spawn(&cmd);
         }
@@ -336,10 +402,11 @@ impl State {
             Some(n) => c.env("DISPLAY", format!(":{n}")),
             None => c.env_remove("DISPLAY"),
         };
-        // Let Qt/KDE apps pick up the user's KDE theme and icons.
-        if std::env::var_os("XDG_CURRENT_DESKTOP").is_none() {
-            c.env("XDG_CURRENT_DESKTOP", "vibe:KDE");
-        }
+        // Say who we are, so tools stop guessing from whatever services happen to run.
+        // KDE stays listed second so Qt/KDE apps still pick up the user's theme and icons.
+        c.env("XDG_CURRENT_DESKTOP", "VIDE-DE:KDE")
+            .env("XDG_SESSION_DESKTOP", "vide-de")
+            .env("DESKTOP_SESSION", "vide-de");
     }
 
     pub fn filtered_apps(&self) -> Vec<usize> {
@@ -351,6 +418,7 @@ impl State {
         self.start.query.clear();
         self.start.selected = 0;
         self.start.scroll = 0;
+        self.start.power_open = false;
         self.needs_redraw = true;
     }
 }
@@ -496,6 +564,11 @@ impl XdgShellHandler for State {
     fn minimize_request(&mut self, surface: ToplevelSurface) {
         self.minimize(surface.wl_surface());
     }
+
+    fn show_window_menu(&mut self, surface: ToplevelSurface, _seat: wl_seat::WlSeat, _serial: Serial, _location: Point<i32, Logical>) {
+        let at = self.pointer_loc.to_i32_round();
+        self.open_window_menu(surface.wl_surface(), at);
+    }
 }
 
 impl SeatHandler for State {
@@ -519,6 +592,22 @@ impl SeatHandler for State {
     }
 }
 
+impl DmabufHandler for State {
+    fn dmabuf_state(&mut self) -> &mut DmabufState {
+        &mut self.dmabuf_state
+    }
+
+    fn dmabuf_imported(&mut self, _global: &DmabufGlobal, dmabuf: Dmabuf, notifier: ImportNotifier) {
+        // The renderer imports for real at draw time; here we only refuse formats it can't do.
+        let ok = self.dmabuf_formats.as_ref().is_some_and(|f| f.contains(&dmabuf.format()));
+        if ok {
+            let _ = notifier.successful::<Self>();
+        } else {
+            notifier.failed();
+        }
+    }
+}
+
 impl BufferHandler for State {
     fn buffer_destroyed(&mut self, _buffer: &wl_buffer::WlBuffer) {}
 }
@@ -530,7 +619,24 @@ impl ShmHandler for State {
 }
 
 impl SelectionHandler for State {
-    type SelectionUserData = ();
+    /// Clipboard contents we own ourselves (screenshots).
+    type SelectionUserData = Arc<Vec<u8>>;
+
+    fn send_selection(
+        &mut self,
+        _ty: SelectionTarget,
+        _mime_type: String,
+        fd: OwnedFd,
+        _seat: Seat<Self>,
+        user_data: &Self::SelectionUserData,
+    ) {
+        // A pipe to the pasting app; write off the main thread so a slow reader can't stall us.
+        let data = user_data.clone();
+        std::thread::spawn(move || {
+            use std::io::Write;
+            let _ = std::fs::File::from(fd).write_all(&data);
+        });
+    }
 }
 
 impl DataDeviceHandler for State {
@@ -599,3 +705,4 @@ delegate_seat!(State);
 delegate_data_device!(State);
 delegate_primary_selection!(State);
 delegate_output!(State);
+delegate_dmabuf!(State);

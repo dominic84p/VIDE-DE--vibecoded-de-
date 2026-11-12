@@ -26,11 +26,12 @@ use smithay::{
 
 use crate::{
     state::{Hover, State},
-    ui::{self, StartHit, TaskbarHit, TitleButton, MENU_W, TASKBAR_H},
+    ui::{self, PowerAction, StartHit, TaskbarHit, TitleButton, MENU_W, TASKBAR_H},
     wm::{edge, Hit},
 };
 
 const BTN_LEFT: u32 = 0x110;
+const BTN_RIGHT: u32 = 0x111;
 const DOUBLE_CLICK: Duration = Duration::from_millis(400);
 
 pub const TERMINAL: &str = "konsole";
@@ -43,6 +44,13 @@ enum Action {
     Minimize,
     Fullscreen,
     StartMenu,
+    WindowMenu,
+    CloseMenu,
+    CancelSnip,
+    Volume(f32),
+    Mute,
+    Brightness(f32),
+    Screenshot { region: bool },
     Quit,
     Vt(i32),
     /// Swallowed by the start menu.
@@ -66,6 +74,28 @@ fn bind(super_mod: bool, mods: &ModifiersState, sym: Keysym) -> Option<Action> {
     }
     if mods.ctrl && mods.alt && sym == Keysym::BackSpace {
         return Some(Action::Quit);
+    }
+    // Media keys.
+    match sym {
+        Keysym::XF86_AudioRaiseVolume => return Some(Action::Volume(0.05)),
+        Keysym::XF86_AudioLowerVolume => return Some(Action::Volume(-0.05)),
+        Keysym::XF86_AudioMute => return Some(Action::Mute),
+        Keysym::XF86_MonBrightnessUp => return Some(Action::Brightness(0.1)),
+        Keysym::XF86_MonBrightnessDown => return Some(Action::Brightness(-0.1)),
+        _ => {}
+    }
+    // Windows-style keys that don't use our modifier.
+    if mods.alt && !mods.ctrl && sym == Keysym::F4 {
+        return Some(Action::Close);
+    }
+    if super_mod && mods.alt && !mods.logo && sym == Keysym::space {
+        return Some(Action::WindowMenu);
+    }
+    if sym == Keysym::Print {
+        return Some(Action::Screenshot { region: mods.shift });
+    }
+    if mods.logo && mods.shift && sym == Keysym::s {
+        return Some(Action::Screenshot { region: true });
     }
     if !(if super_mod { mods.logo } else { mods.alt }) {
         return None;
@@ -99,6 +129,8 @@ fn menu_key(sym: Keysym, ch: Option<char>) -> MenuKey {
 
 /// Where the pointer is, in terms of our UI.
 enum Target {
+    /// Over our right-click menu, maybe on an item.
+    Menu(Option<usize>),
     Start(StartHit),
     Taskbar(TaskbarHit),
     Window(Hit),
@@ -132,6 +164,15 @@ impl State {
             }
 
             InputEvent::PointerAxis { event } => {
+                let over_volume = matches!(self.target(self.pointer_loc), Target::Taskbar(TaskbarHit::Volume))
+                    || (self.tray.flyout == Some(crate::tray::Flyout::Volume) && self.flyout_rect().to_f64().contains(self.pointer_loc));
+                if over_volume {
+                    let v = event.amount(Axis::Vertical).unwrap_or_else(|| event.amount_v120(Axis::Vertical).unwrap_or(0.0) / 8.0);
+                    if v != 0.0 {
+                        self.set_volume(self.tray.volume - v.signum() as f32 * 0.05);
+                    }
+                    return;
+                }
                 if self.start.open {
                     if let Target::Start(_) = self.target(self.pointer_loc) {
                         let v = event
@@ -190,6 +231,12 @@ impl State {
             if let Some(a) = bind(super_mod, mods, modified).or_else(|| bind(super_mod, mods, raw)) {
                 return if pressed { FilterResult::Intercept(a) } else { FilterResult::Forward };
             }
+            if state.snip.is_some() && modified == Keysym::Escape {
+                return FilterResult::Intercept(if pressed { Action::CancelSnip } else { Action::CloseMenu });
+            }
+            if state.menu.is_some() && pressed && modified == Keysym::Escape {
+                return FilterResult::Intercept(Action::CloseMenu);
+            }
             if menu_open {
                 // The start menu takes all typing while open.
                 let k = if pressed { menu_key(modified, modified.key_char()) } else { MenuKey::Ignore };
@@ -241,6 +288,18 @@ impl State {
                 }
             }
             Action::StartMenu => self.toggle_start(),
+            Action::WindowMenu => {
+                if let Some(s) = focused {
+                    let at = self.wm.find(&s).map(|w| w.frame().loc).unwrap_or_default();
+                    self.open_window_menu(&s, at);
+                }
+            }
+            Action::CloseMenu => self.close_menu(),
+            Action::CancelSnip => self.cancel_snip(),
+            Action::Volume(d) => self.set_volume(self.tray.volume + d),
+            Action::Mute => self.toggle_mute(),
+            Action::Brightness(d) => self.set_brightness(self.tray.brightness + d),
+            Action::Screenshot { region } => self.start_screenshot(region),
             Action::Quit => self.running = false,
             Action::Vt(n) => self.pending_vt = Some(n),
             Action::Menu(k) => self.menu_key(k),
@@ -301,10 +360,15 @@ impl State {
 
     fn taskbar_visible(&self) -> bool {
         let focused = self.focused();
-        !self.wm.top().is_some_and(|w| w.fullscreen.is_some() && Some(w.surface()) == focused.as_ref())
+        self.start.open || !self.wm.top().is_some_and(|w| w.fullscreen.is_some() && Some(w.surface()) == focused.as_ref())
     }
 
     fn target(&self, pos: Point<f64, Logical>) -> Target {
+        if let Some(m) = &self.menu {
+            if m.rect().to_f64().contains(pos) {
+                return Target::Menu(m.item_at(pos));
+            }
+        }
         for x in self.x11_overrides.iter().rev() {
             if let Some(s) = x.wl_surface() {
                 if let Some((hit, o)) = under_from_surface_tree(&s, pos, x.geometry().loc, WindowSurfaceType::ALL) {
@@ -345,12 +409,34 @@ impl State {
         self.pointer_loc = pos;
         self.needs_redraw = true;
 
+        // Snipping: the screen is ours until a region is picked.
+        if self.snip.is_some() {
+            let ptr = self.pointer.clone();
+            ptr.motion(self, None, &MotionEvent { location: pos, serial: SERIAL_COUNTER.next_serial(), time });
+            ptr.frame(self);
+            return;
+        }
+
+        if self.tray.dragging {
+            self.flyout_drag(pos);
+            return;
+        }
+
         let mut focus = None;
         if self.wm.grab.is_some() {
             self.wm.update_grab(pos, 0);
         } else {
             let mut cursor = CursorIcon::Default;
-            self.hover = match self.target(pos) {
+            let target = self.target(pos);
+            let menu_hover = match target {
+                Target::Menu(i) => i,
+                _ => None,
+            };
+            if let Some(m) = self.menu.as_mut() {
+                m.hover = menu_hover;
+            }
+            self.hover = match target {
+                Target::Menu(_) => Hover::None,
                 Target::Start(h) => Hover::Start(h),
                 Target::Taskbar(h) => Hover::Taskbar(h),
                 Target::Window(Hit::Client(s, origin)) => {
@@ -383,6 +469,28 @@ impl State {
             ptr.frame(s);
         };
 
+        if let Some(snip) = self.snip.as_mut() {
+            match (button, state) {
+                (BTN_LEFT, ButtonState::Pressed) => snip.start = Some(self.pointer_loc),
+                (BTN_LEFT, ButtonState::Released) => {
+                    let sel = snip.selection(self.pointer_loc).filter(|r| r.size.w > 2 && r.size.h > 2);
+                    self.cancel_snip();
+                    if let Some(r) = sel {
+                        self.screenshot_requested = Some(Some(r));
+                    }
+                }
+                (_, ButtonState::Pressed) => self.cancel_snip(),
+                _ => {}
+            }
+            self.needs_redraw = true;
+            return;
+        }
+
+        if state == ButtonState::Released && button == BTN_LEFT && self.tray.dragging {
+            self.tray.dragging = false;
+            return;
+        }
+
         if state == ButtonState::Released {
             if self.wm.grab.is_some() && button == BTN_LEFT {
                 self.wm.end_grab();
@@ -397,8 +505,36 @@ impl State {
 
         let pos = self.pointer_loc;
         let left = button == BTN_LEFT;
+        let right = button == BTN_RIGHT;
         let target = self.target(pos);
         self.needs_redraw = true;
+
+        // Tray flyout: clicks on it drive the slider; clicks elsewhere close it
+        // (except on the tray buttons themselves, which toggle).
+        if self.tray.flyout.is_some() {
+            if self.flyout_rect().to_f64().contains(pos) {
+                if left {
+                    self.flyout_press(pos);
+                }
+                return;
+            }
+            if !matches!(target, Target::Taskbar(TaskbarHit::Volume | TaskbarHit::Brightness)) {
+                self.close_flyout();
+            }
+        }
+
+        // An open right-click menu eats the next click: run the item, or just close it.
+        if self.menu.is_some() {
+            if let Target::Menu(item) = target {
+                if let Some(i) = item {
+                    let action = self.menu.as_ref().unwrap().items[i].1.clone();
+                    self.run_menu_action(action);
+                }
+                return;
+            }
+            self.close_menu();
+            return;
+        }
 
         // Any click outside the start menu (except its own buttons) closes it.
         if self.start.open && !matches!(target, Target::Start(_) | Target::Taskbar(TaskbarHit::Start | TaskbarHit::Search)) {
@@ -419,8 +555,9 @@ impl State {
                                 self.toggle_start();
                             }
                         }
-                        StartHit::Power => self.running = false,
-                        StartHit::Nothing => {}
+                        StartHit::Power => self.start.power_open = !self.start.power_open,
+                        StartHit::PowerAction(a) => self.power(a),
+                        StartHit::Nothing => self.start.power_open = false,
                     }
                 }
             }
@@ -435,8 +572,12 @@ impl State {
                         }
                         TaskbarHit::Window(s) => self.activate_from_taskbar(&s),
                         TaskbarHit::ShowDesktop => self.show_desktop(),
+                        TaskbarHit::Volume => self.toggle_flyout(crate::tray::Flyout::Volume),
+                        TaskbarHit::Brightness => self.toggle_flyout(crate::tray::Flyout::Brightness),
                         TaskbarHit::Nothing => {}
                     }
+                } else if let (true, TaskbarHit::Window(s)) = (right, hit) {
+                    self.open_taskbar_menu(&s, pos.x as i32);
                 }
             }
             Target::Window(Hit::Button(s, b)) => {
@@ -458,7 +599,9 @@ impl State {
             }
             Target::Window(Hit::Titlebar(s)) => {
                 self.focus(Some(s.clone()), serial);
-                if left {
+                if right {
+                    self.open_window_menu(&s, pos.to_i32_round());
+                } else if left {
                     let now = Instant::now();
                     let double = matches!(&self.last_title_click, Some((ls, t)) if *ls == s && now - *t < DOUBLE_CLICK);
                     if double {
@@ -488,8 +631,23 @@ impl State {
                 }
                 forward(self);
             }
-            Target::Desktop => forward(self),
+            Target::Desktop => {
+                if right {
+                    self.open_desktop_menu(pos.to_i32_round());
+                }
+                forward(self);
+            }
+            Target::Menu(_) => {}
         }
+    }
+
+    fn power(&mut self, a: PowerAction) {
+        match a {
+            PowerAction::SignOut => self.running = false,
+            PowerAction::Restart => self.spawn("systemctl reboot"),
+            PowerAction::ShutDown => self.spawn("systemctl poweroff"),
+        }
+        self.toggle_start();
     }
 
     /// The toplevel surface that `s` (a subsurface or popup) belongs to.

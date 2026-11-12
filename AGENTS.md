@@ -28,6 +28,8 @@ the WM in `src/wm.rs` is deliberately our own.
   `MemoryRenderBuffer`s, cached by a key and repainted only when the key changes.
 - `xwayland.rs`, `focus.rs`: X11 support and the keyboard focus enum.
 - `apps.rs`, `icons.rs`, `cursor.rs`: desktop entries, icon themes, xcursor themes.
+- `menu.rs`: right-click menus. `tray.rs`: volume/brightness. `screenshot.rs`: PrtSc and snip.
+- `about/`: `vide-about`, a separate egui app (workspace member), launched from the desktop menu.
 
 ## Conventions
 
@@ -74,6 +76,9 @@ the WM in `src/wm.rs` is deliberately our own.
   `KeyboardFocus` is `FocusTarget` rather than `WlSurface`.
 - **Single-instance apps** (Electron, Firefox) hand off to a copy already
   running in another session. That's expected, not a bug in us.
+- **Without linux-dmabuf (with a render-node feedback), Xwayland can't use the GPU**
+  and games drop to single-digit FPS. `State::init_dmabuf` must run in every backend.
+- **Brightness is a compositor overlay** (`state.dim`), since desktop monitors have no backlight.
 - **Debug builds are slow** because of the CPU-painted UI; `profile.dev` sets
   `opt-level = 1`. Use release builds for real sessions.
 

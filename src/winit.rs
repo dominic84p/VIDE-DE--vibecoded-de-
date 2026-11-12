@@ -2,6 +2,7 @@
 
 use smithay::{
     backend::{
+        egl::EGLDevice,
         renderer::{damage::OutputDamageTracker, gles::GlesRenderer},
         winit::{self, WinitEvent},
     },
@@ -14,6 +15,10 @@ use crate::{render, state::State};
 
 pub fn run(event_loop: &mut EventLoop<'static, State>, state: &mut State) -> Result<(), Box<dyn std::error::Error>> {
     let (mut backend, winit) = winit::init::<GlesRenderer>()?;
+    let render_node = EGLDevice::device_for_display(backend.renderer().egl_context().display())
+        .ok()
+        .and_then(|d| d.try_get_render_node().ok().flatten());
+    state.init_dmabuf(backend.renderer(), render_node);
     // We draw our own cursor.
     backend.window().set_cursor_visible(false);
 
@@ -46,6 +51,10 @@ pub fn run(event_loop: &mut EventLoop<'static, State>, state: &mut State) -> Res
 
     while state.running {
         event_loop.dispatch(None, state)?;
+
+        if let Some(region) = state.screenshot_requested.take() {
+            crate::screenshot::take(backend.renderer(), state, region);
+        }
 
         if state.needs_redraw {
             state.needs_redraw = false;

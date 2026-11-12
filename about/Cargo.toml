@@ -1,0 +1,10 @@
+[package]
+name = "vide-about"
+version = "0.1.0"
+edition = "2024"
+description = "About VIDE-DE: system info from fastfetch, in a proper window"
+
+[dependencies]
+eframe = "0.37"
+egui_extras = { version = "0.37", features = ["image"] }
+image = { version = "0.25", default-features = false, features = ["png"] }

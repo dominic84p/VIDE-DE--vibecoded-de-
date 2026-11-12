@@ -1,4 +1,4 @@
-# Contributing to vibecoded-de
+# Contributing to VIDE-DE
 
 Thanks for wanting to contribute to a desktop environment that was vibecoded
 from the first line to the last. Before you open your editor (you won't need

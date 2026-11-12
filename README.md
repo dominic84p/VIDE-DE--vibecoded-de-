@@ -1,10 +1,10 @@
 <p align="center">
-  <img src="assets/logo-512.png" alt="vibecoded-de logo" width="200">
+  <img src="assets/logo-512.png" alt="VIDE-DE logo" width="200">
 </p>
 
-# vibecoded-de
+# VIDE-DE
 
-A Wayland desktop environment with its own compositor, written in Rust and
+**vide-de**, short for vibecoded-de: a Wayland desktop environment with its own compositor, written in Rust and
 vibecoded end to end. No human-written code (see [CONTRIBUTING.md](CONTRIBUTING.md)).
 
 It's built on [Smithay](https://github.com/Smithay/smithay), a library of
@@ -27,7 +27,12 @@ taskbar, start menu and titlebars are all our own code.
   - apps that draw their own titlebars
   - clipboard and middle-click paste
   - your cursor and icon themes
-- **X11 apps** through Xwayland
+- **X11 apps** through Xwayland, GPU-accelerated (linux-dmabuf), so games run properly
+- **Right-click menus** on taskbar buttons, titlebars and the desktop
+- **Tray** with volume (PipeWire) and brightness sliders
+- **Screenshots** and a Windows-style snipping tool
+- **Keyring**: starts KWallet's Secret Service so browsers and Electron apps can save logins
+- **About VIDE-DE** (`vide-about`), a separate app showing your system info via fastfetch
 - **Smooth**: damage-tracked rendering, paced to vsync
 
 ## Keybinds
@@ -45,6 +50,11 @@ eats Super).
 | Mod+Down | Minimize (or restore if maximized) |
 | Mod+F | Fullscreen |
 | Mod+drag | Move a window from anywhere |
+| Alt+F4 | Close window |
+| Alt+Space (TTY) | Window menu |
+| PrtSc | Screenshot (saved to ~/Pictures/Screenshots + clipboard) |
+| Win+Shift+S / Shift+PrtSc | Snip a region |
+| Volume / brightness keys | Adjust, same as the tray sliders |
 | Mod+Shift+E | Quit |
 | Ctrl+Alt+F1–F12 | Switch VT |
 | **Ctrl+Alt+Backspace** | **Quit (always works)** |
@@ -58,7 +68,8 @@ sudo pacman -S wayland libxkbcommon mesa libinput seatd libdrm xorg-xwayland
 ```
 
 ```bash
-cargo build --release --features tty
+cargo build --release --features tty      # the compositor
+cargo build --release -p vide-about       # the About app
 ```
 
 Leave out `--features tty` if you only want the nested mode (then you don't need `seatd`).

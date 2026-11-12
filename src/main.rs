@@ -4,8 +4,11 @@ mod cursor;
 mod focus;
 mod icons;
 mod input;
+mod menu;
 mod render;
+mod screenshot;
 mod state;
+mod tray;
 #[cfg(feature = "tty")]
 mod tty;
 mod ui;

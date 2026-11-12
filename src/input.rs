@@ -27,6 +27,8 @@ use smithay::{
     },
 };
 
+use smithay::wayland::shell::wlr_layer::Layer;
+
 use crate::{
     state::{Hover, State},
     ui::{self, PowerAction, StartHit, TaskbarHit, TitleButton, MENU_W, TASKBAR_H},
@@ -532,8 +534,15 @@ impl State {
                 .unwrap_or(TaskbarHit::Nothing);
             return Target::Taskbar(hit);
         }
-        match self.wm.hit(pos) {
-            Some(h) => Target::Window(h),
+        // Layer clients: panels/overlays above windows, the desktop program below them.
+        if let Some((s, o)) = self.layer_hit(&[Layer::Overlay, Layer::Top], pos) {
+            return Target::Window(Hit::Client(s, o));
+        }
+        if let Some(h) = self.wm.hit(pos) {
+            return Target::Window(h);
+        }
+        match self.layer_hit(&[Layer::Bottom, Layer::Background], pos) {
+            Some((s, o)) => Target::Window(Hit::Client(s, o)),
             None => Target::Desktop,
         }
     }

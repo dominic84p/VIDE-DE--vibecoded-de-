@@ -5,6 +5,7 @@ mod desktops;
 mod focus;
 mod icons;
 mod input;
+mod layers;
 mod menu;
 mod render;
 mod screenshot;

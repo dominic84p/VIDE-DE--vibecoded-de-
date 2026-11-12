@@ -35,6 +35,11 @@ the WM in `src/wm.rs` is deliberately our own.
   (`vide-about`, `vide-settings`, `powerslop`, `file-exploder`, `task-mangler`), separate egui programs. `apps::install_builtin` registers them as
   .desktop entries on startup. PowerSlop uses egui 0.31 (egui_term's version).
   Our apps are Windows puns styled like their Windows originals.
+- `layers.rs`: wlr-layer-shell, so separate programs can be the desktop, panels or
+  overlays. `desktop/` is `vide-desktop`, our desktop (wallpaper + icons) as an SCTK
+  client on the background layer; the compositor starts it. Keep desktop features
+  there, not in the compositor. Wallpapers: `assets/wallpapers/`, installed by
+  `apps::install_builtin` to `~/.local/share/vide-de/wallpapers`.
 - `config/`: `vide-config`, the settings file shared by the compositor and Settings
   (`~/.config/vide-de/settings.conf`, polled once a second).
 

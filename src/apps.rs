@@ -146,6 +146,16 @@ const BUILTIN: &[(&str, &str, &str, &str, &str, &str)] = &[
     ("file-exploder", "file-exploder", "File Exploder", "Your files. Like File Explorer, but it might go off", "system-file-manager", "System;FileManager;"),
 ];
 
+/// Our bundled wallpapers, installed for vide-desktop and the Settings picker.
+const WALLPAPERS: &[(&str, &[u8])] = &[
+    ("bloom.png", include_bytes!("../assets/wallpapers/bloom.png")),
+    ("aurora.png", include_bytes!("../assets/wallpapers/aurora.png")),
+    ("sunset.png", include_bytes!("../assets/wallpapers/sunset.png")),
+    ("midnight.png", include_bytes!("../assets/wallpapers/midnight.png")),
+    ("ember.png", include_bytes!("../assets/wallpapers/ember.png")),
+    ("vibe.png", include_bytes!("../assets/wallpapers/vibe.png")),
+];
+
 /// Install the built-ins that exist next to our binary. Marked OnlyShowIn=VIDE-DE so
 /// other desktops don't list them. Files are only rewritten when they changed.
 pub fn install_builtin() {
@@ -163,6 +173,10 @@ pub fn install_builtin() {
         }
     };
     write(&share.join("icons/hicolor/512x512/apps/vide-de.png"), include_bytes!("../assets/logo-512.png"));
+    let walls = vide_config::wallpapers_dir();
+    for (name, bytes) in WALLPAPERS {
+        write(&walls.join(name), bytes);
+    }
     for (bin, id, name, comment, icon, categories) in BUILTIN {
         let exe = bin_dir.join(bin);
         if !exe.exists() {

@@ -1,0 +1,14 @@
+[package]
+name = "vide-desktop"
+version = "0.1.0"
+edition = "2024"
+description = "The VIDE-DE desktop: wallpaper and desktop icons, as its own program on the background layer"
+
+[dependencies]
+calloop-wayland-source = "0.4.1"
+fontdue = "0.9.5"
+png = "0.18.1"
+resvg = { version = "0.50.0", default-features = false }
+smithay-client-toolkit = "0.21"
+vide-config = { path = "../config" }
+wayland-client = "0.31.15"

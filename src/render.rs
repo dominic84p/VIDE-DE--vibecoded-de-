@@ -22,6 +22,8 @@ use smithay::{
     wayland::compositor::{with_states, with_surface_tree_downward, SurfaceAttributes, TraversalAction},
 };
 
+use smithay::wayland::shell::wlr_layer::Layer;
+
 use crate::{
     state::{Hover, State},
     ui::{self, StartKey, TaskItem, TaskbarKey, MENU_W, TASKBAR_H},
@@ -80,6 +82,11 @@ pub fn elements_with(renderer: &mut GlesRenderer, state: &mut State, cursor: boo
             let (buf, hot) = state.cursors.get(*icon);
             out.extend(image(renderer, buf, ptr - *hot, Kind::Cursor));
         }
+    }
+
+    // Overlay-layer clients (lock screens, notifications) above all our chrome.
+    for (s, at) in state.layer_surfaces(&[Layer::Overlay]) {
+        out.extend(surface_tree(renderer, &s, at, Kind::Unspecified));
     }
 
     // Software brightness: everything below the cursor seen through a black veil.
@@ -187,6 +194,11 @@ pub fn elements_with(renderer: &mut GlesRenderer, state: &mut State, cursor: boo
         out.extend(image(renderer, &bar.buffer, (0, oh - TASKBAR_H).into(), Kind::Unspecified));
     }
 
+    // Top-layer clients (panels, docks) above windows.
+    for (s, at) in state.layer_surfaces(&[Layer::Top]) {
+        out.extend(surface_tree(renderer, &s, at, Kind::Unspecified));
+    }
+
     // Windows, top to bottom (only current workspace).
     let font = state.font.as_ref();
     let icons = &mut state.icons;
@@ -214,7 +226,16 @@ pub fn elements_with(renderer: &mut GlesRenderer, state: &mut State, cursor: boo
         }
     }
 
-    // Wallpaper at the very back.
+    // Bottom and background layers: vide-desktop's icons and wallpaper live here.
+    state.arrange_layers();
+    for (s, at) in state.layer_surfaces(&[Layer::Bottom, Layer::Background]) {
+        out.extend(surface_tree(renderer, &s, at, Kind::Unspecified));
+    }
+    if state.has_background_layer() {
+        return out;
+    }
+
+    // Our own wallpaper at the very back, when no desktop program provides one.
     if state.wallpaper.as_ref().is_none_or(|(s, _)| *s != state.output_size) {
         state.wallpaper = Some((state.output_size, ui::draw_wallpaper(ow, oh)));
     }
@@ -315,6 +336,9 @@ pub fn send_frames(state: &State, time: u32) {
         if let Some(s) = x.wl_surface() {
             send(&s);
         }
+    }
+    for (s, _) in state.layer_surfaces(&[Layer::Overlay, Layer::Top, Layer::Bottom, Layer::Background]) {
+        send(&s);
     }
     if let CursorImageStatus::Surface(s) = &state.cursor_status {
         send(s);

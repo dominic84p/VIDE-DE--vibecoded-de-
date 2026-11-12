@@ -6,6 +6,6 @@ description = "VIDE-DE Settings"
 
 [dependencies]
 eframe = "0.37"
-egui_extras = { version = "0.37", features = ["image"] }
+egui_extras = { version = "0.37", features = ["image", "file"] }
 image = { version = "0.25", default-features = false, features = ["png"] }
 vide-config = { path = "../config" }

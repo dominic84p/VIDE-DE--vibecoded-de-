@@ -28,6 +28,7 @@ pub fn run(event_loop: &mut EventLoop<'static, State>, state: &mut State) -> Res
         PhysicalProperties { size: (0, 0).into(), subpixel: Subpixel::Unknown, make: "vibecoded".into(), model: "nested".into() },
     );
     let _global = output.create_global::<State>(&state.dh);
+    crate::layers::set_output(state, &output);
     let mode = Mode { size, refresh: 60_000 };
     output.change_current_state(Some(mode), Some(Transform::Flipped180), None, Some((0, 0).into()));
     output.set_preferred(mode);

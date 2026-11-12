@@ -35,6 +35,10 @@ taskbar, start menu and titlebars are all our own code.
   (Discord, Steam, ...): click to open, right-click for the app's menu
 - **Screenshots** and a Windows-style snipping tool
 - **Keyring**: starts KWallet's Secret Service so browsers and Electron apps can save logins
+- **Desktop** (`vide-desktop`): its own program on the background layer (wlr-layer-shell):
+  wallpaper plus your ~/Desktop items in a Windows-style grid, Recycle Bin, right-click menu
+- **Wallpapers**: six originals (Bloom, Aurora, Sunset, Midnight, Ember, Vibe); pick one,
+  or your own picture, in Settings → Personalization
 - **Our own apps**, installed into the start menu automatically:
   - **Settings** (`vide-settings`): mouse acceleration and speed, hide KDE apps from Start search
   - **PowerSlop** (`powerslop`): the terminal. Like PowerShell, but vibecoded (blue, banner, `PS>` prompt, tabs)

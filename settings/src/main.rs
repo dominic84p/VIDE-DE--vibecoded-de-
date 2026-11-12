@@ -12,16 +12,18 @@ const DIM: Color32 = Color32::from_rgb(0xa0, 0xa0, 0xa0);
 
 #[derive(Clone, Copy, PartialEq)]
 enum Page {
+    Personalization,
     Mouse,
     Start,
     About,
 }
 
 impl Page {
-    const ALL: [Page; 3] = [Page::Mouse, Page::Start, Page::About];
+    const ALL: [Page; 4] = [Page::Personalization, Page::Mouse, Page::Start, Page::About];
 
     fn title(self) -> &'static str {
         match self {
+            Page::Personalization => "Personalization",
             Page::Mouse => "Mouse",
             Page::Start => "Start",
             Page::About => "About",
@@ -34,7 +36,7 @@ fn main() -> eframe::Result {
         viewport: egui::ViewportBuilder::default()
             .with_title("Settings")
             .with_app_id("vide-settings")
-            .with_inner_size([760.0, 520.0])
+            .with_inner_size([900.0, 680.0])
             .with_min_inner_size([560.0, 400.0]),
         ..Default::default()
     };
@@ -43,12 +45,23 @@ fn main() -> eframe::Result {
         options,
         Box::new(|cc| {
             egui_extras::install_image_loaders(&cc.egui_ctx);
-            Ok(Box::new(Settings { config: Config::load(), page: Page::Mouse, error: None }))
+            // `--page personalization` (from the desktop's Personalize item) opens straight there.
+            let args: Vec<String> = std::env::args().collect();
+            let page = match args.iter().position(|a| a == "--page").and_then(|i| args.get(i + 1)).map(String::as_str) {
+                Some("personalization") => Page::Personalization,
+                Some("start") => Page::Start,
+                Some("about") => Page::About,
+                _ => Page::Mouse,
+            };
+            let custom = String::new();
+            Ok(Box::new(Settings { config: Config::load(), page, error: None, custom }))
         }),
     )
 }
 
 struct Settings {
+    /// "Browse" path being typed on the Personalization page.
+    custom: String,
     config: Config,
     page: Page,
     error: Option<String>,
@@ -106,6 +119,51 @@ impl eframe::App for Settings {
             ui.add_space(16.0);
             let mut changed = false;
             match self.page {
+                Page::Personalization => {
+                    ui.label(RichText::new("Background").color(Color32::WHITE).size(16.0));
+                    ui.add_space(8.0);
+                    // Current wallpaper, big, then the bundled ones to pick from.
+                    let current = format!("file://{}", self.config.wallpaper.display());
+                    ui.add(egui::Image::new(current).fit_to_exact_size(egui::vec2(384.0, 216.0)).corner_radius(4.0));
+                    ui.add_space(12.0);
+                    ui.label(RichText::new("Choose your picture").color(DIM).size(13.0));
+                    ui.add_space(4.0);
+                    let mut walls: Vec<_> = std::fs::read_dir(vide_config::wallpapers_dir())
+                        .map(|rd| rd.flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "png" || x == "jpg")).collect())
+                        .unwrap_or_default();
+                    walls.sort();
+                    // As many 160px thumbnails per row as fit.
+                    let per_row = ((ui.available_width() / 172.0) as usize).max(1);
+                    for chunk in walls.chunks(per_row) {
+                      ui.horizontal(|ui| {
+                        for path in chunk.iter().cloned() {
+                            let selected = path == self.config.wallpaper;
+                            let img = egui::Image::new(format!("file://{}", path.display())).fit_to_exact_size(egui::vec2(160.0, 90.0)).corner_radius(3.0);
+                            let r = egui::Frame::new()
+                                .stroke((if selected { 3.0 } else { 0.0 }, ACCENT))
+                                .inner_margin(2.0)
+                                .show(ui, |ui| ui.add(img.sense(egui::Sense::click())))
+                                .inner;
+                            if r.clicked() {
+                                self.config.wallpaper = path.clone();
+                                changed = true;
+                            }
+                        }
+                      });
+                    }
+                    ui.add_space(12.0);
+                    changed |= row(ui, "Browse", "Use your own picture (PNG): type its full path and press Enter.", |ui| {
+                        let r = ui.add(egui::TextEdit::singleline(&mut self.custom).hint_text("/home/you/Pictures/wall.png").desired_width(280.0));
+                        if r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                            let p = std::path::PathBuf::from(self.custom.trim());
+                            if p.is_file() {
+                                self.config.wallpaper = p;
+                                return true;
+                            }
+                        }
+                        false
+                    });
+                }
                 Page::Mouse => {
                     // Windows calls acceleration "Enhance pointer precision".
                     let mut accel = !self.config.mouse_flat;

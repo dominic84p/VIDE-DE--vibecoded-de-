@@ -149,6 +149,7 @@ pub fn run(event_loop: &mut EventLoop<'static, State>, state: &mut State) -> Res
     output.change_current_state(Some(wl_mode), None, None, Some((0, 0).into()));
     output.set_preferred(wl_mode);
     let _global = output.create_global::<State>(&state.dh);
+    crate::layers::set_output(state, &output);
     state.output_size = wl_mode.size.to_logical(1);
     state.pointer_loc = (state.output_size.w as f64 / 2.0, state.output_size.h as f64 / 2.0).into();
 

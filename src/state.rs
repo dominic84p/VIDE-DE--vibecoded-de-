@@ -117,6 +117,9 @@ pub struct State {
     pub primary_selection_state: PrimarySelectionState,
     pub _output_manager_state: OutputManagerState,
     pub popups: PopupManager,
+    pub layer_shell_state: smithay::wayland::shell::wlr_layer::WlrLayerShellState,
+    /// The (single) output; layer surfaces are laid out on it.
+    pub output: Option<smithay::output::Output>,
     pub dmabuf_state: DmabufState,
     /// Explicit sync (linux-drm-syncobj). NVIDIA needs it: without it we can show a
     /// client's frame before its GPU finished drawing it (flicker, stale frames, black boxes).
@@ -217,6 +220,8 @@ impl State {
             primary_selection_state: PrimarySelectionState::new::<Self>(&dh),
             _output_manager_state: OutputManagerState::new_with_xdg_output::<Self>(&dh),
             popups: PopupManager::default(),
+            layer_shell_state: smithay::wayland::shell::wlr_layer::WlrLayerShellState::new::<Self>(&dh),
+            output: None,
             dmabuf_state: DmabufState::new(),
             syncobj_state: None,
             loop_handle,
@@ -440,6 +445,11 @@ impl State {
              org.freedesktop.DBus.NameHasOwner string:org.freedesktop.secrets | grep -q true \
              || exec ksecretd",
         );
+        // The desktop (wallpaper + icons) is its own program on the background layer;
+        // without it we fall back to drawing a wallpaper ourselves.
+        if let Some(desktop) = crate::input::own_app("vide-desktop") {
+            self.spawn(&desktop);
+        }
         if let Some(cmd) = self.startup.take() {
             self.spawn(&cmd);
         }
@@ -591,6 +601,7 @@ impl CompositorHandler for State {
                 root = parent;
             }
             self.wm.on_commit(&root);
+            self.layer_commit(&root);
         }
 
         // xdg-shell: the first commit of a toplevel or popup is answered with a configure.

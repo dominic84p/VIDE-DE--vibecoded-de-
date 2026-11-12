@@ -1,0 +1,31 @@
+<!-- branding/vide-wordmark-white.svg -->
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 656 140"
+  width="656"
+  height="140"
+  role="img"
+  aria-label="VIDE-DE"
+>
+  <title>VIDE-DE</title>
+
+  <g
+    fill="#FFFFFF"
+    transform="translate(20 20) scale(1)"
+  >
+    <!-- V -->
+    <polygon points="0,0 26.9,0 52,51.7 77.1,0 104,0 61,100 43,100" />
+    <!-- I -->
+    <rect x="126" y="0" width="24" height="100" />
+    <!-- D -->
+    <path fill-rule="evenodd" d="M172 0 H210 A50 50 0 0 1 210 100 H172Z M196 24 V76 H210 A26 26 0 0 0 210 24Z" />
+    <!-- E -->
+    <path d="M282 0 H352 V22.1 H306 V39 H342 V61 H306 V77.9 H352 V100 H282Z" />
+    <!-- - -->
+    <rect x="374" y="39" width="40" height="22.1" />
+    <!-- D -->
+    <path fill-rule="evenodd" d="M436 0 H474 A50 50 0 0 1 474 100 H436Z M460 24 V76 H474 A26 26 0 0 0 474 24Z" />
+    <!-- E -->
+    <path d="M546 0 H616 V22.1 H570 V39 H606 V61 H570 V77.9 H616 V100 H546Z" />
+  </g>
+</svg>

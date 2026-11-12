@@ -1,0 +1,27 @@
+<!-- branding/vide-glyph.svg -->
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 512 512"
+  width="512"
+  height="512"
+  role="img"
+  aria-label="VIDE-DE glyph"
+>
+  <title>VIDE-DE glyph</title>
+
+  <g
+    fill="#FFFFFF"
+    stroke="#FFFFFF"
+    stroke-width="6"
+    stroke-linejoin="round"
+  >
+    <!-- upper left pane -->
+    <polygon points="62,84 174,84 241,229 135.3,229" />
+    <!-- upper right pane -->
+    <polygon points="450,84 338,84 271,229 376.7,229" />
+    <!-- lower left pane -->
+    <polygon points="150.4,259 241,259 241,438.3" />
+    <!-- lower right pane -->
+    <polygon points="361.6,259 271,259 271,438.3" />
+  </g>
+</svg>

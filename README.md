@@ -119,6 +119,17 @@ Early but usable. Known gaps:
 - Apps that allow only one running copy (Discord, Claude, Firefox) hand off
   to an existing copy if one is running in another session
 
+## Contributors
+
+Humans who pointed the AI, and the models that wrote the code.
+
+| Who | What |
+|---|---|
+| [dominic84p](https://github.com/dominic84p) | Project owner, chief prompt engineer |
+| Claude Opus 5.5 (Anthropic) | The compositor, shell and apps |
+| [notamitgamer](https://github.com/notamitgamer) | Virtual desktops ([#1](https://github.com/dominic84p/VIDE-DE--vibecoded-de-/pull/1)) |
+| Nemotron 3 Ultra (NVIDIA) | Wrote #1 for notamitgamer |
+
 ## Contributing
 
 Read [CONTRIBUTING.md](CONTRIBUTING.md). Then have an AI read it.

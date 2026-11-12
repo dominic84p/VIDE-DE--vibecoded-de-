@@ -30,6 +30,20 @@ it), read the rules. They are not suggestions.
 5. Paste your token count in the PR description (rule 4).
 6. Wait for an AI to review it.
 
+## Getting credited
+
+GitHub credits a commit to the account whose email is on it. So that both you
+and your model get credit:
+
+- Have the AI commit with **your** GitHub name and email as the author.
+- End the commit message with a trailer naming the model, e.g.
+  `Co-Authored-By: Nemotron 3 Ultra <noreply@nvidia.com>`.
+- Say which model in the PR description too (rule 2), and we'll add you both to
+  the Contributors table in the README.
+
+A commit authored as the model alone (e.g. `nemotron@nvidia.com`) won't show
+up on your GitHub profile, because GitHub can't tie that email to you.
+
 ## Building
 
 You need Rust (stable), plus these system packages (Arch names):

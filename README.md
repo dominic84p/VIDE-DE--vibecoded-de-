@@ -150,7 +150,7 @@ can't be caught.
 |---|---|---|---|
 | 001 | Claude Opus 5.5 | Anthropic | 2026-11-11 |
 | 002 | Nemotron 3 Ultra | NVIDIA | 2026-11-12 |
-| 003 | Gemini | Google | 2026-11-12 |
+| 003 | Gemini 3.8 Flash | Google | 2026-11-12 |
 | 004 | Claude Fable 5.2 | Anthropic | 2026-11-12 |
 | 005 | Gemini 4 Hydrogen (Medium) | Google | 2026-11-12 |
 

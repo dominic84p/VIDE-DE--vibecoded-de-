@@ -50,6 +50,9 @@ pub enum WinKind {
     X11(X11Surface),
 }
 
+/// Workspace index (0-based). We support up to 10 workspaces (1-9, 0 = 10).
+pub const WORKSPACE_COUNT: usize = 10;
+
 /// Window states we ask clients to adopt.
 #[derive(Clone, Copy)]
 pub enum Flag {
@@ -70,6 +73,8 @@ pub struct Window {
     /// Geometry to restore to.
     pub maximized: Option<Rectangle<i32, Logical>>,
     pub fullscreen: Option<Rectangle<i32, Logical>>,
+    /// Workspace this window belongs to (0-9).
+    pub workspace: usize,
     /// While/after an edge resize: keep the opposite edges pinned as the client resizes.
     anchor: Option<(u32, Rectangle<i32, Logical>)>,
     pub mapped: bool,
@@ -292,6 +297,8 @@ pub struct Wm {
     pub windows: Vec<Window>,
     pub grab: Option<Grab>,
     next_id: u64,
+    /// Current workspace (0-9).
+    pub current_workspace: usize,
 }
 
 impl Wm {
@@ -313,6 +320,7 @@ impl Wm {
             minimized: false,
             maximized: None,
             fullscreen: None,
+            workspace: self.current_workspace,
             anchor: None,
             mapped: false,
             border: Default::default(),
@@ -335,9 +343,9 @@ impl Wm {
         self.windows.iter_mut().find(|w| w.surface() == surface)
     }
 
-    /// Topmost visible window.
+    /// Topmost visible window on the current workspace.
     pub fn top(&self) -> Option<&Window> {
-        self.windows.iter().rev().find(|w| !w.minimized && w.mapped)
+        self.windows.iter().rev().find(|w| !w.minimized && w.mapped && w.workspace == self.current_workspace)
     }
 
     pub fn raise(&mut self, surface: &WlSurface) {
@@ -349,11 +357,69 @@ impl Wm {
 
     /// Bring the bottom-most visible window to the top. Alt+Tab.
     pub fn cycle(&mut self) -> Option<WlSurface> {
-        let i = self.windows.iter().position(|w| !w.minimized && w.mapped)?;
+        let i = self.windows.iter().position(|w| !w.minimized && w.mapped && w.workspace == self.current_workspace)?;
         let w = self.windows.remove(i);
         let s = w.surface().clone();
         self.windows.push(w);
         Some(s)
+    }
+
+    /// Get all windows on the current workspace, bottom to top.
+    pub fn windows_on_current(&self) -> impl Iterator<Item = &Window> {
+        let ws = self.current_workspace;
+        self.windows.iter().filter(move |w| w.workspace == ws)
+    }
+
+    /// Get all windows on the current workspace, top to bottom.
+    pub fn windows_on_current_rev(&self) -> impl Iterator<Item = &Window> {
+        let ws = self.current_workspace;
+        self.windows.iter().rev().filter(move |w| w.workspace == ws)
+    }
+
+    /// Get mutable windows on the current workspace, top to bottom.
+    pub fn windows_on_current_mut(&mut self) -> impl Iterator<Item = &mut Window> {
+        let ws = self.current_workspace;
+        self.windows.iter_mut().rev().filter(move |w| w.workspace == ws)
+    }
+
+    /// Switch to workspace `ws` (0-9). Returns the new workspace index.
+    pub fn set_workspace(&mut self, ws: usize) -> usize {
+        self.current_workspace = ws.min(WORKSPACE_COUNT - 1);
+        self.current_workspace
+    }
+
+    /// Move to the next workspace (with wrap).
+    pub fn next_workspace(&mut self) -> usize {
+        self.current_workspace = (self.current_workspace + 1) % WORKSPACE_COUNT;
+        self.current_workspace
+    }
+
+    /// Move to the previous workspace (with wrap).
+    pub fn prev_workspace(&mut self) -> usize {
+        self.current_workspace = (self.current_workspace + WORKSPACE_COUNT - 1) % WORKSPACE_COUNT;
+        self.current_workspace
+    }
+
+    /// Move a window to a different workspace.
+    pub fn move_window_to_workspace(&mut self, surface: &WlSurface, ws: usize) -> bool {
+        let ws = ws.min(WORKSPACE_COUNT - 1);
+        if let Some(w) = self.find_mut(surface) {
+            w.workspace = ws;
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Get workspace indicator data for the taskbar.
+    pub fn workspace_indicator(&self) -> (usize, [bool; WORKSPACE_COUNT]) {
+        let mut has_windows = [false; WORKSPACE_COUNT];
+        for w in &self.windows {
+            if w.mapped && !w.minimized {
+                has_windows[w.workspace] = true;
+            }
+        }
+        (self.current_workspace, has_windows)
     }
 
     /// Called on every commit of a toplevel's root surface.
@@ -373,7 +439,7 @@ impl Wm {
 
     /// Topmost thing under `point`.
     pub fn hit(&self, point: Point<f64, Logical>) -> Option<Hit> {
-        for w in self.windows.iter().rev().filter(|w| !w.minimized && w.mapped) {
+        for w in self.windows.iter().rev().filter(|w| !w.minimized && w.mapped && w.workspace == self.current_workspace) {
             let sloc = w.surface_loc();
             for (popup, offset) in PopupManager::popups_for_surface(w.surface()) {
                 let ploc = sloc + offset - popup.geometry().loc;

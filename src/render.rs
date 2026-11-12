@@ -111,8 +111,9 @@ pub fn elements(renderer: &mut GlesRenderer, state: &mut State) -> Vec<Elem> {
     // Taskbar, unless a fullscreen window is in front.
     let fullscreen_top = state.wm.top().is_some_and(|w| w.fullscreen.is_some() && Some(w.surface()) == focused.as_ref());
     if !fullscreen_top {
-        let mut items: Vec<_> = state.wm.windows.iter().filter(|w| w.mapped).collect();
+        let mut items: Vec<_> = state.wm.windows.iter().filter(|w| w.mapped && w.workspace == state.wm.current_workspace).collect();
         items.sort_by_key(|w| w.id);
+        let (current_ws, ws_has_windows) = state.wm.workspace_indicator();
         let key = TaskbarKey {
             width: ow,
             items: items
@@ -131,6 +132,8 @@ pub fn elements(renderer: &mut GlesRenderer, state: &mut State) -> Vec<Elem> {
                 _ => None,
             },
             start_open: state.start.open,
+            current_workspace: current_ws,
+            workspace_has_windows: ws_has_windows,
         };
         if state.taskbar.as_ref().is_none_or(|t| t.key != key) {
             state.taskbar = Some(ui::draw_taskbar(state.font.as_ref(), &mut state.icons, key));
@@ -139,11 +142,11 @@ pub fn elements(renderer: &mut GlesRenderer, state: &mut State) -> Vec<Elem> {
         out.extend(image(renderer, &bar.buffer, (0, oh - TASKBAR_H).into(), Kind::Unspecified));
     }
 
-    // Windows, top to bottom.
+    // Windows, top to bottom (only current workspace).
     let font = state.font.as_ref();
     let icons = &mut state.icons;
     let apps = &state.apps;
-    for w in state.wm.windows.iter_mut().rev().filter(|w| !w.minimized && w.mapped) {
+    for w in state.wm.windows.iter_mut().rev().filter(|w| !w.minimized && w.mapped && w.workspace == state.wm.current_workspace) {
         let active = Some(w.surface()) == focused.as_ref();
         let sloc = w.surface_loc();
         for (popup, offset) in PopupManager::popups_for_surface(w.surface()) {

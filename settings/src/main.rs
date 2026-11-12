@@ -228,8 +228,8 @@ impl Settings {
 
     fn render_search_box(&mut self, ui: &mut egui::Ui, width: f32) {
         egui::Frame::new()
-            .fill(Color32::from_rgb(0x24, 0x24, 0x24))
-            .stroke(Stroke::new(1.0, Color32::from_rgb(0x55, 0x55, 0x55)))
+            .fill(Color32::WHITE)
+            .stroke(Stroke::new(1.0, Color32::from_rgb(0x99, 0x99, 0x99)))
             .inner_margin(egui::Margin::symmetric(8, 5))
             .show(ui, |ui| {
                 ui.set_width(width);
@@ -257,7 +257,7 @@ impl Settings {
             .take(8)
             .collect();
         egui::Frame::new()
-            .fill(Color32::from_rgb(0x26, 0x26, 0x26))
+            .fill(Color32::WHITE)
             .stroke(Stroke::new(1.0, ACCENT))
             .inner_margin(4.0)
             .show(ui, |ui| {
@@ -282,7 +282,7 @@ impl Settings {
                 egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
                     ui.add_space(16.0);
                     ui.vertical_centered(|ui| {
-                        ui.label(RichText::new("Windows Settings").font(FontId::proportional(26.0)).color(TEXT));
+                        ui.label(RichText::new("VIDE-DE Settings").font(FontId::proportional(26.0)).color(TEXT));
                         ui.add_space(16.0);
                         let sw = ui.available_width().min(420.0);
                         ui.allocate_ui(Vec2::new(sw, 32.0), |ui| {
@@ -314,7 +314,7 @@ impl Settings {
                                 let painter = ui.painter();
                                 if resp.hovered() {
                                     painter.rect_filled(rect, 0.0, CARD_HOVER);
-                                    painter.rect_stroke(rect, 0.0, Stroke::new(1.0, Color32::from_rgb(0x55, 0x55, 0x55)), StrokeKind::Inside);
+                                    painter.rect_stroke(rect, 0.0, Stroke::new(1.0, BORDER), StrokeKind::Inside);
                                 }
                                 let icon_rect = Rect::from_min_size(rect.min + Vec2::new(14.0, 22.0), Vec2::splat(32.0));
                                 draw_category_icon(painter, icon_rect, cat, ACCENT);
@@ -388,7 +388,7 @@ impl Settings {
                     let (rect, resp) = ui.allocate_exact_size(Vec2::new(220.0, 36.0), egui::Sense::click());
                     let painter = ui.painter();
                     if selected {
-                        painter.rect_filled(rect, 0.0, Color32::from_rgb(0x2d, 0x2d, 0x2d));
+                        painter.rect_filled(rect, 0.0, Color32::from_rgb(0xdc, 0xdc, 0xdc));
                         painter.rect_filled(
                             Rect::from_min_size(Pos2::new(rect.left(), rect.top() + 6.0), Vec2::new(4.0, rect.height() - 12.0)),
                             0.0,
@@ -402,7 +402,7 @@ impl Settings {
                         egui::Align2::LEFT_CENTER,
                         p.title(),
                         FontId::proportional(13.5),
-                        if selected { TEXT } else { Color32::from_rgb(0xd4, 0xd4, 0xd4) },
+                        TEXT,
                     );
                     if resp.clicked() {
                         self.page = Some((cat, p));
@@ -411,7 +411,7 @@ impl Settings {
                 }
 
                 ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
-                    ui.label(RichText::new("VIDE-DE Settings").color(BORDER).size(11.0));
+                    ui.label(RichText::new("VIDE-DE Settings").color(DIM).size(11.0));
                 });
             });
 
@@ -427,7 +427,7 @@ impl Settings {
                     }
                     if let Some(e) = &self.error {
                         ui.add_space(8.0);
-                        ui.colored_label(Color32::LIGHT_RED, e);
+                        ui.colored_label(Color32::from_rgb(0xc4, 0x2b, 0x1c), e);
                     }
                 });
             });

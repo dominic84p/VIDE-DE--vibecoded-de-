@@ -7,20 +7,20 @@ use crate::system::{display_modes, fmt_bytes, fmt_res, launch_desktop_exec, spaw
 use crate::{Category, Settings, SubPage};
 
 pub const ACCENT: Color32 = Color32::from_rgb(0x00, 0x78, 0xd7);
-pub const ACCENT_HOVER: Color32 = Color32::from_rgb(0x1a, 0x86, 0xdc);
-pub const BG: Color32 = Color32::from_rgb(0x10, 0x10, 0x10);
-pub const SIDEBAR: Color32 = Color32::from_rgb(0x1f, 0x1f, 0x1f);
-pub const CARD: Color32 = Color32::from_rgb(0x1b, 0x1b, 0x1b);
-pub const CARD_HOVER: Color32 = Color32::from_rgb(0x28, 0x28, 0x28);
-pub const BORDER: Color32 = Color32::from_rgb(0x33, 0x33, 0x33);
-pub const TEXT: Color32 = Color32::WHITE;
-pub const DIM: Color32 = Color32::from_rgb(0xa0, 0xa0, 0xa0);
+pub const ACCENT_HOVER: Color32 = Color32::from_rgb(0x10, 0x6e, 0xbe);
+pub const BG: Color32 = Color32::WHITE;
+pub const SIDEBAR: Color32 = Color32::from_rgb(0xf2, 0xf2, 0xf2);
+pub const CARD: Color32 = Color32::from_rgb(0xf8, 0xf8, 0xf8);
+pub const CARD_HOVER: Color32 = Color32::from_rgb(0xe6, 0xe6, 0xe6);
+pub const BORDER: Color32 = Color32::from_rgb(0xd4, 0xd4, 0xd4);
+pub const TEXT: Color32 = Color32::from_rgb(0x11, 0x11, 0x11);
+pub const DIM: Color32 = Color32::from_rgb(0x60, 0x60, 0x60);
 
 pub fn apply_win10_style(ctx: &egui::Context) {
-    let mut visuals = egui::Visuals::dark();
+    let mut visuals = egui::Visuals::light();
     visuals.window_fill = BG;
     visuals.panel_fill = BG;
-    visuals.extreme_bg_color = Color32::from_rgb(0x25, 0x25, 0x25);
+    visuals.extreme_bg_color = Color32::WHITE;
     visuals.selection.bg_fill = ACCENT;
     visuals.selection.stroke = Stroke::new(1.0, Color32::WHITE);
     visuals.widgets.noninteractive.corner_radius = 0.0.into();
@@ -28,11 +28,11 @@ pub fn apply_win10_style(ctx: &egui::Context) {
     visuals.widgets.hovered.corner_radius = 0.0.into();
     visuals.widgets.active.corner_radius = 0.0.into();
     visuals.widgets.open.corner_radius = 0.0.into();
-    visuals.widgets.inactive.bg_fill = Color32::from_rgb(0x33, 0x33, 0x33);
-    visuals.widgets.hovered.bg_fill = Color32::from_rgb(0x45, 0x45, 0x45);
-    visuals.widgets.active.bg_fill = Color32::from_rgb(0x55, 0x55, 0x55);
-    visuals.widgets.inactive.bg_stroke = Stroke::new(1.0, Color32::from_rgb(0x44, 0x44, 0x44));
-    visuals.widgets.hovered.bg_stroke = Stroke::new(1.0, Color32::from_rgb(0x77, 0x77, 0x77));
+    visuals.widgets.inactive.bg_fill = Color32::from_rgb(0xe6, 0xe6, 0xe6);
+    visuals.widgets.hovered.bg_fill = Color32::from_rgb(0xd6, 0xd6, 0xd6);
+    visuals.widgets.active.bg_fill = Color32::from_rgb(0xc6, 0xc6, 0xc6);
+    visuals.widgets.inactive.bg_stroke = Stroke::new(1.0, Color32::from_rgb(0xc8, 0xc8, 0xc8));
+    visuals.widgets.hovered.bg_stroke = Stroke::new(1.0, Color32::from_rgb(0x88, 0x88, 0x88));
     visuals.window_corner_radius = 0.0.into();
     ctx.set_visuals(visuals);
 }
@@ -55,7 +55,7 @@ pub fn win10_toggle(ui: &mut egui::Ui, value: &mut bool) -> bool {
             let knob = Pos2::new(rect.right() - r, rect.center().y);
             painter.circle_filled(knob, 5.0, Color32::WHITE);
         } else {
-            let stroke_color = if resp.hovered() { Color32::WHITE } else { Color32::from_rgb(0xba, 0xba, 0xba) };
+            let stroke_color = if resp.hovered() { TEXT } else { Color32::from_rgb(0x55, 0x55, 0x55) };
             painter.rect_stroke(rect, r, Stroke::new(1.6, stroke_color), StrokeKind::Inside);
             let knob = Pos2::new(rect.left() + r, rect.center().y);
             painter.circle_filled(knob, 5.0, stroke_color);
@@ -232,7 +232,7 @@ pub fn signal_bars_ui(ui: &mut egui::Ui, signal: u8) {
         let x = rect.left() + i as f32 * 5.0;
         let y = rect.bottom() - h;
         let bar = Rect::from_min_size(Pos2::new(x, y), Vec2::new(3.0, h));
-        let col = if i < bars { ACCENT } else { Color32::from_rgb(0x45, 0x45, 0x45) };
+        let col = if i < bars { ACCENT } else { Color32::from_rgb(0xcc, 0xcc, 0xcc) };
         painter.rect_filled(bar, 0.0, col);
     }
 }
@@ -583,7 +583,7 @@ impl Settings {
                 ui.add_space(6.0);
                 let (bar_rect, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 8.0), egui::Sense::hover());
                 let painter = ui.painter();
-                painter.rect_filled(bar_rect, 0.0, Color32::from_rgb(0x33, 0x33, 0x33));
+                painter.rect_filled(bar_rect, 0.0, Color32::from_rgb(0xe0, 0xe0, 0xe0));
                 let fill_w = (bar_rect.width() * (disk.pct / 100.0).clamp(0.0, 1.0)).max(2.0);
                 let fill_col = if disk.pct > 90.0 { Color32::from_rgb(0xd1, 0x34, 0x38) } else { ACCENT };
                 painter.rect_filled(Rect::from_min_size(bar_rect.min, Vec2::new(fill_w, bar_rect.height())), 0.0, fill_col);
@@ -716,7 +716,7 @@ impl Settings {
         card_frame().show(ui, |ui| {
             ui.set_width(ui.available_width());
             let (rect, resp) = ui.allocate_exact_size(Vec2::new(ui.available_width().min(420.0), 72.0), egui::Sense::click_and_drag());
-            ui.painter().rect_filled(rect, 0.0, Color32::from_rgb(0x14, 0x14, 0x14));
+            ui.painter().rect_filled(rect, 0.0, Color32::from_rgb(0xf2, 0xf2, 0xf2));
             ui.painter().rect_stroke(rect, 0.0, Stroke::new(1.0, if resp.hovered() { ACCENT } else { BORDER }), StrokeKind::Inside);
             let msg = if resp.dragged() {
                 "Dragging..."
@@ -756,7 +756,7 @@ impl Settings {
                 ui.label(RichText::new("Not connected").color(Color32::from_rgb(0xff, 0x8c, 0x00)).size(16.0));
                 ui.label(RichText::new("No active network connection detected.").color(DIM).size(12.5));
             } else {
-                ui.label(RichText::new("You're connected to the Internet").color(Color32::from_rgb(0x4c, 0xc2, 0xff)).size(16.0));
+                ui.label(RichText::new("You're connected to the Internet").color(ACCENT).size(16.0));
                 ui.add_space(6.0);
                 for iface in &active {
                     kv_row(ui, &format!("{} ({})", iface.device, iface.kind), &format!("{} — {}", iface.connection, iface.ip));
@@ -787,13 +787,13 @@ impl Settings {
             return;
         }
         if let Some(connected) = self.system.wifi.iter().find(|n| n.active).cloned() {
-            egui::Frame::new().fill(Color32::from_rgb(0x00, 0x5a, 0x9e)).inner_margin(12.0).show(ui, |ui| {
+            egui::Frame::new().fill(ACCENT).inner_margin(12.0).show(ui, |ui| {
                 ui.set_width(ui.available_width());
                 ui.horizontal(|ui| {
                     ui.vertical(|ui| {
-                        ui.label(RichText::new(&connected.ssid).color(TEXT).size(16.0));
+                        ui.label(RichText::new(&connected.ssid).color(Color32::WHITE).size(16.0));
                         let sec = if connected.security.is_empty() { "Open" } else { "Secured" };
-                        ui.label(RichText::new(format!("Connected · {sec} · {}%", connected.signal)).color(Color32::from_rgb(0xcc, 0xe4, 0xf7)).size(12.0));
+                        ui.label(RichText::new(format!("Connected · {sec} · {}%", connected.signal)).color(Color32::from_rgb(0xe6, 0xf2, 0xfc)).size(12.0));
                     });
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if ui.button("Disconnect").clicked() {
@@ -967,7 +967,7 @@ impl Settings {
         section_title(ui, "Taskbar");
         card_frame().show(ui, |ui| {
             ui.set_width(ui.available_width());
-            ui.label(RichText::new("Windows 10 Taskbar").color(TEXT).size(14.5));
+            ui.label(RichText::new("VIDE-DE Taskbar").color(TEXT).size(14.5));
             ui.add_space(4.0);
             ui.label(RichText::new("• Right-click any app in Start or on the taskbar to Pin / Unpin it.").color(DIM).size(12.5));
             ui.label(RichText::new("• Task View button and Win+Tab open virtual desktops.").color(DIM).size(12.5));

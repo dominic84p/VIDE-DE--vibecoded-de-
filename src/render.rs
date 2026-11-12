@@ -133,7 +133,7 @@ pub fn elements(renderer: &mut GlesRenderer, state: &mut State) -> Vec<Elem> {
             start_open: state.start.open,
         };
         if state.taskbar.as_ref().is_none_or(|t| t.key != key) {
-            state.taskbar = Some(ui::draw_taskbar(state.font.as_ref(), &mut state.icons, key));
+            state.taskbar = Some(ui::draw_taskbar(state.font.as_ref(), &mut state.icons, state.logo.as_ref(), key));
         }
         let bar = state.taskbar.as_ref().unwrap();
         out.extend(image(renderer, &bar.buffer, (0, oh - TASKBAR_H).into(), Kind::Unspecified));

@@ -106,6 +106,8 @@ pub struct State {
 
     pub font: Option<Font>,
     pub icons: Icons,
+    /// Our logo, sized for the start button.
+    pub logo: Option<crate::icons::Icon>,
     pub apps: Vec<App>,
     pub taskbar: Option<Taskbar>,
     pub start: Start,
@@ -167,6 +169,7 @@ impl State {
             cursors: Cursors::load(),
             font: canvas::load_font(),
             icons: Icons::new(),
+            logo: crate::icons::logo(24),
             apps: apps::scan(),
             taskbar: None,
             start: Start::default(),

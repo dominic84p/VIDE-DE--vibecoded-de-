@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo-512.png" alt="vibecoded-de logo" width="200">
+</p>
+
 # vibecoded-de
 
 A Wayland desktop environment with its own compositor, written in Rust and

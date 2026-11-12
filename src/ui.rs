@@ -86,19 +86,24 @@ pub struct Taskbar {
     pub hits: Vec<(Rectangle<i32, Logical>, TaskbarHit)>,
 }
 
-pub fn draw_taskbar(font: Option<&Font>, icons: &mut Icons, key: TaskbarKey) -> Taskbar {
+pub fn draw_taskbar(font: Option<&Font>, icons: &mut Icons, logo: Option<&crate::icons::Icon>, key: TaskbarKey) -> Taskbar {
     let w = key.width;
     let mut c = Canvas::new(w, TASKBAR_H);
     let mut hits = Vec::new();
     let hovered = |h: &TaskbarHit| key.hover.as_ref() == Some(h);
     c.fill(TASKBAR_BG);
 
-    // Start button: our own mark, a chevron, not anyone's logo.
+    // Start button: our logo (a chevron if it somehow failed to load).
     let start_bg = if key.start_open { TASK_ACTIVE } else if hovered(&TaskbarHit::Start) { TASK_HOVER } else { TASKBAR_BG };
     c.rect(0, 0, START_W, TASKBAR_H, start_bg);
-    let mark = if key.start_open || hovered(&TaskbarHit::Start) { TASK_LINE } else { WHITE };
-    c.line(16.0, 14.0, 24.0, 26.0, 2.5, mark);
-    c.line(24.0, 26.0, 32.0, 14.0, 2.5, mark);
+    match logo {
+        Some(l) => c.icon(l, (START_W - l.w as i32) / 2, (TASKBAR_H - l.h as i32) / 2),
+        None => {
+            let mark = if key.start_open || hovered(&TaskbarHit::Start) { TASK_LINE } else { WHITE };
+            c.line(16.0, 14.0, 24.0, 26.0, 2.5, mark);
+            c.line(24.0, 26.0, 32.0, 14.0, 2.5, mark);
+        }
+    }
     hits.push((rect(0, 0, START_W, TASKBAR_H), TaskbarHit::Start));
 
     // Search box (opens the start menu, which has the real search).

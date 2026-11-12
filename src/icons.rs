@@ -155,8 +155,18 @@ fn load_svg(path: &Path, size: u32) -> Option<Icon> {
 }
 
 fn load_png(path: &Path) -> Option<Icon> {
-    let file = std::io::BufReader::new(std::fs::File::open(path).ok()?);
-    let mut decoder = png::Decoder::new(file);
+    decode_png(std::io::BufReader::new(std::fs::File::open(path).ok()?))
+}
+
+/// Our logo, baked into the binary so it shows no matter where we're run from.
+pub fn logo(height: u32) -> Option<Icon> {
+    let src = decode_png(std::io::Cursor::new(include_bytes!("../assets/logo-512.png")))?;
+    let w = (src.w * height + src.h / 2) / src.h;
+    Some(scale_to(&src, w, height))
+}
+
+fn decode_png(r: impl std::io::BufRead + std::io::Seek) -> Option<Icon> {
+    let mut decoder = png::Decoder::new(r);
     decoder.set_transformations(png::Transformations::normalize_to_color8());
     let mut reader = decoder.read_info().ok()?;
     let mut buf = vec![0; reader.output_buffer_size()?];
@@ -180,15 +190,19 @@ fn load_png(path: &Path) -> Option<Icon> {
     Some(Icon { w: info.width, h: info.height, rgba })
 }
 
-/// Box-filter (or nearest, when enlarging) scale to size×size.
 fn scale(src: &Icon, size: u32) -> Icon {
-    if src.w == size && src.h == size {
-        return Icon { w: size, h: size, rgba: src.rgba.clone() };
+    scale_to(src, size, size)
+}
+
+/// Box-filter (or nearest, when enlarging) scale to w×h.
+fn scale_to(src: &Icon, w: u32, h: u32) -> Icon {
+    if src.w == w && src.h == h {
+        return Icon { w, h, rgba: src.rgba.clone() };
     }
-    let mut out = vec![0u8; (size * size * 4) as usize];
-    let (sx, sy) = (src.w as f32 / size as f32, src.h as f32 / size as f32);
-    for y in 0..size {
-        for x in 0..size {
+    let mut out = vec![0u8; (w * h * 4) as usize];
+    let (sx, sy) = (src.w as f32 / w as f32, src.h as f32 / h as f32);
+    for y in 0..h {
+        for x in 0..w {
             let (x0, y0) = ((x as f32 * sx) as u32, (y as f32 * sy) as u32);
             let x1 = (((x + 1) as f32 * sx) as u32).max(x0 + 1).min(src.w);
             let y1 = (((y + 1) as f32 * sy) as u32).max(y0 + 1).min(src.h);
@@ -202,11 +216,11 @@ fn scale(src: &Icon, size: u32) -> Icon {
                 }
             }
             let n = ((x1 - x0) * (y1 - y0)).max(1);
-            let o = ((y * size + x) * 4) as usize;
+            let o = ((y * w + x) * 4) as usize;
             for k in 0..4 {
                 out[o + k] = (acc[k] / n) as u8;
             }
         }
     }
-    Icon { w: size, h: size, rgba: out }
+    Icon { w, h, rgba: out }
 }

@@ -346,6 +346,10 @@ impl State {
             Action::MoveToWorkspace(ws) => {
                 if let Some(s) = focused {
                     self.wm.move_window_to_workspace(&s, ws);
+                    // It just left the screen; don't keep typing into it.
+                    if ws != self.wm.current_workspace {
+                        self.focus_top();
+                    }
                 }
             }
             Action::Menu(k) => self.menu_key(k),

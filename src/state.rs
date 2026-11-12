@@ -262,6 +262,9 @@ impl State {
             self.wm.raise(s);
             if let Some(w) = self.wm.find_mut(s) {
                 w.minimized = false;
+                // Focusing a window on another workspace takes you there, so focus is never invisible.
+                let ws = w.workspace;
+                self.wm.set_workspace(ws);
             }
         }
         for w in &self.wm.windows {
@@ -313,7 +316,8 @@ impl State {
     }
 
     pub fn show_desktop(&mut self) {
-        for w in &mut self.wm.windows {
+        let ws = self.wm.current_workspace;
+        for w in self.wm.windows.iter_mut().filter(|w| w.workspace == ws) {
             w.minimized = true;
         }
         self.focus(None, SERIAL_COUNTER.next_serial());

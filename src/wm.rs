@@ -364,24 +364,6 @@ impl Wm {
         Some(s)
     }
 
-    /// Get all windows on the current workspace, bottom to top.
-    pub fn windows_on_current(&self) -> impl Iterator<Item = &Window> {
-        let ws = self.current_workspace;
-        self.windows.iter().filter(move |w| w.workspace == ws)
-    }
-
-    /// Get all windows on the current workspace, top to bottom.
-    pub fn windows_on_current_rev(&self) -> impl Iterator<Item = &Window> {
-        let ws = self.current_workspace;
-        self.windows.iter().rev().filter(move |w| w.workspace == ws)
-    }
-
-    /// Get mutable windows on the current workspace, top to bottom.
-    pub fn windows_on_current_mut(&mut self) -> impl Iterator<Item = &mut Window> {
-        let ws = self.current_workspace;
-        self.windows.iter_mut().rev().filter(move |w| w.workspace == ws)
-    }
-
     /// Switch to workspace `ws` (0-9). Returns the new workspace index.
     pub fn set_workspace(&mut self, ws: usize) -> usize {
         self.current_workspace = ws.min(WORKSPACE_COUNT - 1);

@@ -41,6 +41,9 @@ pub enum Action {
     Inert,
     /// A separator line.
     Separator,
+    /// Pin or unpin an app (by desktop-file id).
+    PinStart(String),
+    PinTaskbar(String),
 }
 
 pub struct Menu {
@@ -146,13 +149,13 @@ impl State {
     pub fn open_taskbar_menu(&mut self, surface: &WlSurface, x: i32) {
         let Some(w) = self.wm.find(surface) else { return };
         let s = surface.clone();
-        let app = self.apps.iter().position(|a| {
-            let id = w.app_id().to_lowercase();
-            !id.is_empty() && (a.id.to_lowercase() == id || a.wm_class.to_lowercase() == id)
-        });
+        let app = crate::apps::match_app(&self.apps, &w.app_id()).and_then(|a| self.apps.iter().position(|b| b.id == a.id));
         let mut items = Vec::new();
         if let Some(i) = app {
+            let id = self.apps[i].id.clone();
+            let pin = if self.pins.taskbar.contains(&id) { "Unpin from taskbar" } else { "Pin to taskbar" };
             items.push((self.apps[i].name.clone(), Action::Launch(i)));
+            items.push((pin.into(), Action::PinTaskbar(id)));
             items.push((String::new(), Action::Separator));
         }
         if w.minimized {
@@ -167,6 +170,10 @@ impl State {
         }
         items.push(("Close window".into(), Action::Close(s.clone())));
         items.push(("End process".into(), Action::Kill(s)));
+        self.open_menu_above_taskbar(x, items);
+    }
+
+    pub fn open_menu_above_taskbar(&mut self, x: i32, items: Vec<(String, Action)>) {
         let h = items.len() as i32 * ROW + PAD * 2;
         self.open_menu((x - MIN_W / 2, self.output_size.h - TASKBAR_H - h).into(), items);
     }
@@ -237,6 +244,14 @@ impl State {
             Action::Launch(i) => {
                 let app = self.apps[i].clone();
                 self.launch(&app);
+            }
+            Action::PinStart(id) => {
+                self.pins.toggle_start(&id);
+                self.refresh_start();
+            }
+            Action::PinTaskbar(id) => {
+                self.pins.toggle_taskbar(&id);
+                self.taskbar = None;
             }
             Action::Minimize(s) => self.minimize(&s),
             Action::Restore(s) => {

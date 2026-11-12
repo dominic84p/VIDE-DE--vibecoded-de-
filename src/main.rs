@@ -8,8 +8,10 @@ mod input;
 mod ipc;
 mod layers;
 mod menu;
+mod pins;
 mod render;
 mod screenshot;
+mod search;
 mod sni;
 mod switcher;
 mod state;
@@ -115,8 +117,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Testing aids: open the start menu or Task View at launch, and/or have the
     // compositor screenshot itself after a few seconds (lands in ~/Pictures/Screenshots).
-    if std::env::var_os("VIBE_DEBUG_START").is_some() {
+    if let Ok(q) = std::env::var("VIBE_DEBUG_START") {
         state.toggle_start();
+        // Anything but "1" is typed into search.
+        if q != "1" {
+            state.start.query = q;
+            state.refresh_start();
+        }
     }
     if std::env::var_os("VIBE_DEBUG_DESKTOPS").is_some() {
         state.toggle_desktops();

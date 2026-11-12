@@ -52,6 +52,7 @@ fn main() -> eframe::Result {
             let page = match args.iter().position(|a| a == "--page").and_then(|i| args.get(i + 1)).map(String::as_str) {
                 Some("personalization") => Page::Personalization,
                 Some("start") => Page::Start,
+                Some("gaming") => Page::Gaming,
                 Some("about") => Page::About,
                 _ => Page::Mouse,
             };

@@ -97,12 +97,6 @@ fn strip_field_codes(exec: &str) -> String {
     out.split_whitespace().filter(|w| !w.starts_with("@@")).collect::<Vec<_>>().join(" ")
 }
 
-/// Case-insensitive match on name or command.
-pub fn matches(app: &App, query: &str) -> bool {
-    let q = query.to_lowercase();
-    app.name.to_lowercase().contains(&q) || app.exec.to_lowercase().contains(&q)
-}
-
 /// Lowercase letters and digits only: "Leather Client", "leather-client" and
 /// "leather_client" all become "leatherclient".
 fn norm(s: &str) -> String {

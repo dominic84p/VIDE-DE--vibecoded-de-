@@ -70,7 +70,7 @@ the WM in `src/wm.rs` is deliberately our own.
   VIBE_STARTUP=konsole timeout 12 ./target/release/vibe-comp --nested 2> /tmp/vibe.log
   ```
 
-  `VIBE_DEBUG_START=1` opens the start menu at launch, for screenshots.
+  `VIBE_DEBUG_START=1` opens the start menu at launch, for screenshots (`=text` also types a search).
 - **Never run `--tty` from inside a running desktop session.** It competes for
   the GPU and seat. The human has to test TTY mode from a spare VT; ask them
   to, and read `~/vibe.log` afterwards.

@@ -104,6 +104,8 @@ pub struct Start {
     pub scroll: usize,
     pub power_open: bool,
     pub menu: Option<StartMenu>,
+    /// What the list shows for `query` (see search.rs).
+    pub results: Vec<crate::search::Entry>,
 }
 
 pub struct State {
@@ -147,6 +149,9 @@ pub struct State {
     pub apps: Vec<App>,
     pub taskbar: Option<Taskbar>,
     pub start: Start,
+    pub pins: crate::pins::Pins,
+    pub task_drag: Option<crate::pins::TaskDrag>,
+    pub file_index: crate::search::FileIndex,
     pub menu: Option<crate::menu::Menu>,
     /// Alt+Tab in progress.
     pub switcher: Option<crate::switcher::Switcher>,
@@ -248,6 +253,9 @@ impl State {
             apps: apps::scan(),
             taskbar: None,
             start: Start::default(),
+            pins: crate::pins::Pins::load(),
+            task_drag: None,
+            file_index: Default::default(),
             menu: None,
             switcher: None,
             snap_buf: Default::default(),
@@ -464,8 +472,9 @@ impl State {
         }
     }
 
-    pub fn launch(&self, app: &App) {
+    pub fn launch(&mut self, app: &App) {
         tracing::info!("launching {} ({})", app.name, app.exec);
+        self.pins.launched(&app.id);
         if app.terminal {
             // Konsole-style `-e`; PowerSlop runs whatever $SHELL it's given, so pass the app as one.
             self.spawn(&format!("konsole -e {}", app.exec));
@@ -498,16 +507,13 @@ impl State {
             .env("DESKTOP_SESSION", "vide-de");
     }
 
-    /// Start menu list/search. Hidden KDE apps are only left out here; they still
-    /// launch from anywhere else (Mod+Enter, taskbar, menus).
-    pub fn filtered_apps(&self) -> Vec<usize> {
-        self.apps
-            .iter()
-            .enumerate()
-            .filter(|(_, a)| !(self.config.hide_kde_apps && a.kde))
-            .filter(|(_, a)| apps::matches(a, &self.start.query))
-            .map(|(i, _)| i)
-            .collect()
+    /// Recompute the start menu's list. Hidden KDE apps are only left out here; they
+    /// still launch from anywhere else (Mod+Enter, taskbar, menus).
+    pub fn refresh_start(&mut self) {
+        self.start.results =
+            crate::search::results(&self.start.query, &self.apps, self.config.hide_kde_apps, &self.pins, &self.file_index);
+        self.start.selected = self.start.results.iter().position(|e| e.selectable()).unwrap_or(0);
+        self.start.scroll = 0;
     }
 
     /// Pick up edits from the Settings app (polled once a second).
@@ -524,6 +530,7 @@ impl State {
         tracing::info!("settings reloaded: {new:?}");
         self.config = new;
         self.start.menu = None;
+        self.refresh_start();
         self.needs_redraw = true;
     }
 
@@ -531,11 +538,11 @@ impl State {
         self.start.open = !self.start.open;
         if self.start.open {
             self.release_pointer();
+            self.file_index.refresh();
         }
         self.start.query.clear();
-        self.start.selected = 0;
-        self.start.scroll = 0;
         self.start.power_open = false;
+        self.refresh_start();
         self.needs_redraw = true;
     }
 }

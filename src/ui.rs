@@ -44,7 +44,9 @@ pub const START_W: i32 = 48;
 const SEARCH_W: i32 = 300;
 /// Right edge of the search box: where the Task View button sits.
 pub const SEARCH_END: i32 = START_W + SEARCH_W;
-const TASK_W: i32 = 48;
+pub const TASK_W: i32 = 48;
+/// Where the first taskbar button starts (after Start, search and Task View).
+pub const TASK_BUTTONS_X: i32 = SEARCH_END + TASK_W + 4;
 const CLOCK_W: i32 = 88;
 const TRAY_W: i32 = 34;
 const SHOW_DESKTOP_W: i32 = 6;
@@ -63,7 +65,8 @@ pub enum TaskbarHit {
     Brightness,
     /// An app's tray icon, by its tray id.
     TrayApp(String),
-    Window(WlSurface),
+    /// A taskbar button, by index into `TaskbarKey::items`.
+    Button(usize),
     TaskView,
     ShowDesktop,
     Nothing,
@@ -71,9 +74,13 @@ pub enum TaskbarHit {
 
 #[derive(Clone, PartialEq)]
 pub struct TaskItem {
-    pub surface: WlSurface,
+    /// Windows behind this button, oldest first. None: a pinned app that isn't running.
+    pub windows: Vec<WlSurface>,
     pub title: String,
-    pub app_id: String,
+    /// Icon name (an app_id we look up variations of).
+    pub icon: String,
+    /// Desktop-file id, when pinned.
+    pub pinned: Option<String>,
     pub focused: bool,
 }
 
@@ -159,15 +166,15 @@ pub fn draw_taskbar(
     let right_edge = w - CLOCK_W - SHOW_DESKTOP_W;
     let apps_x = right_edge - TRAY_W * 2 - TRAY_W * key.tray_apps.len() as i32;
     let tray_x = apps_x;
-    let mut x = tv_x + TASK_W + 4;
-    for item in &key.items {
+    let mut x = TASK_BUTTONS_X;
+    for (i, item) in key.items.iter().enumerate() {
         if x + TASK_W > tray_x {
             break;
         }
-        let hit = TaskbarHit::Window(item.surface.clone());
+        let hit = TaskbarHit::Button(i);
         let bg = if item.focused { TASK_ACTIVE } else if hovered(&hit) { TASK_HOVER } else { TASKBAR_BG };
         c.rect(x, 0, TASK_W, TASKBAR_H, bg);
-        match app_icon(icons, &item.app_id, 24) {
+        match app_icon(icons, &item.icon, 24) {
             Some(icon) => c.icon(&icon, x + (TASK_W - 24) / 2, (TASKBAR_H - 24) / 2),
             None => {
                 // No icon: first letter of the title in a tile.
@@ -179,11 +186,15 @@ pub fn draw_taskbar(
                 }
             }
         }
-        // Open-window underline; full width when focused.
+        // Open-window underline; full width when focused, none for a pinned app that isn't running.
         if item.focused {
             c.rect(x, TASKBAR_H - 2, TASK_W, 2, TASK_LINE);
-        } else {
+        } else if !item.windows.is_empty() {
             c.rect(x + 6, TASKBAR_H - 2, TASK_W - 12, 2, TASK_LINE);
+        }
+        // Several windows: a second, offset line, like Windows' stacked-button edge.
+        if item.windows.len() > 1 {
+            c.rect(x + TASK_W - 3, 4, 1, TASKBAR_H - 8, hex(0x3a3a3a));
         }
         hits.push((rect(x, 0, TASK_W, TASKBAR_H), hit));
         x += TASK_W;
@@ -374,11 +385,17 @@ impl PowerAction {
 }
 
 #[derive(Clone, PartialEq)]
+pub enum StartRow {
+    Header(String),
+    /// (label, icon name, dim detail text on the right)
+    Item(String, String, String),
+}
+
+#[derive(Clone, PartialEq)]
 pub struct StartKey {
     pub height: i32,
     pub query: String,
-    /// Filtered (name, icon) pairs.
-    pub items: Vec<(String, String)>,
+    pub items: Vec<StartRow>,
     pub selected: usize,
     pub scroll: usize,
     pub hover: Option<StartHit>,
@@ -420,28 +437,42 @@ pub fn draw_start_menu(font: Option<&Font>, icons: &mut Icons, key: StartKey) ->
     let lx = RAIL_W + 16;
     magnifier(&mut c, lx as f32 + 6.0, 26.0, WHITE, MENU_BG);
     if let Some(f) = font {
-        let (t, col) = if key.query.is_empty() { ("Type to search apps".to_string(), TEXT_DIM) } else { (format!("{}|", key.query), WHITE) };
+        let (t, col) = if key.query.is_empty() { ("Type to search apps, settings and files".to_string(), TEXT_DIM) } else { (format!("{}|", key.query), WHITE) };
         c.text(f, 14.0, lx + 22, 8, 36, col, &t);
     }
     c.rect(lx, 46, MENU_W - lx - 16, 1, hex(0x505050));
 
     // App list.
     let rows = start_menu_rows(h);
-    for (row, (i, (name, icon))) in key.items.iter().enumerate().skip(key.scroll).take(rows).enumerate() {
+    for (row, (i, item)) in key.items.iter().enumerate().skip(key.scroll).take(rows).enumerate() {
         let y = MENU_TOP + row as i32 * MENU_ROW;
+        let (name, icon, detail) = match item {
+            StartRow::Header(h) => {
+                if let Some(f) = font {
+                    c.text(f, 12.0, RAIL_W + 16, y + 6, MENU_ROW - 6, TEXT_DIM, h);
+                }
+                continue;
+            }
+            StartRow::Item(n, i, d) => (n, i, d),
+        };
         let hit = StartHit::Item(i);
         if i == key.selected {
             c.rect(RAIL_W, y, MENU_W - RAIL_W, MENU_ROW, TASK_ACTIVE);
         } else if key.hover.as_ref() == Some(&hit) {
             c.rect(RAIL_W, y, MENU_W - RAIL_W, MENU_ROW, TASK_HOVER);
         }
-        match icons.get(icon, 24) {
+        match icons.get(icon, 24).or_else(|| app_icon(icons, icon, 24)) {
             Some(ic) => c.icon(&ic, RAIL_W + 12, y + (MENU_ROW - 24) / 2),
             None => c.round_rect(RAIL_W + 12, y + 6, 24, 24, 4, ACCENT),
         }
         if let Some(f) = font {
-            let t = ellipsize(f, 13.0, name, MENU_W - RAIL_W - 60);
+            let dw = if detail.is_empty() { 0 } else { measure(f, 11.0, detail).min(120) + 12 };
+            let t = ellipsize(f, 13.0, name, MENU_W - RAIL_W - 60 - dw);
             c.text(f, 13.0, RAIL_W + 48, y, MENU_ROW, WHITE, &t);
+            if !detail.is_empty() {
+                let d = ellipsize(f, 11.0, detail, 120);
+                c.text(f, 11.0, MENU_W - 12 - measure(f, 11.0, &d), y, MENU_ROW, TEXT_DIM, &d);
+            }
         }
         hits.push((rect(RAIL_W, y, MENU_W - RAIL_W, MENU_ROW), hit));
     }

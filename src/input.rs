@@ -471,28 +471,86 @@ impl State {
     }
 
     fn menu_key(&mut self, k: MenuKey) {
-        let n = self.filtered_apps().len();
         match k {
             MenuKey::Close => self.toggle_start(),
-            MenuKey::Launch => {
-                if let Some(&i) = self.filtered_apps().get(self.start.selected) {
-                    let app = self.apps[i].clone();
-                    self.launch(&app);
-                    self.toggle_start();
-                }
-            }
-            MenuKey::Up => self.select(self.start.selected.saturating_sub(1)),
-            MenuKey::Down => self.select((self.start.selected + 1).min(n.saturating_sub(1))),
+            MenuKey::Launch => self.activate_start_entry(self.start.selected),
+            MenuKey::Up => self.step_selection(-1),
+            MenuKey::Down => self.step_selection(1),
             MenuKey::Backspace => {
                 self.start.query.pop();
-                self.select(0);
+                self.refresh_start();
             }
             MenuKey::Char(c) => {
                 self.start.query.push(c);
-                self.select(0);
+                self.refresh_start();
             }
             MenuKey::Ignore => {}
         }
+    }
+
+    /// Move the highlight up or down, hopping over section headers.
+    fn step_selection(&mut self, dir: i32) {
+        let n = self.start.results.len() as i32;
+        let mut i = self.start.selected as i32 + dir;
+        while i >= 0 && i < n && !self.start.results[i as usize].selectable() {
+            i += dir;
+        }
+        if i >= 0 && i < n {
+            self.select(i as usize);
+        } else if dir < 0 {
+            // At the top: show the header above too.
+            self.start.scroll = 0;
+        }
+    }
+
+    /// Run whatever a start menu row stands for.
+    fn activate_start_entry(&mut self, i: usize) {
+        use crate::search::Entry;
+        let Some(entry) = self.start.results.get(i).cloned() else { return };
+        let quote = |p: &std::path::Path| format!("'{}'", p.to_string_lossy().replace('\'', "'\\''"));
+        let exec_of = |s: &Self, id: &str| s.apps.iter().find(|a| a.id == id).map(|a| a.exec.clone());
+        match entry {
+            Entry::Header(_) => return,
+            Entry::App(idx) => {
+                let app = self.apps[idx].clone();
+                self.launch(&app);
+            }
+            Entry::Setting(_, page) => {
+                if let Some(exec) = exec_of(self, "vide-settings") {
+                    self.spawn(&format!("{exec} --page {page}"));
+                }
+            }
+            Entry::File(p) => match (p.is_dir(), exec_of(self, "file-exploder")) {
+                (true, Some(fe)) => self.spawn(&format!("{fe} {}", quote(&p))),
+                _ => self.spawn(&format!("xdg-open {}", quote(&p))),
+            },
+            Entry::Calc(v) => {
+                let mimes = ["text/plain;charset=utf-8", "text/plain", "UTF8_STRING"].map(String::from).to_vec();
+                smithay::wayland::selection::data_device::set_data_device_selection(
+                    &self.dh,
+                    &self.seat,
+                    mimes,
+                    std::sync::Arc::new(v.into_bytes()),
+                );
+            }
+            Entry::Power(a) => return self.power(a),
+        }
+        self.toggle_start();
+    }
+
+    /// Right-click on a start menu app: pin or unpin it.
+    fn open_start_item_menu(&mut self, i: usize, at: Point<i32, Logical>) {
+        let Some(crate::search::Entry::App(idx)) = self.start.results.get(i) else { return };
+        let id = self.apps[*idx].id.clone();
+        let start = if self.pins.start.contains(&id) { "Unpin from Start" } else { "Pin to Start" };
+        let bar = if self.pins.taskbar.contains(&id) { "Unpin from taskbar" } else { "Pin to taskbar" };
+        let items = vec![
+            ("Open".into(), crate::menu::Action::Launch(*idx)),
+            (String::new(), crate::menu::Action::Separator),
+            (start.into(), crate::menu::Action::PinStart(id.clone())),
+            (bar.into(), crate::menu::Action::PinTaskbar(id)),
+        ];
+        self.open_menu(at, items);
     }
 
     /// Select row `i` of the filtered list, scrolling it into view.
@@ -507,7 +565,7 @@ impl State {
     }
 
     fn scroll_menu(&mut self, rows: i32) {
-        let n = self.filtered_apps().len();
+        let n = self.start.results.len();
         let visible = ui::start_menu_rows(self.start_menu_rect().size.h);
         let max = n.saturating_sub(visible) as i32;
         self.start.scroll = (self.start.scroll as i32 + rows).clamp(0, max) as usize;
@@ -594,6 +652,7 @@ impl State {
             self.flyout_drag(pos);
             return;
         }
+        self.task_drag_motion(pos.x);
 
         let mut focus = None;
         if self.wm.grab.is_some() {
@@ -685,6 +744,12 @@ impl State {
             return;
         }
 
+        if state == ButtonState::Released && button == BTN_LEFT && self.task_drag.is_some() {
+            self.task_drag_release();
+            self.needs_redraw = true;
+            return;
+        }
+
         if state == ButtonState::Released && button == BTN_LEFT && self.tray.dragging {
             self.tray.dragging = false;
             return;
@@ -760,15 +825,13 @@ impl State {
 
         match target {
             Target::Start(hit) => {
-                if left {
+                if right {
+                    if let StartHit::Item(i) = hit {
+                        self.open_start_item_menu(i, pos.to_i32_round());
+                    }
+                } else if left {
                     match hit {
-                        StartHit::Item(i) => {
-                            if let Some(&idx) = self.filtered_apps().get(i) {
-                                let app = self.apps[idx].clone();
-                                self.launch(&app);
-                                self.toggle_start();
-                            }
-                        }
+                        StartHit::Item(i) => self.activate_start_entry(i),
                         StartHit::Power => self.start.power_open = !self.start.power_open,
                         StartHit::PowerAction(a) => self.power(a),
                         StartHit::Nothing => self.start.power_open = false,
@@ -784,7 +847,7 @@ impl State {
                                 self.toggle_start();
                             }
                         }
-                        TaskbarHit::Window(s) => self.activate_from_taskbar(&s),
+                        TaskbarHit::Button(i) => self.press_task_button(i, pos.x),
                         TaskbarHit::TaskView => self.toggle_desktops(),
                         TaskbarHit::ShowDesktop => self.show_desktop(),
                         TaskbarHit::Volume => self.toggle_flyout(crate::tray::Flyout::Volume),
@@ -799,7 +862,7 @@ impl State {
                     }
                 } else if right {
                     match hit {
-                        TaskbarHit::Window(s) => self.open_taskbar_menu(&s, pos.x as i32),
+                        TaskbarHit::Button(i) => self.open_task_button_menu(i, pos.x as i32),
                         TaskbarHit::TrayApp(id) => {
                             self.tray_menu_x = pos.x as i32;
                             if let Some(tx) = &self.sni_tx {

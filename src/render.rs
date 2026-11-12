@@ -27,7 +27,7 @@ use smithay::wayland::shell::wlr_layer::Layer;
 
 use crate::{
     state::{Hover, State},
-    ui::{self, StartKey, TaskItem, TaskbarKey, MENU_W, TASKBAR_H},
+    ui::{self, StartKey, TaskbarKey, MENU_W, TASKBAR_H},
 };
 
 pub const CLEAR: Color32F = Color32F::new(0.0, 0.1, 0.24, 1.0);
@@ -163,8 +163,7 @@ pub fn elements_with(renderer: &mut GlesRenderer, state: &mut State, cursor: boo
     // Start menu.
     if state.start.open {
         let height = (oh - TASKBAR_H).min(620);
-        let items: Vec<(String, String)> =
-            state.filtered_apps().into_iter().map(|i| (state.apps[i].name.clone(), state.apps[i].icon.clone())).collect();
+        let items = state.start_rows();
         let hover = match &state.hover {
             Hover::Start(h) => Some(h.clone()),
             _ => None,
@@ -190,19 +189,9 @@ pub fn elements_with(renderer: &mut GlesRenderer, state: &mut State, cursor: boo
     // Fullscreen apps cover it, unless the start menu is up (Super over a game shows it, like Windows).
     let fullscreen_top = state.wm.top().is_some_and(|w| w.fullscreen.is_some() && Some(w.surface()) == focused.as_ref());
     if !fullscreen_top || state.start.open {
-        let mut items: Vec<_> = state.wm.windows.iter().filter(|w| w.mapped && w.workspace == state.wm.current_workspace).collect();
-        items.sort_by_key(|w| w.id);
         let key = TaskbarKey {
             width: ow,
-            items: items
-                .iter()
-                .map(|w| TaskItem {
-                    surface: w.surface().clone(),
-                    title: w.title(),
-                    app_id: crate::apps::icon_for_app_id(&state.apps, &w.app_id()),
-                    focused: !w.minimized && Some(w.surface()) == focused.as_ref(),
-                })
-                .collect(),
+            items: state.taskbar_items(focused.as_ref()),
             time: state.clock.0.clone(),
             date: state.clock.1.clone(),
             hover: match &state.hover {

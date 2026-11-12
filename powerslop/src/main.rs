@@ -278,7 +278,7 @@ impl App {
 
     fn paste(&mut self) {
         let Some(b) = self.backend.as_mut() else { return };
-        match std::process::Command::new("wl-paste").args(["--no-newline", "--type", "text"]).output() {
+        match std::process::Command::new("wl-paste").args(["--no-newline"]).output() {
             Ok(out) if out.status.success() && !out.stdout.is_empty() => {
                 b.process_command(BackendCommand::Write(out.stdout));
             }
@@ -372,6 +372,11 @@ impl eframe::App for App {
             }
         }
 
+        // Prevent egui_term from also handling Event::Copy / Event::Paste (which can
+        // overwrite the clipboard with a stale selection or double-paste).
+        ctx.input_mut(|i| {
+            i.events.retain(|ev| !matches!(ev, egui::Event::Copy | egui::Event::Paste(_)));
+        });
         let ctrl_shift = |k| ctx.input_mut(|i| i.consume_key(Modifiers::CTRL | Modifiers::SHIFT, k));
         let ctrl = |k| ctx.input_mut(|i| i.consume_key(Modifiers::CTRL, k));
         if ctrl_shift(Key::C) || ctrl(Key::Insert) {
@@ -410,7 +415,7 @@ impl eframe::App for App {
             let right_click = ui.input(|i| {
                 i.pointer.button_clicked(PointerButton::Secondary) && i.pointer.interact_pos().is_some_and(|p: Pos2| term_rect.contains(p))
             });
-            if right_click && !self.copy(ctx) {
+            if right_click {
                 self.paste();
             }
 

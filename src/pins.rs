@@ -263,7 +263,7 @@ impl State {
     /// Pointer moved while a pinned button is held: past a few pixels, drag it along.
     pub fn task_drag_motion(&mut self, x: f64) {
         let Some(d) = self.task_drag.as_mut() else { return };
-        if !d.moved && (x - d.start_x).abs() < 8.0 {
+        if !d.moved && (x - d.start_x).abs() < 12.0 {
             return;
         }
         d.moved = true;

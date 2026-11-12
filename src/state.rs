@@ -386,6 +386,9 @@ impl State {
             None => FocusTarget::Wayland(s),
         });
         let kb = self.keyboard.clone();
+        if kb.current_focus() == target && target.is_some() {
+            kb.set_focus(self, None, serial);
+        }
         kb.set_focus(self, target, serial);
         self.needs_redraw = true;
     }
@@ -471,24 +474,21 @@ impl State {
     pub fn run_startup(&mut self) {
         // D-Bus starts portals and the keyring's password prompt on demand; they need
         // to know our display, or they can't show file pickers and dialogs.
-        // Also propagate to systemd --user when available so PipeWire/portals see it.
+        // Run sequentially: update D-Bus/systemd env -> trigger pam_kwallet_init so the
+        // SDDM PAM ksecretd unlocks KWallet -> only spawn ksecretd if nothing owns
+        // org.freedesktop.secrets (e.g. raw VT login without SDDM).
         self.spawn(
             "dbus-update-activation-environment --systemd WAYLAND_DISPLAY DISPLAY XDG_CURRENT_DESKTOP \
              XDG_SESSION_TYPE XDG_SESSION_DESKTOP DESKTOP_SESSION QT_QPA_PLATFORM 2>/dev/null \
              || dbus-update-activation-environment WAYLAND_DISPLAY DISPLAY XDG_CURRENT_DESKTOP \
-             XDG_SESSION_TYPE XDG_SESSION_DESKTOP DESKTOP_SESSION QT_QPA_PLATFORM",
-        );
-        // Unlock KWallet automatically via PAM credentials when logged in through SDDM/PAM.
-        self.spawn(
-            "if [ -n \"$PAM_KWALLET5_LOGIN\" ]; then \
-             for k in /usr/lib/pam_kwallet_init /usr/libexec/pam_kwallet_init; do \
-             [ -x \"$k\" ] && exec \"$k\"; done; fi",
-        );
-        // Keyring: KWallet's ksecretd provides the Secret Service that browsers, Electron
-        // apps and libsecret store passwords in. Nothing D-Bus-activates it, so start it
-        // ourselves unless something on this bus already owns the name.
-        self.spawn(
-            "dbus-send --session --print-reply --dest=org.freedesktop.DBus /org/freedesktop/DBus \
+             XDG_SESSION_TYPE XDG_SESSION_DESKTOP DESKTOP_SESSION QT_QPA_PLATFORM; \
+             if [ -n \"$PAM_KWALLET5_LOGIN\" ]; then \
+               for k in /usr/lib/pam_kwallet_init /usr/libexec/pam_kwallet_init; do \
+                 [ -x \"$k\" ] && \"$k\" && break; \
+               done; \
+               sleep 0.4; \
+             fi; \
+             dbus-send --session --print-reply --dest=org.freedesktop.DBus /org/freedesktop/DBus \
              org.freedesktop.DBus.NameHasOwner string:org.freedesktop.secrets | grep -q true \
              || exec ksecretd",
         );

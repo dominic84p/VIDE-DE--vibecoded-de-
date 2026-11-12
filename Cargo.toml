@@ -1,0 +1,32 @@
+[package]
+name = "vibe-comp"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+chrono = { version = "0.4.45", default-features = false, features = ["clock"] }
+fontdue = "0.9.5"
+png = "0.18.1"
+resvg = { version = "0.50.0", default-features = false }
+smithay = { version = "0.7", default-features = false, features = ["backend_winit", "renderer_gl", "wayland_frontend", "desktop", "xwayland"] }
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+xcursor = "0.3.11"
+
+[features]
+default = []
+# Real TTY backend. Needs libseat (the `seatd` package on Arch).
+tty = [
+    "smithay/backend_drm",
+    "smithay/backend_gbm",
+    "smithay/backend_libinput",
+    "smithay/backend_udev",
+    "smithay/backend_session_libseat",
+]
+
+# Our CPU-painted UI is unusably slow unoptimized; keep debug builds snappy.
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3

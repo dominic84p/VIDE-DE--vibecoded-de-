@@ -1,0 +1,225 @@
+//! Real hardware backend: DRM/KMS for display, libinput for input, libseat
+//! (via logind) for device access and VT switching.
+//!
+//! Single GPU, single monitor for now: the first connected connector wins.
+
+use std::{cell::RefCell, rc::Rc};
+
+use smithay::{
+    backend::{
+        allocator::{
+            gbm::{GbmAllocator, GbmBufferFlags, GbmDevice},
+            Fourcc,
+        },
+        drm::{
+            compositor::FrameFlags,
+            exporter::gbm::GbmFramebufferExporter,
+            output::{DrmOutput, DrmOutputManager, DrmOutputRenderElements},
+            DrmDevice, DrmDeviceFd, DrmEvent,
+        },
+        egl::{EGLContext, EGLDisplay},
+        libinput::{LibinputInputBackend, LibinputSessionInterface},
+        renderer::gles::GlesRenderer,
+        session::{libseat::LibSeatSession, Event as SessionEvent, Session},
+        udev::{all_gpus, primary_gpu},
+    },
+    output::{Mode as WlMode, Output, PhysicalProperties, Subpixel},
+    reexports::{
+        calloop::EventLoop,
+        drm::control::{connector, Device as _, ModeTypeFlags},
+        input::Libinput,
+        rustix::fs::OFlags,
+    },
+    utils::DeviceFd,
+};
+
+use crate::{
+    render::{self, Elem},
+    state::State,
+};
+
+type Out = DrmOutput<GbmAllocator<DrmDeviceFd>, GbmFramebufferExporter<DrmDeviceFd>, (), DrmDeviceFd>;
+type Manager = DrmOutputManager<GbmAllocator<DrmDeviceFd>, GbmFramebufferExporter<DrmDeviceFd>, (), DrmDeviceFd>;
+
+struct Tty {
+    session: LibSeatSession,
+    libinput: Libinput,
+    manager: Manager,
+    output: Out,
+    renderer: GlesRenderer,
+    /// A page flip is in flight; don't queue another until its vblank.
+    frame_pending: bool,
+    active: bool,
+}
+
+pub fn run(event_loop: &mut EventLoop<'static, State>, state: &mut State) -> Result<(), Box<dyn std::error::Error>> {
+    state.tty = true;
+
+    let (mut session, session_notifier) = LibSeatSession::new()?;
+    let seat = session.seat();
+
+    // GPU
+    let gpu = primary_gpu(&seat)?
+        .or_else(|| all_gpus(&seat).ok()?.into_iter().next())
+        .ok_or("no GPU found")?;
+    tracing::info!("using GPU {}", gpu.display());
+    let fd = session.open(&gpu, OFlags::RDWR | OFlags::CLOEXEC | OFlags::NOCTTY | OFlags::NONBLOCK)?;
+    let fd = DrmDeviceFd::new(DeviceFd::from(fd));
+    let (drm, drm_notifier) = DrmDevice::new(fd.clone(), true)?;
+    let gbm = GbmDevice::new(fd.clone())?;
+
+    let egl = unsafe { EGLDisplay::new(gbm.clone())? };
+    let ctx = EGLContext::new(&egl)?;
+    let render_formats = ctx.dmabuf_render_formats().clone();
+    let mut renderer = unsafe { GlesRenderer::new(ctx)? };
+
+    let mut manager: Manager = DrmOutputManager::new(
+        drm,
+        GbmAllocator::new(gbm.clone(), GbmBufferFlags::RENDERING | GbmBufferFlags::SCANOUT),
+        GbmFramebufferExporter::new(gbm.clone(), None),
+        Some(gbm),
+        [Fourcc::Argb8888, Fourcc::Xrgb8888],
+        render_formats,
+    );
+
+    // Monitor
+    let res = fd.resource_handles()?;
+    let conn = res
+        .connectors()
+        .iter()
+        .filter_map(|c| fd.get_connector(*c, false).ok())
+        .find(|c| c.state() == connector::State::Connected && !c.modes().is_empty())
+        .ok_or("no connected monitor")?;
+    let mode = conn
+        .modes()
+        .iter()
+        .find(|m| m.mode_type().contains(ModeTypeFlags::PREFERRED))
+        .copied()
+        .unwrap_or(conn.modes()[0]);
+    let crtc = conn
+        .encoders()
+        .iter()
+        .filter_map(|e| fd.get_encoder(*e).ok())
+        .flat_map(|enc| res.filter_crtcs(enc.possible_crtcs()))
+        .next()
+        .ok_or("no CRTC for monitor")?;
+    let name = format!("{:?}-{}", conn.interface(), conn.interface_id());
+    tracing::info!("output {name}: {}x{}@{}", mode.size().0, mode.size().1, mode.vrefresh());
+
+    let (mm_w, mm_h) = conn.size().unwrap_or((0, 0));
+    let output = Output::new(
+        name,
+        PhysicalProperties {
+            size: (mm_w as i32, mm_h as i32).into(),
+            subpixel: Subpixel::Unknown,
+            make: "unknown".into(),
+            model: "unknown".into(),
+        },
+    );
+    let wl_mode = WlMode::from(mode);
+    output.change_current_state(Some(wl_mode), None, None, Some((0, 0).into()));
+    output.set_preferred(wl_mode);
+    let _global = output.create_global::<State>(&state.dh);
+    state.output_size = wl_mode.size.to_logical(1);
+    state.pointer_loc = (state.output_size.w as f64 / 2.0, state.output_size.h as f64 / 2.0).into();
+
+    let drm_output = manager
+        .initialize_output::<_, Elem>(
+            crtc,
+            mode,
+            &[conn.handle()],
+            &output,
+            None,
+            &mut renderer,
+            &DrmOutputRenderElements::default(),
+        )
+        .map_err(|e| format!("initialize_output: {e:?}"))?;
+
+    // Input
+    let mut libinput = Libinput::new_with_udev(LibinputSessionInterface::from(session.clone()));
+    libinput.udev_assign_seat(&seat).map_err(|_| "libinput: failed to assign seat")?;
+    event_loop
+        .handle()
+        .insert_source(LibinputInputBackend::new(libinput.clone()), |event, _, state| state.handle_input(event))?;
+
+    let tty = Rc::new(RefCell::new(Tty {
+        session,
+        libinput,
+        manager,
+        output: drm_output,
+        renderer,
+        frame_pending: false,
+        active: true,
+    }));
+
+    // Page flip finished: we may draw the next frame.
+    let t = tty.clone();
+    event_loop.handle().insert_source(drm_notifier, move |event, _, state| match event {
+        DrmEvent::VBlank(_) => {
+            let mut t = t.borrow_mut();
+            if let Err(e) = t.output.frame_submitted() {
+                tracing::warn!("frame_submitted: {e:?}");
+            }
+            t.frame_pending = false;
+            render::send_frames(state, state.start_time.elapsed().as_millis() as u32);
+        }
+        DrmEvent::Error(e) => tracing::error!("drm: {e}"),
+    })?;
+
+    // VT switched away from / back to us.
+    let t = tty.clone();
+    event_loop.handle().insert_source(session_notifier, move |event, _, state| {
+        let mut t = t.borrow_mut();
+        match event {
+            SessionEvent::PauseSession => {
+                tracing::info!("session paused");
+                t.active = false;
+                t.libinput.suspend();
+                t.manager.pause();
+            }
+            SessionEvent::ActivateSession => {
+                tracing::info!("session resumed");
+                if t.libinput.resume().is_err() {
+                    tracing::error!("libinput resume failed");
+                }
+                if let Err(e) = t.manager.activate(false) {
+                    tracing::error!("drm activate: {e}");
+                }
+                t.active = true;
+                t.frame_pending = false;
+                state.needs_redraw = true;
+            }
+        }
+    })?;
+
+    while state.running {
+        event_loop.dispatch(None, state)?;
+
+        let mut t = tty.borrow_mut();
+        if let Some(vt) = state.pending_vt.take() {
+            if let Err(e) = t.session.change_vt(vt) {
+                tracing::warn!("change_vt({vt}): {e}");
+            }
+        }
+
+        if state.needs_redraw && t.active && !t.frame_pending {
+            state.needs_redraw = false;
+            let t = &mut *t;
+            let elements = render::elements(&mut t.renderer, state);
+            // Composite everything, cursor included. Hardware cursor/overlay planes are flaky on NVIDIA.
+            let flags = FrameFlags::ALLOW_PRIMARY_PLANE_SCANOUT;
+            match t.output.render_frame(&mut t.renderer, &elements, render::CLEAR, flags) {
+                Ok(res) if !res.is_empty => match t.output.queue_frame(()) {
+                    Ok(()) => t.frame_pending = true,
+                    Err(e) => tracing::warn!("queue_frame: {e:?}"),
+                },
+                Ok(_) => render::send_frames(state, state.start_time.elapsed().as_millis() as u32),
+                Err(e) => tracing::warn!("render_frame: {e:?}"),
+            }
+        }
+        drop(t);
+
+        state.dh.flush_clients()?;
+    }
+    Ok(())
+}

@@ -1,0 +1,9 @@
+[package]
+name = "microsoft-store"
+version = "0.1.0"
+edition = "2024"
+description = "Microsoft Store - Software Center for VIDE-DE"
+
+[dependencies]
+eframe = "0.37"
+image = { version = "0.25", default-features = false, features = ["png"] }

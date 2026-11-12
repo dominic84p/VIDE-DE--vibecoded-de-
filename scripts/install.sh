@@ -14,6 +14,7 @@ BINS=(
   file-exploder
   task-mangler
   snip-and-sketchy
+  microsoft-store
 )
 
 # Build as the normal user before elevating so target/ stays user-owned.

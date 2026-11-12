@@ -2573,6 +2573,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "microsoft-store"
+version = "0.1.0"
+dependencies = [
+ "eframe 0.37.0",
+ "image",
+]
+
+[[package]]
 name = "mime"
 version = "0.3.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"

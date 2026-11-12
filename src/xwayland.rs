@@ -83,9 +83,10 @@ impl State {
         let ssd = !window.is_decorated() && !window.is_popup();
         let g = window.geometry();
         let pos = (g.loc != Point::from((0, 0))).then_some(g.loc);
-        // Apps without an installed .desktop file (Minecraft) carry their icon on the window.
+        // Apps without an installed .desktop file (Minecraft, terminal-launched apps) carry their icon on the window.
         if let (Some(display), Some(tx)) = (self.xdisplay, self.x11_icon_tx.clone()) {
-            fetch_window_icon(display, window.window_id(), window.class(), tx);
+            let class = if window.class().is_empty() { window.instance() } else { window.class() };
+            fetch_window_icon(display, window.window_id(), class, tx);
         }
         self.wm.add(WinKind::X11(window), surface.clone(), pos, ssd);
         if let Some(w) = self.wm.find(&surface) {

@@ -18,7 +18,13 @@ pub struct Icons {
     custom: HashMap<String, Icon>,
     /// Icon name -> best file for it, across the installed themes.
     index: HashMap<String, PathBuf>,
+    /// Normalized (alphanumeric lowercase) icon name -> best file, for case/punctuation mismatches.
+    norm_index: HashMap<String, PathBuf>,
     cache: HashMap<(String, u32), Option<Rc<Icon>>>,
+}
+
+fn norm_key(s: &str) -> String {
+    s.chars().filter(|c| c.is_alphanumeric()).flat_map(char::to_lowercase).collect()
 }
 
 impl Icons {
@@ -48,7 +54,29 @@ impl Icons {
                 themes.push(t.into());
             }
         }
-        let bases: Vec<PathBuf> = data_dirs().into_iter().map(|d| d.join("icons")).filter(|p| p.is_dir()).collect();
+        let mut bases: Vec<PathBuf> = data_dirs().into_iter().map(|d| d.join("icons")).filter(|p| p.is_dir()).collect();
+        if let Ok(home) = std::env::var("HOME") {
+            let legacy = PathBuf::from(format!("{home}/.icons"));
+            if legacy.is_dir() && !bases.contains(&legacy) {
+                bases.push(legacy);
+            }
+        }
+        // Include any other installed themes after our preferred list so apps using
+        // custom or fallback themes still resolve.
+        for base in &bases {
+            if let Ok(entries) = std::fs::read_dir(base) {
+                for e in entries.flatten() {
+                    let p = e.path();
+                    if p.is_dir() {
+                        if let Some(name) = p.file_name().and_then(|s| s.to_str()) {
+                            if !themes.iter().any(|x| x == name) {
+                                themes.push(name.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
         // Earlier themes win; within a theme, the best-scoring file wins.
         let mut index: HashMap<String, (usize, i32, PathBuf)> = HashMap::new();
@@ -68,13 +96,34 @@ impl Icons {
             }
         }
         let rank = themes.len();
-        walk(Path::new("/usr/share/pixmaps"), 1, &mut |path| {
-            if let Some(name) = path.file_stem().and_then(|s| s.to_str()) {
-                index.entry(name.to_string()).or_insert((rank, 0, path.to_path_buf()));
-            }
-        });
+        for pix in data_dirs().into_iter().map(|d| d.join("pixmaps")).chain(std::iter::once(PathBuf::from("/usr/share/pixmaps"))) {
+            walk(&pix, 1, &mut |path| {
+                if let Some(name) = path.file_stem().and_then(|s| s.to_str()) {
+                    index.entry(name.to_string()).or_insert((rank, 0, path.to_path_buf()));
+                }
+            });
+        }
         tracing::info!("indexed {} icons from {:?}", index.len(), themes);
-        Self { custom: HashMap::new(), index: index.into_iter().map(|(k, (_, _, p))| (k, p)).collect(), cache: HashMap::new() }
+        let mut norm_index: HashMap<String, (usize, i32, PathBuf)> = HashMap::new();
+        for (name, (r, sc, p)) in &index {
+            let k = norm_key(name);
+            if k.is_empty() {
+                continue;
+            }
+            let better = match norm_index.get(&k) {
+                None => true,
+                Some((nr, nsc, _)) => *r < *nr || (*r == *nr && *sc > *nsc),
+            };
+            if better {
+                norm_index.insert(k, (*r, *sc, p.clone()));
+            }
+        }
+        Self {
+            custom: HashMap::new(),
+            index: index.into_iter().map(|(k, (_, _, p))| (k, p)).collect(),
+            norm_index: norm_index.into_iter().map(|(k, (_, _, p))| (k, p)).collect(),
+            cache: HashMap::new(),
+        }
     }
 
     /// Remember an icon a window supplied itself; used when nothing installed matches.
@@ -91,10 +140,18 @@ impl Icons {
         let icon = self
             .find(name)
             .and_then(|p| load(&p, size))
-            .or_else(|| self.custom.get(name).map(|i| scale(i, size)))
+            .or_else(|| self.find_custom(name).map(|i| scale(i, size)))
             .map(Rc::new);
         self.cache.insert(key, icon.clone());
         icon
+    }
+
+    fn find_custom(&self, name: &str) -> Option<&Icon> {
+        if let Some(i) = self.custom.get(name) {
+            return Some(i);
+        }
+        let want = norm_key(name);
+        (!want.is_empty()).then(|| self.custom.iter().find(|(k, _)| norm_key(k) == want).map(|(_, v)| v)).flatten()
     }
 
     fn find(&self, name: &str) -> Option<PathBuf> {
@@ -105,7 +162,10 @@ impl Icons {
         if p.is_absolute() {
             return p.exists().then(|| p.to_path_buf());
         }
-        self.index.get(name).cloned()
+        self.index.get(name).cloned().or_else(|| {
+            let k = norm_key(name);
+            (!k.is_empty()).then(|| self.norm_index.get(&k).cloned()).flatten()
+        })
     }
 }
 
@@ -115,7 +175,7 @@ fn walk(dir: &Path, depth: u32, f: &mut dyn FnMut(&Path)) {
     for e in entries.flatten() {
         let path = e.path();
         if path.is_dir() {
-            if depth < 3 {
+            if depth < 4 {
                 walk(&path, depth + 1, f);
             }
         } else if matches!(path.extension().and_then(|x| x.to_str()), Some("png" | "svg")) {

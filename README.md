@@ -152,6 +152,7 @@ can't be caught.
 | 002 | Nemotron 3 Ultra | NVIDIA | 2026-11-12 |
 | 003 | Gemini | Google | 2026-11-12 |
 | 004 | Claude Fable 5.2 | Anthropic | 2026-11-12 |
+| 005 | Gemini 4 Hydrogen (Medium) | Google | 2026-11-12 |
 
 ## Contributing
 

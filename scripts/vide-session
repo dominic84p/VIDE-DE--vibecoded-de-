@@ -18,7 +18,14 @@ export PATH="$HOME/.local/bin:$PATH:/usr/local/bin:/usr/bin"
 LOG="$HOME/vibe.log"
 
 if [ -z "$DBUS_SESSION_BUS_ADDRESS" ]; then
-    exec dbus-run-session -- vibe-comp --tty 2> "$LOG"
+    # Prefer the user's systemd session bus when present so PipeWire/WirePlumber
+    # and portals share the same bus; fall back to dbus-run-session otherwise.
+    if [ -n "$XDG_RUNTIME_DIR" ] && [ -S "$XDG_RUNTIME_DIR/bus" ]; then
+        export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
+        exec vibe-comp --tty 2> "$LOG"
+    else
+        exec dbus-run-session -- vibe-comp --tty 2> "$LOG"
+    fi
 else
     exec vibe-comp --tty 2> "$LOG"
 fi

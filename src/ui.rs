@@ -169,14 +169,18 @@ pub fn draw_taskbar(
     }
     hits.push((rect(sx, 0, SEARCH_W, TASKBAR_H), TaskbarHit::Search));
 
-    // Task View: one button for virtual desktops (two stacked windows, current desktop number).
+    // Task View: Windows 10 overlapping desktop frames with the current workspace badge.
     let tv_x = SEARCH_END;
     let tv_bg = if key.taskview_open { TASK_ACTIVE } else if hovered(&TaskbarHit::TaskView) { TASK_HOVER } else { TASKBAR_BG };
     c.rect(tv_x, 0, TASK_W, TASKBAR_H, tv_bg);
     let (cx, cy) = (tv_x + TASK_W / 2, TASKBAR_H / 2);
-    c.outline(cx - 9, cy - 5, 14, 11, WHITE);
-    c.rect(cx - 5, cy - 9, 14, 1, WHITE);
-    c.rect(cx + 8, cy - 9, 1, 11, WHITE);
+    crate::tray::glyph(
+        &mut c,
+        r##"<rect x="2.5" y="5.5" width="11.5" height="9" rx="0.6" fill="none" stroke="#fff" stroke-width="1.2"/><path d="M5.5 5.5V3.5h12v9h-2" fill="none" stroke="#fff" stroke-width="1.2" stroke-linejoin="round"/><path d="M5 17h10" stroke="#fff" stroke-width="1.2" stroke-linecap="round"/>"##.into(),
+        cx as f32,
+        cy as f32,
+        20,
+    );
     if let Some(f) = font {
         let n = (key.current_workspace + 1).to_string();
         let tw = measure(f, 10.0, &n);
@@ -299,10 +303,12 @@ pub fn app_icon(icons: &mut Icons, app_id: &str, size: u32) -> Option<std::rc::R
         .find_map(|n| icons.get(n, size))
 }
 
-fn magnifier(c: &mut Canvas, x: f32, y: f32, fg: Rgba, bg: Rgba) {
-    c.circle(x - 1.5, y - 1.5, 6.0, fg);
-    c.circle(x - 1.5, y - 1.5, 4.6, bg);
-    c.line(x + 2.5, y + 2.5, x + 7.0, y + 7.0, 1.6, fg);
+fn magnifier(c: &mut Canvas, x: f32, y: f32, fg: Rgba, _bg: Rgba) {
+    let col = format!("#{:02x}{:02x}{:02x}", fg.0, fg.1, fg.2);
+    let svg = format!(
+        r##"<circle cx="8.5" cy="8.5" r="5.2" fill="none" stroke="{col}" stroke-width="1.35"/><path d="M12.3 12.3l4.7 4.7" stroke="{col}" stroke-width="1.45" stroke-linecap="round"/>"##
+    );
+    crate::tray::glyph(c, svg, x, y, 18);
 }
 
 fn rect(x: i32, y: i32, w: i32, h: i32) -> Rectangle<i32, Logical> {
@@ -586,12 +592,12 @@ pub fn draw_start_menu(font: Option<&Font>, icons: &mut Icons, key: StartKey) ->
         }
         let (gx, gy) = (RAIL_W as f32 / 2.0, y as f32 + 20.0);
         let body = match item {
-            Some(RailItem::Expand) => r##"<path d="M3 5.5h14M3 10h14M3 14.5h14" stroke="#fff" stroke-width="1.3" stroke-linecap="round"/>"##,
-            Some(RailItem::Account) => r##"<circle cx="10" cy="10" r="8" fill="none" stroke="#fff" stroke-width="1.2"/><circle cx="10" cy="8" r="2.8" fill="none" stroke="#fff" stroke-width="1.2"/><path d="M4.8 15.5c1.2-2.4 3-3.5 5.2-3.5s4 1.1 5.2 3.5" fill="none" stroke="#fff" stroke-width="1.2"/>"##,
-            Some(RailItem::Documents) => r##"<path d="M5 2.5h6.5L15 6v11.5H5zM11.5 2.5V6H15" fill="none" stroke="#fff" stroke-width="1.2" stroke-linejoin="round"/>"##,
-            Some(RailItem::Pictures) => r##"<rect x="2.5" y="4" width="15" height="12" fill="none" stroke="#fff" stroke-width="1.2"/><path d="M2.5 13.5l4-4 3.5 3.5 2.5-2.5 5 5" fill="none" stroke="#fff" stroke-width="1.2" stroke-linejoin="round"/><circle cx="13" cy="7.5" r="1.2" fill="#fff"/>"##,
-            Some(RailItem::Settings) => r##"<circle cx="10" cy="10" r="2.6" fill="none" stroke="#fff" stroke-width="1.2"/><circle cx="10" cy="10" r="5.4" fill="none" stroke="#fff" stroke-width="1.2"/><path d="M10 2.5v2.2M10 15.3v2.2M2.5 10h2.2M15.3 10h2.2M4.7 4.7l1.6 1.6M13.7 13.7l1.6 1.6M4.7 15.3l1.6-1.6M13.7 6.3l1.6-1.6" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/>"##,
-            None => r##"<path d="M6.2 5.2a6.5 6.5 0 1 0 7.6 0" fill="none" stroke="#fff" stroke-width="1.3" stroke-linecap="round"/><path d="M10 2.5v7" stroke="#fff" stroke-width="1.3" stroke-linecap="round"/>"##,
+            Some(RailItem::Expand) => r##"<path d="M3 5.5h14M3 10h14M3 14.5h14" stroke="#fff" stroke-width="1.25" stroke-linecap="round"/>"##,
+            Some(RailItem::Account) => r##"<circle cx="10" cy="10" r="7.8" fill="none" stroke="#fff" stroke-width="1.2"/><circle cx="10" cy="7.8" r="2.6" fill="none" stroke="#fff" stroke-width="1.2"/><path d="M5 15.3c1.2-2.2 2.9-3.3 5-3.3s3.8 1.1 5 3.3" fill="none" stroke="#fff" stroke-width="1.2" stroke-linecap="round"/>"##,
+            Some(RailItem::Documents) => r##"<path d="M4.5 2.5h7l4 4v11h-11zM11.5 2.5v4h4M7 9.5h6M7 12.5h6M7 15.5h4" fill="none" stroke="#fff" stroke-width="1.15" stroke-linejoin="round" stroke-linecap="round"/>"##,
+            Some(RailItem::Pictures) => r##"<rect x="2.5" y="4" width="15" height="12" rx="0.6" fill="none" stroke="#fff" stroke-width="1.2"/><path d="M2.8 13.5l3.8-3.8 3.2 3.2 2.4-2.4 5 5" fill="none" stroke="#fff" stroke-width="1.2" stroke-linejoin="round"/><circle cx="13.2" cy="7.4" r="1.2" fill="#fff"/>"##,
+            Some(RailItem::Settings) => r##"<circle cx="10" cy="10" r="2.7" fill="none" stroke="#fff" stroke-width="1.2"/><path d="M8.7 2.5h2.6l.4 1.8a5.7 5.7 0 0 1 1.4.6l1.5-1 1.8 1.8-1 1.5c.25.45.45.92.6 1.4l1.8.4v2.6l-1.8.4a5.7 5.7 0 0 1-.6 1.4l1 1.5-1.8 1.8-1.5-1a5.7 5.7 0 0 1-1.4.6l-.4 1.8H8.7l-.4-1.8a5.7 5.7 0 0 1-1.4-.6l-1.5 1-1.8-1.8 1-1.5a5.7 5.7 0 0 1-.6-1.4l-1.8-.4V8.7l1.8-.4c.15-.48.35-.95.6-1.4l-1-1.5 1.8-1.8 1.5 1c.45-.25.92-.45 1.4-.6z" fill="none" stroke="#fff" stroke-width="1.15" stroke-linejoin="round"/>"##,
+            None => r##"<path d="M6.2 5.2a6.4 6.4 0 1 0 7.6 0" fill="none" stroke="#fff" stroke-width="1.3" stroke-linecap="round"/><path d="M10 2.5v6.8" stroke="#fff" stroke-width="1.3" stroke-linecap="round"/>"##,
         };
         crate::tray::glyph(&mut c, body.into(), gx, gy, 18);
         if key.rail_open {

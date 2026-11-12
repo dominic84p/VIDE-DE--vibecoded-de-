@@ -900,10 +900,10 @@ fn wifi_signal(c: &mut Canvas, x: f32, y: f32, signal: u32, secure: bool) {
 fn ethernet_glyph(c: &mut Canvas, x: f32, y: f32) {
     glyph(
         c,
-        r##"<rect x="2.5" y="3.5" width="15" height="10" rx="0.5" fill="none" stroke="#fff" stroke-width="1.3"/><path d="M7 17.5h6M10 13.5v4" stroke="#fff" stroke-width="1.3" stroke-linecap="round"/>"##.into(),
+        r##"<rect x="2" y="3.5" width="11.5" height="8.5" rx="0.6" fill="none" stroke="#fff" stroke-width="1.2"/><path d="M5 15h5.5M7.75 12v3" stroke="#fff" stroke-width="1.2" stroke-linecap="round"/><path d="M15.5 3v10.5M14 5.5h3v3.5h-3z" fill="none" stroke="#fff" stroke-width="1.15" stroke-linejoin="round"/><path d="M14.5 15.5h2" stroke="#fff" stroke-width="1.2" stroke-linecap="round"/>"##.into(),
         x,
         y,
-        24,
+        20,
     );
 }
 
@@ -930,7 +930,7 @@ pub fn hotspot(c: &mut Canvas, x: f32, y: f32) {
 pub fn bluetooth(c: &mut Canvas, x: f32, y: f32) {
     glyph(
         c,
-        r##"<path d="M8 2.5v15l6-4.2-10-6.6M14 9.3l-6 4.2" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>"##.into(),
+        r##"<path d="M10 2.5v15l4.6-3.7-9.2-7.6M10 17.5l4.6-3.7-9.2-7.6M10 2.5l4.6 3.7-4.6 3.8" fill="none" stroke="#fff" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>"##.into(),
         x,
         y,
         20,

@@ -131,7 +131,7 @@ fn bind(super_mod: bool, mods: &ModifiersState, sym: Keysym) -> Option<Action> {
     if sym == Keysym::Print {
         return Some(Action::Screenshot { region: mods.shift });
     }
-    if mods.logo && mods.shift && sym == Keysym::s {
+    if mods.logo && mods.shift && matches!(sym, Keysym::s | Keysym::S) {
         return Some(Action::Screenshot { region: true });
     }
     if !(if super_mod { mods.logo } else { mods.alt }) {
@@ -372,7 +372,7 @@ impl State {
                 return if pressed { FilterResult::Intercept(a) } else { FilterResult::Forward };
             }
             if state.snip.is_some() && modified == Keysym::Escape {
-                return FilterResult::Intercept(if pressed { Action::CancelSnip } else { Action::CloseMenu });
+                return FilterResult::Intercept(if pressed { Action::CancelSnip } else { Action::Menu(MenuKey::Ignore) });
             }
             if state.tray.password.is_some() && state.tray.flyout == Some(crate::tray::Flyout::Network) {
                 let k = if pressed { menu_key(modified, modified.key_char()) } else { MenuKey::Ignore };

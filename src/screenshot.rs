@@ -70,11 +70,9 @@ impl Snip {
 }
 
 impl State {
+    /// Start, the search pane, flyouts and menus stay open, as on Windows, so they
+    /// can be captured.
     pub fn start_screenshot(&mut self, region: bool) {
-        self.close_menu();
-        if self.start.open {
-            self.toggle_start();
-        }
         if region {
             self.snip = Some(Snip::default());
             self.cursor_status = CursorImageStatus::Named(CursorIcon::Crosshair);

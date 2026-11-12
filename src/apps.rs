@@ -22,26 +22,37 @@ pub fn scan() -> Vec<App> {
     let mut seen = HashSet::new();
     let mut apps = Vec::new();
     for dir in dirs {
-        let Ok(entries) = std::fs::read_dir(&dir) else { continue };
-        for e in entries.flatten() {
-            let path = e.path();
-            if path.extension().is_none_or(|x| x != "desktop") {
-                continue;
-            }
-            let id = path.file_name().unwrap().to_string_lossy().into_owned();
-            if !seen.insert(id) {
-                continue;
-            }
-            if let Some(mut app) = std::fs::read_to_string(&path).ok().and_then(|s| parse(&s)) {
-                app.id = path.file_stem().unwrap().to_string_lossy().into_owned();
-                app.kde |= app.id.starts_with("org.kde.");
-                apps.push(app);
-            }
-        }
+        scan_dir(&dir, 0, &dir, &mut seen, &mut apps);
     }
     apps.sort_by_key(|a| a.name.to_lowercase());
     tracing::info!("found {} apps", apps.len());
     apps
+}
+
+fn scan_dir(dir: &PathBuf, depth: u32, root: &PathBuf, seen: &mut HashSet<String>, apps: &mut Vec<App>) {
+    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    for e in entries.flatten() {
+        let path = e.path();
+        if path.is_dir() {
+            if depth < 2 {
+                scan_dir(&path, depth + 1, root, seen, apps);
+            }
+            continue;
+        }
+        if path.extension().is_none_or(|x| x != "desktop") {
+            continue;
+        }
+        let rel = path.strip_prefix(root).unwrap_or(&path);
+        let id = rel.to_string_lossy().replace('/', "-");
+        if !seen.insert(id) {
+            continue;
+        }
+        if let Some(mut app) = std::fs::read_to_string(&path).ok().and_then(|s| parse(&s)) {
+            app.id = rel.with_extension("").to_string_lossy().replace('/', "-");
+            app.kde |= app.id.starts_with("org.kde.");
+            apps.push(app);
+        }
+    }
 }
 
 fn parse(text: &str) -> Option<App> {
@@ -111,9 +122,16 @@ pub fn match_app<'a>(apps: &'a [App], app_id: &str) -> Option<&'a App> {
     let want = norm(app_id);
     let last = |id: &str| norm(id.rsplit('.').next().unwrap_or(id));
     let exe = |exec: &str| {
-        let first = exec.trim_start_matches('"').split(['"', ' ']).next().unwrap_or("");
-        let base = first.rsplit('/').next().unwrap_or(first);
-        norm(base.split('.').next().unwrap_or(base))
+        let mut parts = exec.split_whitespace().map(|s| s.trim_matches('"'));
+        let first = loop {
+            let Some(tok) = parts.next() else { return String::new() };
+            let base = tok.rsplit('/').next().unwrap_or(tok);
+            if base == "env" || (tok.contains('=') && !tok.starts_with('/')) {
+                continue;
+            }
+            break base;
+        };
+        norm(first.split('.').next().unwrap_or(first))
     };
     // Most to least specific, so a weak match never beats a strong one.
     apps.iter()
@@ -126,7 +144,10 @@ pub fn match_app<'a>(apps: &'a [App], app_id: &str) -> Option<&'a App> {
 /// The icon name for a running window's app_id, via its desktop entry if we can find one.
 /// Without one, the app_id itself: the theme may have it, or the window supplied its own.
 pub fn icon_for_app_id(apps: &[App], app_id: &str) -> String {
-    match_app(apps, app_id).map(|a| a.icon.clone()).unwrap_or_else(|| app_id.to_string())
+    match_app(apps, app_id)
+        .map(|a| a.icon.clone())
+        .filter(|i| !i.is_empty())
+        .unwrap_or_else(|| app_id.to_string())
 }
 
 /// Our own apps, registered like any installed app (a .desktop file in the user's

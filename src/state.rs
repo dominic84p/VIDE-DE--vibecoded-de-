@@ -471,8 +471,11 @@ impl State {
     pub fn run_startup(&mut self) {
         // D-Bus starts portals and the keyring's password prompt on demand; they need
         // to know our display, or they can't show file pickers and dialogs.
+        // Also propagate to systemd --user when available so PipeWire/portals see it.
         self.spawn(
-            "dbus-update-activation-environment WAYLAND_DISPLAY DISPLAY XDG_CURRENT_DESKTOP \
+            "dbus-update-activation-environment --systemd WAYLAND_DISPLAY DISPLAY XDG_CURRENT_DESKTOP \
+             XDG_SESSION_TYPE XDG_SESSION_DESKTOP DESKTOP_SESSION QT_QPA_PLATFORM 2>/dev/null \
+             || dbus-update-activation-environment WAYLAND_DISPLAY DISPLAY XDG_CURRENT_DESKTOP \
              XDG_SESSION_TYPE XDG_SESSION_DESKTOP DESKTOP_SESSION QT_QPA_PLATFORM",
         );
         // Keyring: KWallet's ksecretd provides the Secret Service that browsers, Electron

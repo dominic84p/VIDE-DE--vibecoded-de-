@@ -1,0 +1,9 @@
+[package]
+name = "vide-portal"
+version = "0.1.0"
+edition = "2024"
+description = "VIDE-DE XDG Desktop Portal backend (ScreenCast + Screenshot + Permissions)"
+
+[dependencies]
+eframe = "0.37"
+zbus = "5"

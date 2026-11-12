@@ -1115,6 +1115,55 @@ impl Settings {
     }
 
     fn page_update_status(&mut self, ui: &mut egui::Ui) {
+        section_title(ui, "Screen sharing permissions");
+        let perms_path = {
+            let base = std::env::var("XDG_CONFIG_HOME")
+                .map(PathBuf::from)
+                .unwrap_or_else(|_| std::env::var("HOME").map(PathBuf::from).unwrap_or_default().join(".config"));
+            base.join("vide-de/screencast-perms.conf")
+        };
+        let mut entries: Vec<(String, String)> = std::fs::read_to_string(&perms_path)
+            .unwrap_or_default()
+            .lines()
+            .filter_map(|l| l.trim().split_once('='))
+            .map(|(k, v)| (k.trim().to_string(), v.trim().to_string()))
+            .collect();
+        if entries.is_empty() {
+            ui.label(RichText::new("No saved screen-sharing permissions yet. Apps will prompt when they request screen capture.").color(DIM).size(12.5));
+        } else {
+            let mut changed = false;
+            let mut remove_idx = None;
+            for (idx, (app, perm)) in entries.iter_mut().enumerate() {
+                card_frame().show(ui, |ui| {
+                    ui.set_width(ui.available_width());
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new(&*app).color(TEXT).size(13.5));
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if ui.button("Revoke").clicked() {
+                                remove_idx = Some(idx);
+                                changed = true;
+                            }
+                            let next = if perm == "allow" { "deny" } else { "allow" };
+                            let label = if perm == "allow" { "Allowed" } else { "Denied" };
+                            if ui.button(label).clicked() {
+                                *perm = next.to_string();
+                                changed = true;
+                            }
+                        });
+                    });
+                });
+                ui.add_space(4.0);
+            }
+            if let Some(i) = remove_idx {
+                entries.remove(i);
+            }
+            if changed {
+                let out: String = entries.iter().map(|(k, v)| format!("{k}={v}\n")).collect();
+                let _ = std::fs::write(&perms_path, out);
+            }
+        }
+        ui.add_space(8.0);
+
         section_title(ui, "Session & services health");
         card_frame().show(ui, |ui| {
             ui.set_width(ui.available_width());

@@ -192,6 +192,9 @@ pub struct State {
     pub night: smithay::backend::renderer::element::solid::SolidColorBuffer,
     /// A screenshot to take on the next frame: `Some(None)` = whole screen, else a region.
     pub screenshot_requested: Option<Option<Rectangle<i32, Logical>>>,
+    /// Active PipeWire screencast streams requesting frames via `vide-portal`.
+    pub screencast_clients: usize,
+    pub last_screencast: Option<Instant>,
     /// Win+Shift+S region selection in progress.
     pub snip: Option<crate::screenshot::Snip>,
     pub wallpaper: Option<(Size<i32, Logical>, MemoryRenderBuffer)>,
@@ -290,6 +293,8 @@ impl State {
             dim: Default::default(),
             night: Default::default(),
             screenshot_requested: None,
+            screencast_clients: 0,
+            last_screencast: None,
             snip: None,
             wallpaper: None,
             hover: Hover::None,
@@ -498,6 +503,10 @@ impl State {
             "for a in /usr/lib/polkit-kde-authentication-agent-1 /usr/libexec/polkit-kde-authentication-agent-1 \
              /usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1; do [ -x \"$a\" ] && exec \"$a\"; done",
         );
+        // Start our screenshare / screenshot portal backend if available.
+        if let Some(portal) = crate::input::own_app("vide-portal") {
+            self.spawn(&portal);
+        }
         // The desktop (wallpaper + icons) is its own program on the background layer;
         // without it we fall back to drawing a wallpaper ourselves.
         if let Some(desktop) = crate::input::own_app("vide-desktop") {

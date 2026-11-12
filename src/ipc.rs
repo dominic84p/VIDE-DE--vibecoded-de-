@@ -61,6 +61,17 @@ fn handle_client(state: &mut State, stream: UnixStream) {
     match cmd {
         "snip" => state.start_screenshot(true),
         "screenshot" => state.start_screenshot(false),
+        "screencast-start" => {
+            state.screencast_clients += 1;
+            state.needs_redraw = true;
+        }
+        "screencast-stop" => {
+            state.screencast_clients = state.screencast_clients.saturating_sub(1);
+        }
+        "screen-info" => {
+            let msg = format!("{} {}\n", state.output_size.w, state.output_size.h);
+            let _ = (&stream).write_all(msg.as_bytes());
+        }
         "copy-png" => match std::fs::read(arg) {
             Ok(bytes) => {
                 set_data_device_selection(&state.dh, &state.seat, vec!["image/png".into()], Arc::new(bytes));

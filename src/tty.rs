@@ -283,7 +283,10 @@ pub fn run(event_loop: &mut EventLoop<'static, State>, state: &mut State) -> Res
             let flags = if state.config.direct_scanout { FrameFlags::ALLOW_PRIMARY_PLANE_SCANOUT } else { FrameFlags::empty() };
             match t.output.render_frame(&mut t.renderer, &elements, render::CLEAR, flags) {
                 Ok(res) if !res.is_empty => match t.output.queue_frame(()) {
-                    Ok(()) => t.frame_pending = true,
+                    Ok(()) => {
+                        t.frame_pending = true;
+                        crate::screenshot::screencast_tick(&mut t.renderer, state);
+                    }
                     Err(e) => tracing::warn!("queue_frame: {e:?}"),
                 },
                 Ok(_) => render::send_frames(state, state.start_time.elapsed().as_millis() as u32),

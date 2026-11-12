@@ -69,6 +69,7 @@ pub fn run(event_loop: &mut EventLoop<'static, State>, state: &mut State) -> Res
                 // Blocks until vsync, which is what paces us.
                 backend.submit(Some(&damage))?;
             }
+            crate::screenshot::screencast_tick(backend.renderer(), state);
             render::send_frames(state, state.start_time.elapsed().as_millis() as u32);
         }
 

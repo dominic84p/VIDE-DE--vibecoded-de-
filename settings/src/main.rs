@@ -201,7 +201,7 @@ const SEARCH_INDEX: &[SearchItem] = &[
     SearchItem { label: "Game Mode & direct scanout", keywords: "gaming game mode direct scanout ultra performance fps", cat: Category::Gaming, page: SubPage::GameMode },
     SearchItem { label: "Captures & screenshots", keywords: "captures screenshot snip", cat: Category::Gaming, page: SubPage::Captures },
     SearchItem { label: "Ease of Access display scale", keywords: "ease of access accessibility scale night light", cat: Category::EaseOfAccess, page: SubPage::EaseDisplay },
-    SearchItem { label: "VIDE-DE status, services & logs", keywords: "update security logs services health", cat: Category::UpdateSecurity, page: SubPage::UpdateStatus },
+    SearchItem { label: "VIDE-DE status, screenshare permissions & logs", keywords: "update security logs services health screenshare permissions privacy", cat: Category::UpdateSecurity, page: SubPage::UpdateStatus },
 ];
 
 pub struct Settings {

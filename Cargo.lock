@@ -4936,6 +4936,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "vide-portal"
+version = "0.1.0"
+dependencies = [
+ "eframe 0.37.0",
+ "zbus",
+]
+
+[[package]]
 name = "vide-settings"
 version = "0.1.0"
 dependencies = [

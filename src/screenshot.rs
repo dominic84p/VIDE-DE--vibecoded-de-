@@ -103,16 +103,46 @@ pub fn take(renderer: &mut GlesRenderer, state: &mut State, region: Option<Recta
     }
 }
 
+pub fn screencast_tick(renderer: &mut GlesRenderer, state: &mut State) {
+    if state.screencast_clients == 0 {
+        return;
+    }
+    if state.last_screencast.is_some_and(|t| t.elapsed() < std::time::Duration::from_millis(33)) {
+        return;
+    }
+    state.last_screencast = Some(std::time::Instant::now());
+    let Ok((w, h, rgba)) = capture_with_cursor(renderer, state, None, true) else { return };
+    let dir = std::env::var("XDG_RUNTIME_DIR").map(PathBuf::from).unwrap_or_else(|_| std::env::temp_dir());
+    let tmp = dir.join("vide-screencast.tmp");
+    let dst = dir.join("vide-screencast.rgba");
+    if let Ok(mut f) = std::fs::File::create(&tmp) {
+        let _ = f.write_all(&w.to_le_bytes());
+        let _ = f.write_all(&h.to_le_bytes());
+        if f.write_all(&rgba).is_ok() {
+            let _ = std::fs::rename(&tmp, &dst);
+        }
+    }
+}
+
 fn capture(
     renderer: &mut GlesRenderer,
     state: &mut State,
     region: Option<Rectangle<i32, Logical>>,
 ) -> Result<(u32, u32, Vec<u8>), Box<dyn std::error::Error>> {
+    capture_with_cursor(renderer, state, region, false)
+}
+
+fn capture_with_cursor(
+    renderer: &mut GlesRenderer,
+    state: &mut State,
+    region: Option<Rectangle<i32, Logical>>,
+    cursor: bool,
+) -> Result<(u32, u32, Vec<u8>), Box<dyn std::error::Error>> {
     let size = state.output_size;
     let full = Rectangle::from_size(size);
     let rect = region.and_then(|r| r.intersection(full)).unwrap_or(full);
 
-    let elements = render::elements_with(renderer, state, false);
+    let elements = render::elements_with(renderer, state, cursor);
     let mut tex: GlesTexture = renderer.create_buffer(Fourcc::Abgr8888, size.to_buffer(1, Transform::Normal))?;
     let mut fb = renderer.bind(&mut tex)?;
     let mut tracker = OutputDamageTracker::new(size.to_physical(1), 1.0, Transform::Normal);

@@ -17,13 +17,35 @@ pub struct Config {
     /// (direct scanout) instead of being composited. Off by default: some NVIDIA setups
     /// flicker with it.
     pub direct_scanout: bool,
+    /// Monitor mode as "WIDTHxHEIGHT@HZ" (e.g. "2560x1440@144"); empty = the monitor's
+    /// preferred mode. Applies to every monitor that supports it.
+    pub display_mode: String,
+    /// UI scale for outputs, 1.0 = 100%.
+    pub display_scale: f64,
+    /// Night light: warm the screen to cut blue light.
+    pub night_light: bool,
+    /// Night light warmth, 0.0 (none) to 1.0 (strongest).
+    pub night_light_strength: f64,
+    /// Lock the screen after this many idle minutes; 0 = never.
+    pub idle_lock_minutes: u32,
 }
 
 impl Default for Config {
     fn default() -> Self {
         // First run: start from what the user already set up in KDE.
         let (mouse_flat, mouse_speed) = kde_mouse().unwrap_or((true, 0.0));
-        Self { hide_kde_apps: false, mouse_flat, mouse_speed, wallpaper: wallpapers_dir().join("bloom.png"), direct_scanout: false }
+        Self {
+            hide_kde_apps: false,
+            mouse_flat,
+            mouse_speed,
+            wallpaper: wallpapers_dir().join("bloom.png"),
+            direct_scanout: false,
+            display_mode: String::new(),
+            display_scale: 1.0,
+            night_light: false,
+            night_light_strength: 0.5,
+            idle_lock_minutes: 0,
+        }
     }
 }
 
@@ -47,6 +69,11 @@ impl Config {
                 "mouse_speed" => c.mouse_speed = v.parse::<f64>().unwrap_or(c.mouse_speed).clamp(-1.0, 1.0),
                 "wallpaper" if !v.is_empty() => c.wallpaper = PathBuf::from(v),
                 "direct_scanout" => c.direct_scanout = v == "true",
+                "display_mode" => c.display_mode = v.to_string(),
+                "display_scale" => c.display_scale = v.parse::<f64>().unwrap_or(1.0).clamp(0.5, 3.0),
+                "night_light" => c.night_light = v == "true",
+                "night_light_strength" => c.night_light_strength = v.parse::<f64>().unwrap_or(0.5).clamp(0.0, 1.0),
+                "idle_lock_minutes" => c.idle_lock_minutes = v.parse().unwrap_or(0),
                 _ => {}
             }
         }
@@ -60,8 +87,18 @@ impl Config {
         }
         let text = format!(
             "# VIDE-DE settings. Edited by the Settings app; changes apply live.\n\
-             hide_kde_apps={}\nmouse_flat={}\nmouse_speed={:.2}\nwallpaper={}\ndirect_scanout={}\n",
-            self.hide_kde_apps, self.mouse_flat, self.mouse_speed, self.wallpaper.display(), self.direct_scanout
+             hide_kde_apps={}\nmouse_flat={}\nmouse_speed={:.2}\nwallpaper={}\ndirect_scanout={}\n\
+             display_mode={}\ndisplay_scale={:.2}\nnight_light={}\nnight_light_strength={:.2}\nidle_lock_minutes={}\n",
+            self.hide_kde_apps,
+            self.mouse_flat,
+            self.mouse_speed,
+            self.wallpaper.display(),
+            self.direct_scanout,
+            self.display_mode,
+            self.display_scale,
+            self.night_light,
+            self.night_light_strength,
+            self.idle_lock_minutes
         );
         // Write-then-rename so the compositor never reads a half-written file.
         let tmp = path.with_extension("conf.tmp");

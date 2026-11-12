@@ -478,6 +478,12 @@ impl State {
              || dbus-update-activation-environment WAYLAND_DISPLAY DISPLAY XDG_CURRENT_DESKTOP \
              XDG_SESSION_TYPE XDG_SESSION_DESKTOP DESKTOP_SESSION QT_QPA_PLATFORM",
         );
+        // Unlock KWallet automatically via PAM credentials when logged in through SDDM/PAM.
+        self.spawn(
+            "if [ -n \"$PAM_KWALLET5_LOGIN\" ]; then \
+             for k in /usr/lib/pam_kwallet_init /usr/libexec/pam_kwallet_init; do \
+             [ -x \"$k\" ] && exec \"$k\"; done; fi",
+        );
         // Keyring: KWallet's ksecretd provides the Secret Service that browsers, Electron
         // apps and libsecret store passwords in. Nothing D-Bus-activates it, so start it
         // ourselves unless something on this bus already owns the name.

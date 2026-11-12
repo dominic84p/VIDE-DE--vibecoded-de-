@@ -39,5 +39,10 @@ done
 install -Dm755 "$ROOT/scripts/vide-session" /usr/local/bin/vide-session
 install -Dm644 "$ROOT/scripts/vide-de.desktop" /usr/share/wayland-sessions/vide-de.desktop
 
+# Hook up KWallet PAM auto-unlock for SDDM if not already configured.
+if [ -x "$ROOT/scripts/setup-keyring-pam.sh" ]; then
+  "$ROOT/scripts/setup-keyring-pam.sh"
+fi
+
 echo "Installed VIDE-DE to /usr/local/bin and /usr/share/wayland-sessions/vide-de.desktop."
 echo "Log out to SDDM and select 'VIDE-DE' from the session menu."

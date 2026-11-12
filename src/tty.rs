@@ -33,7 +33,22 @@ use smithay::{
     utils::DeviceFd,
 };
 
-use smithay::wayland::drm_syncobj::{supports_syncobj_eventfd, DrmSyncobjState};
+use smithay::{
+    backend::input::InputEvent,
+    reexports::input::{AccelProfile, Device as InputDevice},
+    wayland::drm_syncobj::{supports_syncobj_eventfd, DrmSyncobjState},
+};
+
+/// Acceleration profile and speed from our settings. KDE normally does this; without
+/// it libinput's default adaptive curve makes high-DPI mice fly off.
+fn apply_mouse(d: &mut InputDevice, c: &vide_config::Config) {
+    if d.config_accel_is_available() {
+        let profile = if c.mouse_flat { AccelProfile::Flat } else { AccelProfile::Adaptive };
+        let _ = d.config_accel_set_profile(profile);
+        let _ = d.config_accel_set_speed(c.mouse_speed);
+        tracing::info!("mouse: {} -> {:?} speed {:.2}", d.name(), profile, c.mouse_speed);
+    }
+}
 
 use crate::{
     render::{self, Elem},
@@ -150,11 +165,26 @@ pub fn run(event_loop: &mut EventLoop<'static, State>, state: &mut State) -> Res
         .map_err(|e| format!("initialize_output: {e:?}"))?;
 
     // Input
+    // Pointer devices, so mouse settings can be re-applied when they change.
+    let devices: Rc<RefCell<Vec<InputDevice>>> = Default::default();
     let mut libinput = Libinput::new_with_udev(LibinputSessionInterface::from(session.clone()));
     libinput.udev_assign_seat(&seat).map_err(|_| "libinput: failed to assign seat")?;
     event_loop
         .handle()
-        .insert_source(LibinputInputBackend::new(libinput.clone()), |event, _, state| state.handle_input(event))?;
+        .insert_source(LibinputInputBackend::new(libinput.clone()), {
+            let devices = devices.clone();
+            move |event, _, state| {
+                if let InputEvent::DeviceAdded { device } = &event {
+                    let mut d = device.clone();
+                    apply_mouse(&mut d, &state.config);
+                    devices.borrow_mut().push(d);
+                }
+                if let InputEvent::DeviceRemoved { device } = &event {
+                    devices.borrow_mut().retain(|d| d != device);
+                }
+                state.handle_input(event);
+            }
+        })?;
 
     let tty = Rc::new(RefCell::new(Tty {
         session,
@@ -208,6 +238,12 @@ pub fn run(event_loop: &mut EventLoop<'static, State>, state: &mut State) -> Res
 
     while state.running {
         event_loop.dispatch(None, state)?;
+
+        if std::mem::take(&mut state.mouse_config_dirty) {
+            for d in devices.borrow_mut().iter_mut() {
+                apply_mouse(d, &state.config);
+            }
+        }
 
         let mut t = tty.borrow_mut();
         if let Some(region) = state.screenshot_requested.take() {

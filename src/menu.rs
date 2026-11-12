@@ -30,6 +30,8 @@ pub enum Action {
     Maximize(WlSurface),
     Fullscreen(WlSurface),
     Close(WlSurface),
+    /// SIGKILL the window's process: for apps that won't close.
+    Kill(WlSurface),
     Spawn(String),
     Screenshot,
     About,
@@ -135,7 +137,8 @@ impl State {
             items.push(("Fullscreen".into(), Action::Fullscreen(s.clone())));
         }
         items.push((String::new(), Action::Separator));
-        items.push(("Close\tAlt+F4".into(), Action::Close(s)));
+        items.push(("Close\tAlt+F4".into(), Action::Close(s.clone())));
+        items.push(("End process".into(), Action::Kill(s)));
         self.open_menu(at, items);
     }
 
@@ -162,7 +165,8 @@ impl State {
         } else {
             items.push(("Maximize".into(), Action::Maximize(s.clone())));
         }
-        items.push(("Close window".into(), Action::Close(s)));
+        items.push(("Close window".into(), Action::Close(s.clone())));
+        items.push(("End process".into(), Action::Kill(s)));
         let h = items.len() as i32 * ROW + PAD * 2;
         self.open_menu((x - MIN_W / 2, self.output_size.h - TASKBAR_H - h).into(), items);
     }
@@ -186,6 +190,34 @@ impl State {
         let h = items.len() as i32 * ROW + PAD * 2;
         let x = self.tray_menu_x;
         self.open_menu((x - MIN_W / 2, self.output_size.h - TASKBAR_H - h).into(), items);
+    }
+
+    /// The process behind a window: X11 windows report their own PID (their Wayland
+    /// connection is Xwayland's, which must never be killed); Wayland apps by socket.
+    fn window_pid(&self, surface: &WlSurface) -> Option<u32> {
+        let w = self.wm.find(surface)?;
+        match w.x11() {
+            Some(x) => x.pid(),
+            None => {
+                use smithay::reexports::wayland_server::Resource;
+                let client = self.dh.get_client(surface.id()).ok()?;
+                client.get_credentials(&self.dh).ok().map(|c| c.pid as u32)
+            }
+        }
+    }
+
+    pub fn kill_window_process(&mut self, surface: &WlSurface) {
+        let Some(pid) = self.window_pid(surface).filter(|&p| p > 1 && p != std::process::id()) else {
+            tracing::warn!("end process: couldn't find a PID; asking the window to close instead");
+            if let Some(w) = self.wm.find(surface) {
+                w.close();
+            }
+            return;
+        };
+        tracing::info!("end process: SIGKILL {pid}");
+        if let Err(e) = std::process::Command::new("kill").args(["-9", &pid.to_string()]).spawn() {
+            tracing::warn!("end process: {e}");
+        }
     }
 
     pub fn open_desktop_menu(&mut self, at: Point<i32, Logical>) {
@@ -227,6 +259,7 @@ impl State {
                     w.close();
                 }
             }
+            Action::Kill(s) => self.kill_window_process(&s),
             Action::Spawn(cmd) => self.spawn(&cmd),
             Action::Screenshot => self.screenshot_requested = Some(None),
             Action::About => {

@@ -1,0 +1,11 @@
+[package]
+name = "vide-settings"
+version = "0.1.0"
+edition = "2024"
+description = "VIDE-DE Settings"
+
+[dependencies]
+eframe = "0.37"
+egui_extras = { version = "0.37", features = ["image"] }
+image = { version = "0.25", default-features = false, features = ["png"] }
+vide-config = { path = "../config" }

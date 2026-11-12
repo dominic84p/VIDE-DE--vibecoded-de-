@@ -11,6 +11,8 @@ pub struct App {
     pub exec: String,
     pub icon: String,
     pub terminal: bool,
+    /// Part of KDE (org.kde.* or Categories has KDE), for the "hide KDE apps" setting.
+    pub kde: bool,
 }
 
 pub fn scan() -> Vec<App> {
@@ -32,6 +34,7 @@ pub fn scan() -> Vec<App> {
             }
             if let Some(mut app) = std::fs::read_to_string(&path).ok().and_then(|s| parse(&s)) {
                 app.id = path.file_stem().unwrap().to_string_lossy().into_owned();
+                app.kde |= app.id.starts_with("org.kde.");
                 apps.push(app);
             }
         }
@@ -44,7 +47,7 @@ pub fn scan() -> Vec<App> {
 fn parse(text: &str) -> Option<App> {
     let mut in_entry = false;
     let (mut name, mut exec, mut icon, mut wm_class) = (None, None, String::new(), String::new());
-    let (mut terminal, mut hidden, mut is_app) = (false, false, false);
+    let (mut terminal, mut hidden, mut is_app, mut kde) = (false, false, false, false);
     for line in text.lines() {
         let line = line.trim();
         if line.starts_with('[') {
@@ -63,6 +66,7 @@ fn parse(text: &str) -> Option<App> {
             "Terminal" => terminal = v.trim() == "true",
             "NoDisplay" | "Hidden" => hidden |= v.trim() == "true",
             "Type" => is_app = v.trim() == "Application",
+            "Categories" => kde |= v.split(';').any(|c| c == "KDE"),
             // We show KDE's apps (we stand in for its shell) and our own.
             "OnlyShowIn" => hidden |= !v.split(';').any(|d| matches!(d, "KDE" | "VIDE-DE" | "")),
             "NotShowIn" => hidden |= v.split(';').any(|d| d == "VIDE-DE"),
@@ -72,7 +76,7 @@ fn parse(text: &str) -> Option<App> {
     if hidden || !is_app {
         return None;
     }
-    Some(App { id: String::new(), wm_class, name: name?, exec: strip_field_codes(&exec?), icon, terminal })
+    Some(App { id: String::new(), wm_class, name: name?, exec: strip_field_codes(&exec?), icon, terminal, kde })
 }
 
 /// `firefox %u` → `firefox`. We launch apps without file arguments.
@@ -99,39 +103,54 @@ pub fn matches(app: &App, query: &str) -> bool {
     app.name.to_lowercase().contains(&q) || app.exec.to_lowercase().contains(&q)
 }
 
-/// The icon name for a running window's app_id, via its desktop entry if we can find one.
-pub fn icon_for_app_id(apps: &[App], app_id: &str) -> String {
-    if app_id.is_empty() {
-        return String::new();
-    }
-    let lower = app_id.to_lowercase();
-    apps.iter()
-        .find(|a| a.id == app_id || a.id.to_lowercase() == lower || a.wm_class.to_lowercase() == lower)
-        .or_else(|| apps.iter().find(|a| a.id.rsplit('.').next().is_some_and(|l| l.to_lowercase() == lower)))
-        .map(|a| a.icon.clone())
-        .unwrap_or_else(|| app_id.to_string())
+/// Lowercase letters and digits only: "Leather Client", "leather-client" and
+/// "leather_client" all become "leatherclient".
+fn norm(s: &str) -> String {
+    s.chars().filter(|c| c.is_alphanumeric()).flat_map(char::to_lowercase).collect()
 }
 
-/// Register our own apps (About VIDE-DE) like any installed app: a .desktop file and
-/// an icon in the user's data dir, so our start menu and search index them. Marked
-/// OnlyShowIn=VIDE-DE so other desktops don't list them.
+/// The installed app a running window belongs to, judged by its app_id / X11 class.
+pub fn match_app<'a>(apps: &'a [App], app_id: &str) -> Option<&'a App> {
+    if app_id.is_empty() {
+        return None;
+    }
+    let want = norm(app_id);
+    let last = |id: &str| norm(id.rsplit('.').next().unwrap_or(id));
+    let exe = |exec: &str| {
+        let first = exec.trim_start_matches('"').split(['"', ' ']).next().unwrap_or("");
+        let base = first.rsplit('/').next().unwrap_or(first);
+        norm(base.split('.').next().unwrap_or(base))
+    };
+    // Most to least specific, so a weak match never beats a strong one.
+    apps.iter()
+        .find(|a| norm(&a.id) == want || (!a.wm_class.is_empty() && norm(&a.wm_class) == want))
+        .or_else(|| apps.iter().find(|a| last(&a.id) == want || last(app_id) == norm(&a.id)))
+        .or_else(|| apps.iter().find(|a| norm(&a.name) == want))
+        .or_else(|| apps.iter().find(|a| !a.exec.contains("flatpak run") && exe(&a.exec) == want))
+}
+
+/// The icon name for a running window's app_id, via its desktop entry if we can find one.
+/// Without one, the app_id itself: the theme may have it, or the window supplied its own.
+pub fn icon_for_app_id(apps: &[App], app_id: &str) -> String {
+    match_app(apps, app_id).map(|a| a.icon.clone()).unwrap_or_else(|| app_id.to_string())
+}
+
+/// Our own apps, registered like any installed app (a .desktop file in the user's
+/// data dir) so the start menu, search and taskbar treat them normally.
+/// (binary, desktop id, name, comment, icon, categories)
+const BUILTIN: &[(&str, &str, &str, &str, &str, &str)] = &[
+    ("vide-about", "vide-about", "About VIDE-DE", "System information for the vibecoded desktop", "vide-de", "System;"),
+    ("vide-settings", "vide-settings", "Settings", "Mouse, Start menu and other VIDE-DE options", "preferences-system", "Settings;System;"),
+    ("terminaitor", "terminaitor", "Terminaitor", "The terminal. It'll be back.", "utilities-terminal", "System;TerminalEmulator;"),
+];
+
+/// Install the built-ins that exist next to our binary. Marked OnlyShowIn=VIDE-DE so
+/// other desktops don't list them. Files are only rewritten when they changed.
 pub fn install_builtin() {
     let Ok(home) = std::env::var("HOME") else { return };
     let Some(bin_dir) = std::env::current_exe().ok().and_then(|p| p.parent().map(|d| d.to_path_buf())) else { return };
-    let about = bin_dir.join("vide-about");
-    if !about.exists() {
-        return;
-    }
     let share = PathBuf::from(&home).join(".local/share");
-    let icon = share.join("icons/hicolor/512x512/apps/vide-de.png");
-    let desktop = share.join("applications/vide-about.desktop");
-    let entry = format!(
-        "[Desktop Entry]\nType=Application\nName=About VIDE-DE\nComment=System information for the vibecoded desktop\n\
-         Exec=\"{}\"\nIcon=vide-de\nStartupWMClass=vide-about\nCategories=System;Settings;\nOnlyShowIn=VIDE-DE;\n",
-        about.display()
-    );
     let write = |path: &PathBuf, bytes: &[u8]| {
-        // Only touch the file when it changed, so we don't churn other launchers' caches.
         if std::fs::read(path).ok().as_deref() != Some(bytes) {
             if let Some(dir) = path.parent() {
                 let _ = std::fs::create_dir_all(dir);
@@ -141,6 +160,17 @@ pub fn install_builtin() {
             }
         }
     };
-    write(&icon, include_bytes!("../assets/logo-512.png"));
-    write(&desktop, entry.as_bytes());
+    write(&share.join("icons/hicolor/512x512/apps/vide-de.png"), include_bytes!("../assets/logo-512.png"));
+    for (bin, id, name, comment, icon, categories) in BUILTIN {
+        let exe = bin_dir.join(bin);
+        if !exe.exists() {
+            continue;
+        }
+        let entry = format!(
+            "[Desktop Entry]\nType=Application\nName={name}\nComment={comment}\nExec=\"{}\"\nIcon={icon}\n\
+             StartupWMClass={id}\nCategories={categories}\nOnlyShowIn=VIDE-DE;\n",
+            exe.display()
+        );
+        write(&share.join(format!("applications/{id}.desktop")), entry.as_bytes());
+    }
 }

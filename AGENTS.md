@@ -31,7 +31,11 @@ the WM in `src/wm.rs` is deliberately our own.
 - `menu.rs`: right-click menus. `tray.rs`: volume/brightness. `screenshot.rs`: PrtSc and snip.
 - `sni.rs`: app tray icons. We are the StatusNotifierWatcher + host, on a D-Bus thread
   talking to the main loop over channels. `desktops.rs`: Task View panel.
-- `about/`: `vide-about`, a separate egui app (workspace member), launched from the desktop menu.
+- `about/`, `settings/`, `terminal/`: our own apps (`vide-about`, `vide-settings`,
+  `terminaitor`), separate egui programs. `apps::install_builtin` registers them as
+  .desktop entries on startup. Terminaitor uses egui 0.31 (egui_term's version).
+- `config/`: `vide-config`, the settings file shared by the compositor and Settings
+  (`~/.config/vide-de/settings.conf`, polled once a second).
 
 ## Conventions
 
@@ -61,6 +65,12 @@ the WM in `src/wm.rs` is deliberately our own.
 - **Never run `--tty` from inside a running desktop session.** It competes for
   the GPU and seat. The human has to test TTY mode from a spare VT; ask them
   to, and read `~/vibe.log` afterwards.
+- **Run nested tests on a private D-Bus**: `dbus-run-session -- env ... vibe-comp --nested`.
+  On the host's bus our tray watcher would collide with the host desktop's. And never
+  request a D-Bus name with `ReplaceExisting`: zbus's builder `.name()` does by default,
+  and that once stole and killed Plasma's tray.
+- `VIBE_DEBUG_SHOT=1` makes the compositor screenshot itself after 6 s, so you can check
+  a nested run without capturing the user's screen.
 - If you screenshot the screen to check the nested window, the user's own
   windows may be in front. Don't capture or describe their private apps.
 

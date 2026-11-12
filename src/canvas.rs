@@ -100,20 +100,6 @@ impl Canvas {
         }
     }
 
-    /// Circular arc (angles in radians, 0 = pointing right), as short line segments.
-    pub fn arc(&mut self, cx: f32, cy: f32, r: f32, a0: f32, a1: f32, width: f32, c: Rgba) {
-        let steps = ((a1 - a0).abs() * r / 2.0).ceil().max(2.0) as i32;
-        let pt = |t: f32| {
-            let a = a0 + (a1 - a0) * t;
-            (cx + r * a.cos(), cy + r * a.sin())
-        };
-        for i in 0..steps {
-            let (x0, y0) = pt(i as f32 / steps as f32);
-            let (x1, y1) = pt((i + 1) as f32 / steps as f32);
-            self.line(x0, y0, x1, y1, width, c);
-        }
-    }
-
     /// 1px rectangle outline.
     pub fn outline(&mut self, x: i32, y: i32, w: i32, h: i32, c: Rgba) {
         self.rect(x, y, w, 1, c);

@@ -14,6 +14,8 @@ pub struct Icon {
 }
 
 pub struct Icons {
+    /// Icons windows hand us directly (X11 `_NET_WM_ICON`), by app_id.
+    custom: HashMap<String, Icon>,
     /// Icon name -> best file for it, across the installed themes.
     index: HashMap<String, PathBuf>,
     cache: HashMap<(String, u32), Option<Rc<Icon>>>,
@@ -72,7 +74,13 @@ impl Icons {
             }
         });
         tracing::info!("indexed {} icons from {:?}", index.len(), themes);
-        Self { index: index.into_iter().map(|(k, (_, _, p))| (k, p)).collect(), cache: HashMap::new() }
+        Self { custom: HashMap::new(), index: index.into_iter().map(|(k, (_, _, p))| (k, p)).collect(), cache: HashMap::new() }
+    }
+
+    /// Remember an icon a window supplied itself; used when nothing installed matches.
+    pub fn set_custom(&mut self, name: &str, icon: Icon) {
+        self.cache.retain(|(n, _), _| n != name);
+        self.custom.insert(name.to_string(), icon);
     }
 
     pub fn get(&mut self, name: &str, size: u32) -> Option<Rc<Icon>> {
@@ -80,7 +88,11 @@ impl Icons {
         if let Some(hit) = self.cache.get(&key) {
             return hit.clone();
         }
-        let icon = self.find(name).and_then(|p| load(&p, size)).map(Rc::new);
+        let icon = self
+            .find(name)
+            .and_then(|p| load(&p, size))
+            .or_else(|| self.custom.get(name).map(|i| scale(i, size)))
+            .map(Rc::new);
         self.cache.insert(key, icon.clone());
         icon
     }
@@ -176,8 +188,12 @@ fn load(path: &Path, size: u32) -> Option<Icon> {
 }
 
 fn load_svg(path: &Path, size: u32) -> Option<Icon> {
+    render_svg(&std::fs::read(path).ok()?, size)
+}
+
+/// Rasterize SVG source to a size×size icon.
+pub fn render_svg(data: &[u8], size: u32) -> Option<Icon> {
     use resvg::{tiny_skia, usvg};
-    let data = std::fs::read(path).ok()?;
     let tree = usvg::Tree::from_data(&data, &usvg::Options::default()).ok()?;
     let mut pixmap = tiny_skia::Pixmap::new(size, size)?;
     let s = size as f32 / tree.size().width().max(tree.size().height());

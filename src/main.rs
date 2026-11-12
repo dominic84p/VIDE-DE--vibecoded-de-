@@ -72,6 +72,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             state.clock = now;
             state.needs_redraw = true;
         }
+        state.reload_config_if_changed();
         TimeoutAction::ToDuration(Duration::from_secs(1))
     })?;
 
@@ -95,6 +96,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     })?;
     state.sni_tx = Some(sni::start(tray_tx));
+
+    // X11 window icons, read off the main thread (see xwayland::fetch_window_icon).
+    let (icon_tx, icon_rx) = smithay::reexports::calloop::channel::channel::<(String, icons::Icon)>();
+    event_loop.handle().insert_source(icon_rx, |event, _, state| {
+        if let smithay::reexports::calloop::channel::Event::Msg((class, icon)) = event {
+            tracing::info!("window icon for {class}: {}x{}", icon.w, icon.h);
+            state.icons.set_custom(&class, icon);
+            state.taskbar = None;
+            state.needs_redraw = true;
+        }
+    })?;
+    state.x11_icon_tx = Some(icon_tx);
 
     // Testing aids: open the start menu or Task View at launch, and/or have the
     // compositor screenshot itself after a few seconds (lands in ~/Pictures/Screenshots).

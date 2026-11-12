@@ -17,6 +17,7 @@ use std::{
 use smithay::reexports::calloop::channel::Sender as LoopSender;
 use zbus::{
     blocking::{connection, Connection, Proxy},
+    fdo::{RequestNameFlags, RequestNameReply},
     message::Header,
     object_server::SignalEmitter,
     zvariant::{OwnedObjectPath, OwnedValue, Value},
@@ -123,8 +124,14 @@ fn run(events: LoopSender<Event>, cmds: mpsc::Receiver<Cmd>) -> zbus::Result<()>
     let dirty = Arc::new(AtomicBool::new(false));
     let conn = connection::Builder::session()?
         .serve_at("/StatusNotifierWatcher", Watcher { items: items.clone(), dirty: dirty.clone() })?
-        .name("org.kde.StatusNotifierWatcher")?
         .build()?;
+    // Only take the name if nobody has it. zbus's default would *replace* an existing
+    // watcher, which, run nested inside Plasma, steals KDE's tray and leaves it dead
+    // after we exit.
+    let reply = conn.request_name_with_flags("org.kde.StatusNotifierWatcher", RequestNameFlags::DoNotQueue.into())?;
+    if reply != RequestNameReply::PrimaryOwner {
+        return Err(zbus::Error::Failure("another tray (the host desktop's) already owns the watcher".into()));
+    }
     tracing::info!("tray: StatusNotifierWatcher up");
     // Apps that started before us wait for this to (re)register.
     if let Ok(iface) = conn.object_server().interface::<_, Watcher>("/StatusNotifierWatcher") {

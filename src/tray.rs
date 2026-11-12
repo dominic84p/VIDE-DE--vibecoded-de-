@@ -155,29 +155,66 @@ impl State {
     }
 }
 
-/// Speaker glyph with sound waves (or an X when muted), drawn with lines.
-pub fn speaker(c: &mut Canvas, x: f32, y: f32, muted: bool, level: f32, color: Rgba) {
-    c.rect(x as i32 - 6, y as i32 - 3, 4, 7, color);
-    c.line(x - 2.0, y - 3.0, x + 4.0, y - 8.0, 1.6, color);
-    c.line(x + 4.0, y - 8.0, x + 4.0, y + 8.0, 1.6, color);
-    c.line(x + 4.0, y + 8.0, x - 2.0, y + 4.0, 1.6, color);
-    if muted {
-        c.line(x + 8.0, y - 4.0, x + 15.0, y + 3.0, 1.6, color);
-        c.line(x + 15.0, y - 4.0, x + 8.0, y + 3.0, 1.6, color);
-        return;
-    }
-    let waves = if level <= 0.01 { 0 } else if level < 0.34 { 1 } else if level < 0.67 { 2 } else { 3 };
-    for i in 0..waves {
-        c.arc(x + 4.0, y, 5.0 + i as f32 * 4.0, -0.9, 0.9, 1.5, color);
-    }
-}
+// Windows-style outline glyphs (20x20 grid, white, round joins), rendered with resvg.
+const SPEAKER: &str = r##"<path d="M2.5 7.5h3.2L10.5 3.8v12.4L5.7 12.5H2.5z" fill="none" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/>"##;
+const WAVES: [&str; 3] = [
+    r##"<path d="M13 8a2.8 2.8 0 0 1 0 4" fill="none" stroke="#fff" stroke-width="1.4" stroke-linecap="round"/>"##,
+    r##"<path d="M15 6a5.6 5.6 0 0 1 0 8" fill="none" stroke="#fff" stroke-width="1.4" stroke-linecap="round"/>"##,
+    r##"<path d="M17 4a8.5 8.5 0 0 1 0 12" fill="none" stroke="#fff" stroke-width="1.4" stroke-linecap="round"/>"##,
+];
+const MUTE: &str = r##"<path d="M13.5 7.8l4.4 4.4M17.9 7.8l-4.4 4.4" fill="none" stroke="#fff" stroke-width="1.4" stroke-linecap="round"/>"##;
 
-/// Sun glyph: a disc with eight rays.
-pub fn sun(c: &mut Canvas, x: f32, y: f32, color: Rgba) {
-    c.circle(x, y, 4.0, color);
+fn sun_svg() -> String {
+    let mut rays = String::new();
     for i in 0..8 {
         let a = i as f32 * std::f32::consts::FRAC_PI_4;
-        let (s, co) = a.sin_cos();
-        c.line(x + co * 7.0, y + s * 7.0, x + co * 10.0, y + s * 10.0, 1.6, color);
+        let (s, c) = a.sin_cos();
+        rays += &format!(
+            r##"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}"/>"##,
+            10.0 + c * 6.0, 10.0 + s * 6.0, 10.0 + c * 8.2, 10.0 + s * 8.2
+        );
     }
+    format!(
+        r##"<circle cx="10" cy="10" r="3.6" fill="none" stroke="#fff" stroke-width="1.4"/><g stroke="#fff" stroke-width="1.4" stroke-linecap="round">{rays}</g>"##
+    )
+}
+
+thread_local! {
+    static GLYPHS: std::cell::RefCell<std::collections::HashMap<String, std::rc::Rc<crate::icons::Icon>>> = Default::default();
+}
+
+/// Rasterize (and cache) one glyph, centred at (x, y).
+fn glyph(c: &mut Canvas, body: String, x: f32, y: f32, size: u32) {
+    let key = format!("{size}:{body}");
+    let icon = GLYPHS.with(|g| {
+        g.borrow_mut()
+            .entry(key)
+            .or_insert_with(|| {
+                let svg = format!(r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">{body}</svg>"##);
+                std::rc::Rc::new(crate::icons::render_svg(svg.as_bytes(), size).unwrap_or(crate::icons::Icon {
+                    w: 1,
+                    h: 1,
+                    rgba: vec![0; 4],
+                }))
+            })
+            .clone()
+    });
+    c.icon(&icon, (x - size as f32 / 2.0).round() as i32, (y - size as f32 / 2.0).round() as i32);
+}
+
+/// Speaker with 0-3 sound waves for the level, or an X when muted.
+pub fn speaker(c: &mut Canvas, x: f32, y: f32, muted: bool, level: f32, _color: Rgba) {
+    let mut body = SPEAKER.to_string();
+    if muted {
+        body += MUTE;
+    } else {
+        let waves = if level <= 0.01 { 0 } else if level < 0.34 { 1 } else if level < 0.67 { 2 } else { 3 };
+        body.extend(WAVES.iter().take(waves).copied());
+    }
+    glyph(c, body, x + 5.0, y, 20);
+}
+
+/// Sun: brightness.
+pub fn sun(c: &mut Canvas, x: f32, y: f32, _color: Rgba) {
+    glyph(c, sun_svg(), x, y, 20);
 }

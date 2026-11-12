@@ -17,7 +17,10 @@ use smithay::{
     },
 };
 
+use smithay::reexports::calloop::channel::Sender;
+
 use crate::{
+    icons::Icon,
     state::State,
     wm::{edge, WinKind},
 };
@@ -80,6 +83,10 @@ impl State {
         let ssd = !window.is_decorated() && !window.is_popup();
         let g = window.geometry();
         let pos = (g.loc != Point::from((0, 0))).then_some(g.loc);
+        // Apps without an installed .desktop file (Minecraft) carry their icon on the window.
+        if let (Some(display), Some(tx)) = (self.xdisplay, self.x11_icon_tx.clone()) {
+            fetch_window_icon(display, window.window_id(), window.class(), tx);
+        }
         self.wm.add(WinKind::X11(window), surface.clone(), pos, ssd);
         if let Some(w) = self.wm.find(&surface) {
             w.configure(None, &[]);
@@ -104,6 +111,56 @@ impl State {
     fn x11_surface(&self, window: &X11Surface) -> Option<WlSurface> {
         window.wl_surface().filter(|s| self.wm.find(s).is_some())
     }
+}
+
+/// Read `_NET_WM_ICON` on a background thread: Xwayland is served by our own main
+/// thread, so a blocking X request from it could deadlock.
+fn fetch_window_icon(display: u32, window: u32, class: String, tx: Sender<(String, Icon)>) {
+    std::thread::spawn(move || {
+        // Games often set the icon a moment after mapping; try a few times.
+        for attempt in 0..3 {
+            if attempt > 0 {
+                std::thread::sleep(std::time::Duration::from_millis(1500));
+            }
+            if let Some(icon) = read_net_wm_icon(display, window) {
+                let _ = tx.send((class, icon));
+                return;
+            }
+        }
+    });
+}
+
+fn read_net_wm_icon(display: u32, window: u32) -> Option<Icon> {
+    use x11rb::{
+        connection::Connection as _,
+        protocol::xproto::{AtomEnum, ConnectionExt as _},
+        rust_connection::RustConnection,
+    };
+    let (conn, _) = RustConnection::connect(Some(&format!(":{display}"))).ok()?;
+    let atom = conn.intern_atom(false, b"_NET_WM_ICON").ok()?.reply().ok()?.atom;
+    let reply = conn.get_property(false, window, atom, AtomEnum::CARDINAL, 0, 1 << 22).ok()?.reply().ok()?;
+    let data: Vec<u32> = reply.value32()?.collect();
+    let _ = conn.flush();
+
+    // A list of (width, height, width*height ARGB pixels); take the one closest to 48px.
+    let (mut best, mut i): (Option<(usize, usize, usize)>, usize) = (None, 0);
+    while i + 2 <= data.len() {
+        let (w, h) = (data[i] as usize, data[i + 1] as usize);
+        if w == 0 || h == 0 || i + 2 + w * h > data.len() {
+            break;
+        }
+        if best.is_none_or(|(bw, _, _)| (w as i64 - 48).abs() < (bw as i64 - 48).abs()) {
+            best = Some((w, h, i + 2));
+        }
+        i += 2 + w * h;
+    }
+    let (w, h, start) = best?;
+    let mut rgba = Vec::with_capacity(w * h * 4);
+    for &px in &data[start..start + w * h] {
+        let (a, r, g, b) = (px >> 24, (px >> 16) & 0xff, (px >> 8) & 0xff, px & 0xff);
+        rgba.extend_from_slice(&[(r * a / 255) as u8, (g * a / 255) as u8, (b * a / 255) as u8, a as u8]);
+    }
+    Some(Icon { w: w as u32, h: h as u32, rgba })
 }
 
 impl XwmHandler for State {

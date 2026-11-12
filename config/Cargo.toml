@@ -1,0 +1,7 @@
+[package]
+name = "vide-config"
+version = "0.1.0"
+edition = "2024"
+description = "VIDE-DE settings, shared by the compositor and the Settings app"
+
+[dependencies]

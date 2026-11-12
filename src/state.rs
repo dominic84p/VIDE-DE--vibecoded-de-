@@ -146,6 +146,11 @@ pub struct State {
     pub start: Start,
     pub menu: Option<crate::menu::Menu>,
     pub tray: crate::tray::Tray,
+    /// Settings from ~/.config/vide-de/settings.conf (written by vide-settings).
+    pub config: vide_config::Config,
+    pub config_mtime: Option<std::time::SystemTime>,
+    /// Mouse settings changed; the TTY backend re-applies them to libinput devices.
+    pub mouse_config_dirty: bool,
     /// App tray icons (StatusNotifierItem), and the channel to the tray thread.
     pub sni_items: Vec<crate::sni::TrayItem>,
     pub sni_tx: Option<std::sync::mpsc::Sender<crate::sni::Cmd>>,
@@ -179,6 +184,8 @@ pub struct State {
     pub x11_pending: Vec<X11Surface>,
     /// X11 menus/tooltips: they position themselves and sit above everything.
     pub x11_overrides: Vec<X11Surface>,
+    /// Where background threads deliver X11 window icons (class, icon).
+    pub x11_icon_tx: Option<smithay::reexports::calloop::channel::Sender<(String, crate::icons::Icon)>>,
     pub socket_name: String,
     /// Command to launch once the session is fully up (`VIBE_STARTUP`).
     pub startup: Option<String>,
@@ -233,6 +240,9 @@ impl State {
             start: Start::default(),
             menu: None,
             tray: crate::tray::Tray::new(),
+            config: vide_config::Config::load(),
+            config_mtime: vide_config::Config::mtime(),
+            mouse_config_dirty: true,
             sni_items: Vec::new(),
             sni_tx: None,
             tray_menu_x: 0,
@@ -253,6 +263,7 @@ impl State {
             xdisplay: None,
             x11_pending: Vec::new(),
             x11_overrides: Vec::new(),
+            x11_icon_tx: None,
             socket_name,
             startup: None,
             running: true,
@@ -464,8 +475,33 @@ impl State {
             .env("DESKTOP_SESSION", "vide-de");
     }
 
+    /// Start menu list/search. Hidden KDE apps are only left out here; they still
+    /// launch from anywhere else (Mod+Enter, taskbar, menus).
     pub fn filtered_apps(&self) -> Vec<usize> {
-        self.apps.iter().enumerate().filter(|(_, a)| apps::matches(a, &self.start.query)).map(|(i, _)| i).collect()
+        self.apps
+            .iter()
+            .enumerate()
+            .filter(|(_, a)| !(self.config.hide_kde_apps && a.kde))
+            .filter(|(_, a)| apps::matches(a, &self.start.query))
+            .map(|(i, _)| i)
+            .collect()
+    }
+
+    /// Pick up edits from the Settings app (polled once a second).
+    pub fn reload_config_if_changed(&mut self) {
+        let mtime = vide_config::Config::mtime();
+        if mtime == self.config_mtime {
+            return;
+        }
+        self.config_mtime = mtime;
+        let new = vide_config::Config::load();
+        if new.mouse_flat != self.config.mouse_flat || new.mouse_speed != self.config.mouse_speed {
+            self.mouse_config_dirty = true;
+        }
+        tracing::info!("settings reloaded: {new:?}");
+        self.config = new;
+        self.start.menu = None;
+        self.needs_redraw = true;
     }
 
     pub fn toggle_start(&mut self) {

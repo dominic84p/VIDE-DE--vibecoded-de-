@@ -35,7 +35,11 @@ taskbar, start menu and titlebars are all our own code.
   (Discord, Steam, ...): click to open, right-click for the app's menu
 - **Screenshots** and a Windows-style snipping tool
 - **Keyring**: starts KWallet's Secret Service so browsers and Electron apps can save logins
-- **About VIDE-DE** (`vide-about`), a separate app showing your system info via fastfetch
+- **Our own apps**, installed into the start menu automatically:
+  - **Settings** (`vide-settings`): mouse acceleration and speed, hide KDE apps from Start search
+  - **Terminaitor** (`terminaitor`): the terminal, Windows Terminal style with tabs. It'll be back.
+  - **About VIDE-DE** (`vide-about`): your system info via fastfetch
+- **End process** in window right-click menus, for apps that won't close
 - **Smooth**: damage-tracked rendering, paced to vsync
 
 ## Keybinds
@@ -74,8 +78,7 @@ sudo pacman -S wayland libxkbcommon mesa libinput seatd libdrm xorg-xwayland
 ```
 
 ```bash
-cargo build --release --features tty      # the compositor
-cargo build --release -p vide-about       # the About app
+cargo build --release --workspace --features vibe-comp/tty   # compositor + all apps
 ```
 
 Leave out `--features tty` if you only want the nested mode (then you don't need `seatd`).

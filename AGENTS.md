@@ -84,6 +84,9 @@ the WM in `src/wm.rs` is deliberately our own.
   running in another session. That's expected, not a bug in us.
 - **Without linux-dmabuf (with a render-node feedback), Xwayland can't use the GPU**
   and games drop to single-digit FPS. `State::init_dmabuf` must run in every backend.
+- **Games need relative-pointer + pointer-constraints.** Xwayland turns X11 pointer
+  grabs (Minecraft mouse-look) into these; without them the cursor escapes. Locks
+  follow pointer focus and are released on Super / focus change (`release_pointer`).
 - **Brightness is a compositor overlay** (`state.dim`), since desktop monitors have no backlight.
 - **Debug builds are slow** because of the CPU-painted UI; `profile.dev` sets
   `opt-level = 1`. Use release builds for real sessions.

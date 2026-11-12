@@ -56,11 +56,13 @@ use smithay::{
         drm::DrmNode,
         renderer::{gles::GlesRenderer, ImportDma},
     },
-    delegate_dmabuf, delegate_drm_syncobj,
+    delegate_dmabuf, delegate_drm_syncobj, delegate_pointer_constraints, delegate_relative_pointer,
     reexports::calloop::LoopHandle,
     wayland::{
         compositor::{add_blocker, add_pre_commit_hook, with_states},
         drm_syncobj::{DrmSyncobjCachedState, DrmSyncobjHandler, DrmSyncobjState},
+        pointer_constraints::{with_pointer_constraint, PointerConstraintsHandler, PointerConstraintsState},
+        relative_pointer::RelativePointerManagerState,
     },
     wayland::dmabuf::{DmabufFeedbackBuilder, DmabufGlobal, DmabufHandler, DmabufState, ImportNotifier},
 };
@@ -127,6 +129,10 @@ pub struct State {
     pub keyboard: KeyboardHandle<Self>,
     pub pointer: PointerHandle<Self>,
     pub pointer_loc: Point<f64, Logical>,
+    /// The client surface under the pointer and its global origin (for relative motion).
+    pub pointer_focus: Option<(WlSurface, Point<f64, Logical>)>,
+    pub relative_pointer_state: RelativePointerManagerState,
+    pub pointer_constraints_state: PointerConstraintsState,
     pub seen_pointer: bool,
     pub cursor_status: CursorImageStatus,
     pub cursors: Cursors,
@@ -213,6 +219,9 @@ impl State {
             keyboard,
             pointer,
             pointer_loc: (0.0, 0.0).into(),
+            pointer_focus: None,
+            relative_pointer_state: RelativePointerManagerState::new::<Self>(&dh),
+            pointer_constraints_state: PointerConstraintsState::new::<Self>(&dh),
             seen_pointer: false,
             cursor_status: CursorImageStatus::default_named(),
             cursors: Cursors::load(),
@@ -283,8 +292,23 @@ impl State {
         Rectangle::from_size((self.output_size.w, self.output_size.h - TASKBAR_H).into())
     }
 
+    /// Let go of any game's pointer lock/confine, so the user gets a usable cursor back
+    /// (Super, Alt+Tab, focus moving elsewhere). The game re-locks when the pointer returns.
+    pub fn release_pointer(&mut self) {
+        if let Some((s, _)) = &self.pointer_focus {
+            with_pointer_constraint(s, &self.pointer, |c| {
+                if let Some(c) = c.filter(|c| c.is_active()) {
+                    c.deactivate();
+                }
+            });
+        }
+    }
+
     /// Give keyboard focus to `surface`, raise and un-minimize its window, mark it activated.
     pub fn focus(&mut self, surface: Option<WlSurface>, serial: Serial) {
+        if self.pointer_focus.as_ref().map(|(s, _)| s) != surface.as_ref() {
+            self.release_pointer();
+        }
         if let Some(s) = &surface {
             self.wm.raise(s);
             if let Some(w) = self.wm.find_mut(s) {
@@ -446,11 +470,38 @@ impl State {
 
     pub fn toggle_start(&mut self) {
         self.start.open = !self.start.open;
+        if self.start.open {
+            self.release_pointer();
+        }
         self.start.query.clear();
         self.start.selected = 0;
         self.start.scroll = 0;
         self.start.power_open = false;
         self.needs_redraw = true;
+    }
+}
+
+/// Games lock or confine the pointer (mouse-look); Xwayland maps X11 pointer grabs onto this.
+impl PointerConstraintsHandler for State {
+    fn new_constraint(&mut self, surface: &WlSurface, pointer: &PointerHandle<Self>) {
+        // Only takes effect while the pointer is over that surface.
+        if self.pointer_focus.as_ref().is_some_and(|(s, _)| s == surface) {
+            with_pointer_constraint(surface, pointer, |c| {
+                if let Some(c) = c {
+                    c.activate();
+                }
+            });
+        }
+    }
+
+    fn cursor_position_hint(&mut self, surface: &WlSurface, pointer: &PointerHandle<Self>, location: Point<f64, Logical>) {
+        // While locked, the app tells us where its cursor "is", so it reappears there on unlock.
+        let active = with_pointer_constraint(surface, pointer, |c| c.is_some_and(|c| c.is_active()));
+        if let (true, Some((s, origin))) = (active, &self.pointer_focus) {
+            if s == surface {
+                self.pointer_loc = *origin + location;
+            }
+        }
     }
 }
 
@@ -764,3 +815,5 @@ delegate_primary_selection!(State);
 delegate_output!(State);
 delegate_dmabuf!(State);
 delegate_drm_syncobj!(State);
+delegate_relative_pointer!(State);
+delegate_pointer_constraints!(State);

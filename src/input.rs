@@ -17,11 +17,14 @@ use smithay::{
     desktop::{find_popup_root_surface, utils::under_from_surface_tree, WindowSurfaceType},
     input::{
         keyboard::{keysyms::KEY_NoSymbol, FilterResult, Keysym, ModifiersState},
-        pointer::{AxisFrame, ButtonEvent, CursorIcon, CursorImageStatus, MotionEvent},
+        pointer::{AxisFrame, ButtonEvent, CursorIcon, CursorImageStatus, MotionEvent, RelativeMotionEvent},
     },
     reexports::wayland_server::protocol::wl_surface::WlSurface,
     utils::{Logical, Point, Rectangle, SERIAL_COUNTER},
-    wayland::compositor::get_parent,
+    wayland::{
+        compositor::get_parent,
+        pointer_constraints::{with_pointer_constraint, PointerConstraint},
+    },
 };
 
 use crate::{
@@ -184,10 +187,53 @@ impl State {
                     self.seen_pointer = true;
                     tracing::info!("first relative pointer motion");
                 }
+                let delta = event.delta();
+
+                // Raw movement for games (mouse-look), whether or not the cursor can move.
+                let ptr = self.pointer.clone();
+                let focus = self.pointer_focus.clone();
+                ptr.relative_motion(
+                    self,
+                    focus.clone(),
+                    &RelativeMotionEvent { delta, delta_unaccel: event.delta_unaccel(), utime: event.time() },
+                );
+
+                // A game holding a lock keeps the cursor still; a confine keeps it in its region.
+                let constraint = focus.as_ref().and_then(|(s, origin)| {
+                    with_pointer_constraint(s, &ptr, |c| match c.as_deref() {
+                        Some(PointerConstraint::Locked(_)) if c.as_ref().unwrap().is_active() => Some(None),
+                        Some(PointerConstraint::Confined(conf)) if c.as_ref().unwrap().is_active() => {
+                            Some(Some((s.clone(), *origin, conf.region().cloned())))
+                        }
+                        _ => None,
+                    })
+                });
                 let size = self.output_size.to_f64();
-                let mut pos = self.pointer_loc + event.delta();
+                let mut pos = self.pointer_loc + delta;
                 pos.x = pos.x.clamp(0.0, size.w - 1.0);
                 pos.y = pos.y.clamp(0.0, size.h - 1.0);
+                match constraint {
+                    Some(None) => {
+                        ptr.frame(self);
+                        return;
+                    }
+                    Some(Some((s, origin, region))) => {
+                        let inside = |p: Point<f64, Logical>| {
+                            let local = (p - origin).to_i32_round::<i32>();
+                            match &region {
+                                Some(r) => r.contains(local),
+                                None => self.wm.hit(p).is_some_and(|h| matches!(h, Hit::Client(ref hs, _) if *hs == s)),
+                            }
+                        };
+                        if !inside(pos) {
+                            // Slide along whichever axis still fits, else stay.
+                            let x_only = Point::from((pos.x, self.pointer_loc.y));
+                            let y_only = Point::from((self.pointer_loc.x, pos.y));
+                            pos = if inside(x_only) { x_only } else if inside(y_only) { y_only } else { self.pointer_loc };
+                        }
+                    }
+                    None => {}
+                }
                 self.pointer_to(pos, event.time_msec());
             }
 
@@ -530,7 +576,28 @@ impl State {
             }
         }
 
+        // Pointer constraints follow focus: deactivate on the old surface, activate on the new.
         let ptr = self.pointer.clone();
+        let old = self.pointer_focus.as_ref().map(|(s, _)| s.clone());
+        let new = focus.as_ref().map(|(s, _)| s.clone());
+        if old != new {
+            if let Some(s) = &old {
+                with_pointer_constraint(s, &ptr, |c| {
+                    if let Some(c) = c.filter(|c| c.is_active()) {
+                        c.deactivate();
+                    }
+                });
+            }
+            if let Some(s) = &new {
+                with_pointer_constraint(s, &ptr, |c| {
+                    if let Some(c) = c.filter(|c| !c.is_active()) {
+                        c.activate();
+                    }
+                });
+            }
+        }
+        self.pointer_focus = focus.clone();
+
         ptr.motion(self, focus, &MotionEvent { location: pos, serial: SERIAL_COUNTER.next_serial(), time });
         ptr.frame(self);
     }

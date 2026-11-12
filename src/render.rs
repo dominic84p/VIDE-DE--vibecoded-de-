@@ -256,11 +256,38 @@ fn tray_icons(state: &mut State) -> Vec<Option<std::rc::Rc<crate::icons::Icon>>>
                     in_app_dir.or_else(|| state.tray_theme.get(&item.icon_name, TRAY_ICON))
                 }
             };
+            let icon = icon.map(|i| match lighten_dark_glyph(&i) {
+                Some(light) => std::rc::Rc::new(light),
+                None => i,
+            });
             state.tray_icon_cache.insert(fp.clone(), icon);
         }
         out.push(state.tray_icon_cache[&fp].clone());
     }
     out
+}
+
+/// Tray icons drawn for light menu bars (black "template" glyphs, like Claude's) vanish
+/// on our dark taskbar. If an icon is nearly all dark and colourless, redraw it in white,
+/// keeping its shape (alpha). Colourful icons are left alone.
+fn lighten_dark_glyph(icon: &crate::icons::Icon) -> Option<crate::icons::Icon> {
+    let (mut n, mut lum, mut sat) = (0u32, 0.0f32, 0.0f32);
+    for px in icon.rgba.chunks_exact(4) {
+        let a = px[3] as f32 / 255.0;
+        if a < 0.25 {
+            continue;
+        }
+        // Un-premultiply to judge the real colour.
+        let (r, g, b) = (px[0] as f32 / 255.0 / a, px[1] as f32 / 255.0 / a, px[2] as f32 / 255.0 / a);
+        lum += 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        sat += r.max(g).max(b) - r.min(g).min(b);
+        n += 1;
+    }
+    if n == 0 || lum / n as f32 > 0.3 || sat / n as f32 > 0.15 {
+        return None;
+    }
+    let rgba = icon.rgba.chunks_exact(4).flat_map(|px| [px[3], px[3], px[3], px[3]]).collect();
+    Some(crate::icons::Icon { w: icon.w, h: icon.h, rgba })
 }
 
 /// Tell every visible surface it was just presented so it can draw its next frame.

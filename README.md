@@ -132,9 +132,9 @@ Humans who pointed the AI, and the models that wrote the code.
 | Who | What |
 |---|---|
 | [dominic84p](https://github.com/dominic84p) | Project owner, chief prompt engineer |
-| Claude Opus 5.5 (Anthropic) | The compositor, shell and apps |
+| **NVIDIA Nemotron 3 Ultra** | Documentation site (Astro Starlight), GitHub Actions workflow, Task Mangler refactor |
 | [notamitgamer](https://github.com/notamitgamer) | Virtual desktops ([#1](https://github.com/dominic84p/vide-de/pull/1)) |
-| Nemotron 3 Ultra (NVIDIA) | Wrote #1 for notamitgamer; the Task Mangler refactor |
+| Claude Opus 5.5 (Anthropic) | The compositor, shell and apps |
 | Gemini (Google) | Notifications and Action Center, Wi-Fi and Bluetooth tray, Settings system pages |
 
 ## AI Agent Pokédex

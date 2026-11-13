@@ -44,7 +44,9 @@ pub fn run(event_loop: &mut EventLoop<'static, State>, state: &mut State) -> Res
             state.output_size = size.to_logical(1);
             state.needs_redraw = true;
         }
-        WinitEvent::Input(event) => state.handle_input(event),
+        WinitEvent::Input(event) => {
+            crate::supervisor::guard("input", || state.handle_input(event));
+        }
         WinitEvent::Redraw => state.needs_redraw = true,
         WinitEvent::CloseRequested => state.running = false,
         WinitEvent::Focus(_) => {}

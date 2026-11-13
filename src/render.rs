@@ -88,31 +88,33 @@ pub fn elements_with(renderer: &mut GlesRenderer, state: &mut State, cursor: boo
     }
 
     // Alt+Tab: live window thumbnails on top of the panel picture.
-    if let (Some(origin), Some(panel)) = (state.switcher_origin(), state.switcher_picture()) {
-        let sw = state.switcher.as_ref().unwrap();
-        for (i, s) in sw.order.iter().enumerate() {
-            let Some(w) = state.wm.find(s) else { continue };
-            let g = w.geometry();
-            if g.size.w <= 0 || g.size.h <= 0 {
-                continue;
+    crate::supervisor::guard("alt-tab switcher", || {
+        if let (Some(origin), Some(panel)) = (state.switcher_origin(), state.switcher_picture()) {
+            let sw = state.switcher.as_ref().unwrap();
+            for (i, s) in sw.order.iter().enumerate() {
+                let Some(w) = state.wm.find(s) else { continue };
+                let g = w.geometry();
+                if g.size.w <= 0 || g.size.h <= 0 {
+                    continue;
+                }
+                let tile = sw.tile(i);
+                let area = (crate::switcher::TILE_W - 20, crate::switcher::THUMB_H);
+                let scale = (area.0 as f64 / g.size.w as f64).min(area.1 as f64 / g.size.h as f64).min(1.0);
+                let (tw, th) = ((g.size.w as f64 * scale) as i32, (g.size.h as f64 * scale) as i32);
+                // Centre the thumbnail; shift by the geometry offset so client shadows sit outside.
+                let off = w.surface_loc() - w.pos;
+                let at = origin + tile.loc + Point::from(((tile.size.w - tw) / 2, 30 + (area.1 - th) / 2));
+                // Draw at full size anchored at `at`, then shrink everything around that point.
+                let origin_px = at.to_physical(1);
+                out.extend(
+                    render_elements_from_surface_tree(renderer, s, (at + off).to_physical(1), 1.0, 1.0, Kind::Unspecified)
+                        .into_iter()
+                        .map(|e| Elem::Thumb(RescaleRenderElement::from_element(e, origin_px, scale))),
+                );
             }
-            let tile = sw.tile(i);
-            let area = (crate::switcher::TILE_W - 20, crate::switcher::THUMB_H);
-            let scale = (area.0 as f64 / g.size.w as f64).min(area.1 as f64 / g.size.h as f64).min(1.0);
-            let (tw, th) = ((g.size.w as f64 * scale) as i32, (g.size.h as f64 * scale) as i32);
-            // Centre the thumbnail; shift by the geometry offset so client shadows sit outside.
-            let off = w.surface_loc() - w.pos;
-            let at = origin + tile.loc + Point::from(((tile.size.w - tw) / 2, 30 + (area.1 - th) / 2));
-            // Draw at full size anchored at `at`, then shrink everything around that point.
-            let origin_px = at.to_physical(1);
-            out.extend(
-                render_elements_from_surface_tree(renderer, s, (at + off).to_physical(1), 1.0, 1.0, Kind::Unspecified)
-                    .into_iter()
-                    .map(|e| Elem::Thumb(RescaleRenderElement::from_element(e, origin_px, scale))),
-            );
+            out.extend(image(renderer, &panel, origin, Kind::Unspecified));
         }
-        out.extend(image(renderer, &panel, origin, Kind::Unspecified));
-    }
+    });
 
     // Overlay-layer clients (lock screens, notifications) above all our chrome.
     for (s, at) in state.layer_surfaces(&[Layer::Overlay]) {
@@ -127,22 +129,28 @@ pub fn elements_with(renderer: &mut GlesRenderer, state: &mut State, cursor: boo
     }
 
     // Task View desktop switcher.
-    let desktops_at = state.desktops_rect().loc;
-    if let Some(buf) = state.desktops_picture() {
-        out.extend(image(renderer, &buf, desktops_at, Kind::Unspecified));
-    }
+    crate::supervisor::guard("task view", || {
+        let desktops_at = state.desktops_rect().loc;
+        if let Some(buf) = state.desktops_picture() {
+            out.extend(image(renderer, &buf, desktops_at, Kind::Unspecified));
+        }
+    });
 
     // Action Center (notifications).
-    let action_center_at = state.action_center_rect().loc;
-    if let Some(buf) = state.action_center_picture() {
-        out.extend(image(renderer, &buf, action_center_at, Kind::Unspecified));
-    }
+    crate::supervisor::guard("action center", || {
+        let action_center_at = state.action_center_rect().loc;
+        if let Some(buf) = state.action_center_picture() {
+            out.extend(image(renderer, &buf, action_center_at, Kind::Unspecified));
+        }
+    });
 
     // Tray flyout (volume/brightness slider), above the taskbar.
-    let flyout_at = state.flyout_rect().loc;
-    if let Some(buf) = state.flyout_picture().cloned() {
-        out.extend(image(renderer, &buf, flyout_at, Kind::Unspecified));
-    }
+    crate::supervisor::guard("tray flyout", || {
+        let flyout_at = state.flyout_rect().loc;
+        if let Some(buf) = state.flyout_picture().cloned() {
+            out.extend(image(renderer, &buf, flyout_at, Kind::Unspecified));
+        }
+    });
 
     // Snipping overlay: everything dimmed except the selection.
     if let Some(snip) = state.snip.as_mut() {
@@ -153,11 +161,13 @@ pub fn elements_with(renderer: &mut GlesRenderer, state: &mut State, cursor: boo
     }
 
     // Our right-click menu.
-    if let Some(m) = state.menu.as_mut() {
-        let pos = m.pos;
-        let buf = m.picture(state.font.as_ref()).clone();
-        out.extend(image(renderer, &buf, pos, Kind::Unspecified));
-    }
+    crate::supervisor::guard("context menu", || {
+        if let Some(m) = state.menu.as_mut() {
+            let pos = m.pos;
+            let buf = m.picture(state.font.as_ref()).clone();
+            out.extend(image(renderer, &buf, pos, Kind::Unspecified));
+        }
+    });
 
     // X11 menus and tooltips, above everything but the cursor.
     for x in state.x11_overrides.iter().rev() {
@@ -173,66 +183,70 @@ pub fn elements_with(renderer: &mut GlesRenderer, state: &mut State, cursor: boo
     }
 
     // Start menu.
-    if state.start.open {
-        let height = (oh - TASKBAR_H).min(620);
-        let items = state.start_rows();
-        let hover = match &state.hover {
-            Hover::Start(h) => Some(h.clone()),
-            _ => None,
-        };
-        let key = StartKey {
-            height,
-            query: state.start.query.clone(),
-            items,
-            selected: state.start.selected,
-            scroll: state.start.scroll,
-            hover,
-            power_open: state.start.power_open,
-            searching: state.start.searching(),
-            filter: state.start.filter,
-            kinds: state.start.results.iter().map(|e| state.result_kind(e)).collect(),
-            tiles: state.start_tiles().into_iter().map(|(i, g)| (state.apps[i].name.clone(), state.apps[i].icon.clone(), g)).collect(),
-            user: std::env::var("USER").unwrap_or_else(|_| "User".into()),
-            rail_open: state.start.rail_open,
-            preview: if state.start.searching() && !state.start.query.trim().is_empty() { state.start_preview() } else { None },
-        };
-        if state.start.menu.as_ref().is_none_or(|m| m.key != key) {
-            state.start.menu = Some(ui::draw_start_menu(state.font.as_ref(), &mut state.icons, key));
+    crate::supervisor::guard("start menu", || {
+        if state.start.open {
+            let height = (oh - TASKBAR_H).min(620);
+            let items = state.start_rows();
+            let hover = match &state.hover {
+                Hover::Start(h) => Some(h.clone()),
+                _ => None,
+            };
+            let key = StartKey {
+                height,
+                query: state.start.query.clone(),
+                items,
+                selected: state.start.selected,
+                scroll: state.start.scroll,
+                hover,
+                power_open: state.start.power_open,
+                searching: state.start.searching(),
+                filter: state.start.filter,
+                kinds: state.start.results.iter().map(|e| state.result_kind(e)).collect(),
+                tiles: state.start_tiles().into_iter().map(|(i, g)| (state.apps[i].name.clone(), state.apps[i].icon.clone(), g)).collect(),
+                user: std::env::var("USER").unwrap_or_else(|_| "User".into()),
+                rail_open: state.start.rail_open,
+                preview: if state.start.searching() && !state.start.query.trim().is_empty() { state.start_preview() } else { None },
+            };
+            if state.start.menu.as_ref().is_none_or(|m| m.key != key) {
+                state.start.menu = Some(ui::draw_start_menu(state.font.as_ref(), &mut state.icons, key));
+            }
+            let menu = state.start.menu.as_ref().unwrap();
+            out.extend(image(renderer, &menu.buffer, (0, oh - TASKBAR_H - height).into(), Kind::Unspecified));
+            let _ = MENU_W;
         }
-        let menu = state.start.menu.as_ref().unwrap();
-        out.extend(image(renderer, &menu.buffer, (0, oh - TASKBAR_H - height).into(), Kind::Unspecified));
-        let _ = MENU_W;
-    }
+    });
 
     // Taskbar, unless a fullscreen window is in front.
-    // Fullscreen apps cover it, unless the start menu is up (Super over a game shows it, like Windows).
-    let fullscreen_top = state.wm.top().is_some_and(|w| w.fullscreen.is_some() && Some(w.surface()) == focused.as_ref());
-    if !fullscreen_top || state.start.open {
-        let key = TaskbarKey {
-            width: ow,
-            items: state.taskbar_items(focused.as_ref()),
-            time: state.clock.0.clone(),
-            date: state.clock.1.clone(),
-            hover: match &state.hover {
-                Hover::Taskbar(h) => Some(h.clone()),
-                _ => None,
-            },
-            start_open: state.start.open,
-            volume: ((state.tray.volume * 100.0).round() as u32, state.tray.muted),
-            net: state.tray.icon(),
-            flyout: state.tray.flyout,
-            current_workspace: state.wm.current_workspace,
-            taskview_open: state.desktops.open,
-            tray_apps: state.sni_items.iter().map(|i| (i.id.clone(), tray_fingerprint(i))).collect(),
-            search_text: (state.start.open && state.start.searching()).then(|| state.start.query.clone()),
-        };
-        if state.taskbar.as_ref().is_none_or(|t| t.key != key) {
-            let tray_icons = tray_icons(state);
-            state.taskbar = Some(ui::draw_taskbar(state.font.as_ref(), &mut state.icons, state.logo.as_ref(), &tray_icons, key));
+    crate::supervisor::guard("taskbar", || {
+        // Fullscreen apps cover it, unless the start menu is up (Super over a game shows it, like Windows).
+        let fullscreen_top = state.wm.top().is_some_and(|w| w.fullscreen.is_some() && Some(w.surface()) == focused.as_ref());
+        if !fullscreen_top || state.start.open {
+            let key = TaskbarKey {
+                width: ow,
+                items: state.taskbar_items(focused.as_ref()),
+                time: state.clock.0.clone(),
+                date: state.clock.1.clone(),
+                hover: match &state.hover {
+                    Hover::Taskbar(h) => Some(h.clone()),
+                    _ => None,
+                },
+                start_open: state.start.open,
+                volume: ((state.tray.volume * 100.0).round() as u32, state.tray.muted),
+                net: state.tray.icon(),
+                flyout: state.tray.flyout,
+                current_workspace: state.wm.current_workspace,
+                taskview_open: state.desktops.open,
+                tray_apps: state.sni_items.iter().map(|i| (i.id.clone(), tray_fingerprint(i))).collect(),
+                search_text: (state.start.open && state.start.searching()).then(|| state.start.query.clone()),
+            };
+            if state.taskbar.as_ref().is_none_or(|t| t.key != key) {
+                let tray_icons = tray_icons(state);
+                state.taskbar = Some(ui::draw_taskbar(state.font.as_ref(), &mut state.icons, state.logo.as_ref(), &tray_icons, key));
+            }
+            let bar = state.taskbar.as_ref().unwrap();
+            out.extend(image(renderer, &bar.buffer, (0, oh - TASKBAR_H).into(), Kind::Unspecified));
         }
-        let bar = state.taskbar.as_ref().unwrap();
-        out.extend(image(renderer, &bar.buffer, (0, oh - TASKBAR_H).into(), Kind::Unspecified));
-    }
+    });
 
     // Top-layer clients (panels, docks) above windows.
     for (s, at) in state.layer_surfaces(&[Layer::Top]) {

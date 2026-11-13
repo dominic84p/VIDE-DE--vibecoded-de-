@@ -286,7 +286,7 @@ impl State {
         let (tx, rx) = channel::channel();
         let res = self.loop_handle.insert_source(rx, |event, _, state| {
             if let channel::Event::Msg(u) = event {
-                state.apply_tray_update(u);
+                crate::supervisor::guard("tray update", || state.apply_tray_update(u));
             }
         });
         if let Err(e) = res {

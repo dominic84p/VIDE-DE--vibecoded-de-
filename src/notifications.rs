@@ -283,20 +283,18 @@ impl Server {
 
 pub fn start(events: LoopSender<NotifEvent>) -> NotifSender {
     let (tx, rx) = mpsc::channel();
-    std::thread::Builder::new()
-        .name("notifications".into())
-        .spawn(move || {
-            if let Err(e) = run(events, rx) {
-                tracing::warn!("notifications: disabled ({e})");
-            }
-        })
-        .ok();
+    // The receiver outlives a crash, so queued commands survive the restart.
+    crate::supervisor::spawn_service("notifications", move || {
+        if let Err(e) = run(&events, &rx) {
+            tracing::warn!("notifications: disabled ({e})");
+        }
+    });
     tx
 }
 
-fn run(events: LoopSender<NotifEvent>, cmds: mpsc::Receiver<NotifCmd>) -> zbus::Result<()> {
+fn run(events: &LoopSender<NotifEvent>, cmds: &mpsc::Receiver<NotifCmd>) -> zbus::Result<()> {
     let next_id = Arc::new(AtomicU32::new(1));
-    let server = Server { events, next_id };
+    let server = Server { events: events.clone(), next_id };
     let conn = connection::Builder::session()?
         .serve_at("/org/freedesktop/Notifications", server)?
         .build()?;

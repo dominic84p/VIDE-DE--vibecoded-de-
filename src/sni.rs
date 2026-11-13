@@ -110,18 +110,15 @@ impl Watcher {
 /// Start the tray thread. Returns where to send clicks; updates arrive on `events`.
 pub fn start(events: LoopSender<Event>) -> mpsc::Sender<Cmd> {
     let (tx, rx) = mpsc::channel();
-    std::thread::Builder::new()
-        .name("tray".into())
-        .spawn(move || {
-            if let Err(e) = run(events, rx) {
-                tracing::warn!("tray: disabled ({e})");
-            }
-        })
-        .ok();
+    crate::supervisor::spawn_service("tray", move || {
+        if let Err(e) = run(&events, &rx) {
+            tracing::warn!("tray: disabled ({e})");
+        }
+    });
     tx
 }
 
-fn run(events: LoopSender<Event>, cmds: mpsc::Receiver<Cmd>) -> zbus::Result<()> {
+fn run(events: &LoopSender<Event>, cmds: &mpsc::Receiver<Cmd>) -> zbus::Result<()> {
     let items: Registry = Default::default();
     let dirty = Arc::new(AtomicBool::new(false));
     let conn = connection::Builder::session()?
@@ -144,7 +141,7 @@ fn run(events: LoopSender<Event>, cmds: mpsc::Receiver<Cmd>) -> zbus::Result<()>
     let mut last_full = Instant::now();
     loop {
         match cmds.recv_timeout(Duration::from_millis(300)) {
-            Ok(cmd) => handle(&conn, &events, cmd),
+            Ok(cmd) => handle(&conn, events, cmd),
             Err(mpsc::RecvTimeoutError::Disconnected) => return Ok(()),
             Err(mpsc::RecvTimeoutError::Timeout) => {}
         }

@@ -227,6 +227,7 @@ pub struct State {
     pub socket_name: String,
     /// Our control socket, handed to apps as $VIDE_IPC.
     pub ipc_path: Option<std::path::PathBuf>,
+    pub supervisor: crate::supervisor::Supervisor,
     /// Command to launch once the session is fully up (`VIBE_STARTUP`).
     pub startup: Option<String>,
     pub running: bool,
@@ -333,6 +334,7 @@ impl State {
             x11_icon_tx: None,
             socket_name,
             ipc_path: None,
+            supervisor: Default::default(),
             startup: None,
             running: true,
             tty: false,
@@ -499,6 +501,12 @@ impl State {
     // ------------------------------------------------------------ launching
 
     pub fn spawn(&self, cmd: &str) {
+        self.spawn_child(cmd);
+    }
+
+    /// Like `spawn`, but hands back the process so the supervisor can watch it.
+    /// `exec` makes the child the program itself, not a shell around it.
+    pub fn spawn_child(&self, cmd: &str) -> Option<std::process::Child> {
         let mut c = std::process::Command::new("sh");
         c.arg("-c").arg(cmd);
         self.app_env(&mut c);
@@ -507,8 +515,12 @@ impl State {
         if cmd.contains("flatpak ") {
             c.env_remove("ELECTRON_OZONE_PLATFORM_HINT");
         }
-        if let Err(e) = c.spawn() {
-            tracing::warn!("failed to spawn {cmd}: {e}");
+        match c.spawn() {
+            Ok(child) => Some(child),
+            Err(e) => {
+                tracing::warn!("failed to spawn {cmd}: {e}");
+                None
+            }
         }
     }
 
@@ -543,13 +555,13 @@ impl State {
         // Start our screenshare / screenshot portal backend and reload xdg-desktop-portal
         // so it picks up vide-portals.conf on the current D-Bus/Wayland environment.
         if let Some(portal) = crate::input::own_app("vide-portal") {
-            self.spawn(&portal);
+            self.supervise("vide-portal", &format!("exec {portal}"));
         }
         self.spawn("systemctl --user try-restart xdg-desktop-portal 2>/dev/null || true");
         // The desktop (wallpaper + icons) is its own program on the background layer;
         // without it we fall back to drawing a wallpaper ourselves.
         if let Some(desktop) = crate::input::own_app("vide-desktop") {
-            self.spawn(&desktop);
+            self.supervise("vide-desktop", &format!("exec {desktop}"));
         }
         if let Some(cmd) = self.startup.take() {
             self.spawn(&cmd);

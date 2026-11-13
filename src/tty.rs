@@ -206,7 +206,7 @@ pub fn run(event_loop: &mut EventLoop<'static, State>, state: &mut State) -> Res
                 if let InputEvent::DeviceRemoved { device } = &event {
                     devices.borrow_mut().retain(|d| d != device);
                 }
-                state.handle_input(event);
+                crate::supervisor::guard("input", || state.handle_input(event));
             }
         })?;
 

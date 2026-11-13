@@ -16,6 +16,7 @@ mod search;
 mod sni;
 mod switcher;
 mod state;
+mod supervisor;
 mod tray;
 #[cfg(feature = "tty")]
 mod tty;
@@ -66,7 +67,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Generic::new(display, Interest::READ, Mode::Level),
         |_, display, state| {
             // Safety: we never drop the display while the source is alive.
-            unsafe { display.get_mut().dispatch_clients(state).unwrap() };
+            // A panic in one protocol handler shouldn't end every client's session.
+            supervisor::guard("wayland dispatch", || unsafe { display.get_mut().dispatch_clients(state).unwrap() });
             state.popups.cleanup();
             Ok(PostAction::Continue)
         },
@@ -74,12 +76,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Panel clock: check once a second, redraw only when the minute changes.
     event_loop.handle().insert_source(Timer::from_duration(Duration::from_secs(1)), |_, _, state| {
-        let now = state::clock_now();
-        if now != state.clock {
-            state.clock = now;
-            state.needs_redraw = true;
-        }
-        state.reload_config_if_changed();
+        supervisor::guard("clock tick", || {
+            let now = state::clock_now();
+            if now != state.clock {
+                state.clock = now;
+                state.needs_redraw = true;
+            }
+            state.reload_config_if_changed();
+        });
+        supervisor::guard("supervisor", || state.supervisor_tick());
         TimeoutAction::ToDuration(Duration::from_secs(1))
     })?;
 
@@ -96,10 +101,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (tray_tx, tray_rx) = smithay::reexports::calloop::channel::channel();
     event_loop.handle().insert_source(tray_rx, |event, _, state| {
         if let smithay::reexports::calloop::channel::Event::Msg(ev) = event {
-            match ev {
+            supervisor::guard("tray event", || match ev {
                 sni::Event::Items(items) => state.sni_items = items,
                 sni::Event::Menu { id, entries } => state.open_tray_menu(id, entries),
-            }
+            });
             state.needs_redraw = true;
         }
     })?;
@@ -110,7 +115,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     event_loop.handle().insert_source(icon_rx, |event, _, state| {
         if let smithay::reexports::calloop::channel::Event::Msg((class, icon)) = event {
             tracing::info!("window icon for {class}: {}x{}", icon.w, icon.h);
-            state.icons.set_custom(&class, icon);
+            supervisor::guard("window icon", || state.icons.set_custom(&class, icon));
             state.taskbar = None;
             state.needs_redraw = true;
         }
@@ -121,7 +126,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (notif_tx, notif_rx) = smithay::reexports::calloop::channel::channel::<notifications::NotifEvent>();
     event_loop.handle().insert_source(notif_rx, |event, _, state| {
         if let smithay::reexports::calloop::channel::Event::Msg(ev) = event {
-            state.handle_notif_event(ev);
+            supervisor::guard("notification event", || state.handle_notif_event(ev));
         }
     })?;
     state.notif_tx = Some(notifications::start(notif_tx));

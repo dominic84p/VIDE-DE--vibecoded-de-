@@ -345,6 +345,9 @@ impl State {
 
     pub fn toggle_flyout(&mut self, f: Flyout) {
         self.tray.flyout = if self.tray.flyout == Some(f) { None } else { Some(f) };
+        if self.tray.flyout.is_some() {
+            self.release_pointer();
+        }
         match f {
             Flyout::Volume => {
                 if let Some((v, m)) = read_volume() {

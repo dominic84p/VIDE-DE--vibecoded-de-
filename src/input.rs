@@ -224,26 +224,34 @@ impl State {
                     tracing::info!("first relative pointer motion");
                 }
                 let delta = event.delta();
+                let overlay_open = self.shell_overlay_open();
 
-                // Raw movement for games (mouse-look), whether or not the cursor can move.
+                // Raw movement for games (mouse-look), unless a shell overlay owns the mouse.
                 let ptr = self.pointer.clone();
                 let focus = self.pointer_focus.clone();
-                ptr.relative_motion(
-                    self,
-                    focus.clone(),
-                    &RelativeMotionEvent { delta, delta_unaccel: event.delta_unaccel(), utime: event.time() },
-                );
+                if !overlay_open {
+                    ptr.relative_motion(
+                        self,
+                        focus.clone(),
+                        &RelativeMotionEvent { delta, delta_unaccel: event.delta_unaccel(), utime: event.time() },
+                    );
+                }
 
                 // A game holding a lock keeps the cursor still; a confine keeps it in its region.
-                let constraint = focus.as_ref().and_then(|(s, origin)| {
-                    with_pointer_constraint(s, &ptr, |c| match c.as_deref() {
-                        Some(PointerConstraint::Locked(_)) if c.as_ref().unwrap().is_active() => Some(None),
-                        Some(PointerConstraint::Confined(conf)) if c.as_ref().unwrap().is_active() => {
-                            Some(Some((s.clone(), *origin, conf.region().cloned())))
-                        }
-                        _ => None,
+                // While any Windows/shell overlay is open, the shell automatically takes the mouse.
+                let constraint = if overlay_open {
+                    None
+                } else {
+                    focus.as_ref().and_then(|(s, origin)| {
+                        with_pointer_constraint(s, &ptr, |c| match c.as_deref() {
+                            Some(PointerConstraint::Locked(_)) if c.as_ref().unwrap().is_active() => Some(None),
+                            Some(PointerConstraint::Confined(conf)) if c.as_ref().unwrap().is_active() => {
+                                Some(Some((s.clone(), *origin, conf.region().cloned())))
+                            }
+                            _ => None,
+                        })
                     })
-                });
+                };
                 let size = self.output_size.to_f64();
                 let mut pos = self.pointer_loc + delta;
                 pos.x = pos.x.clamp(0.0, size.w - 1.0);
@@ -861,11 +869,13 @@ impl State {
             }
         }
 
-        // Pointer constraints follow focus: deactivate on the old surface, activate on the new.
+        // Pointer constraints follow focus: deactivate on the old surface, activate on the new
+        // (unless a shell overlay is open and owns the mouse).
         let ptr = self.pointer.clone();
         let old = self.pointer_focus.as_ref().map(|(s, _)| s.clone());
         let new = focus.as_ref().map(|(s, _)| s.clone());
-        if old != new {
+        let overlay_open = self.shell_overlay_open();
+        if old != new || overlay_open {
             if let Some(s) = &old {
                 with_pointer_constraint(s, &ptr, |c| {
                     if let Some(c) = c.filter(|c| c.is_active()) {
@@ -873,12 +883,14 @@ impl State {
                     }
                 });
             }
-            if let Some(s) = &new {
-                with_pointer_constraint(s, &ptr, |c| {
-                    if let Some(c) = c.filter(|c| !c.is_active()) {
-                        c.activate();
-                    }
-                });
+            if !overlay_open {
+                if let Some(s) = &new {
+                    with_pointer_constraint(s, &ptr, |c| {
+                        if let Some(c) = c.filter(|c| !c.is_active()) {
+                            c.activate();
+                        }
+                    });
+                }
             }
         }
         self.pointer_focus = focus.clone();

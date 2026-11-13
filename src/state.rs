@@ -158,6 +158,7 @@ pub struct State {
     pub relative_pointer_state: RelativePointerManagerState,
     pub pointer_constraints_state: PointerConstraintsState,
     pub seen_pointer: bool,
+    pub dnd_icon: Option<WlSurface>,
     pub cursor_status: CursorImageStatus,
     pub cursors: Cursors,
 
@@ -285,6 +286,7 @@ impl State {
             relative_pointer_state: RelativePointerManagerState::new::<Self>(&dh),
             pointer_constraints_state: PointerConstraintsState::new::<Self>(&dh),
             seen_pointer: false,
+            dnd_icon: None,
             cursor_status: CursorImageStatus::default_named(),
             cursors: Cursors::load(),
             font: canvas::load_font(),
@@ -367,6 +369,17 @@ impl State {
     /// The screen minus the taskbar: where maximized windows go.
     pub fn work_area(&self) -> Rectangle<i32, Logical> {
         Rectangle::from_size((self.output_size.w, self.output_size.h - TASKBAR_H).into())
+    }
+
+    /// True while any compositor shell overlay (Start, Task View, tray flyout, menu, Alt+Tab, snip)
+    /// is open and should own the mouse instead of an underlying game's pointer lock.
+    pub fn shell_overlay_open(&self) -> bool {
+        self.start.open
+            || self.desktops.open
+            || self.tray.flyout.is_some()
+            || self.menu.is_some()
+            || self.switcher.is_some()
+            || self.snip.is_some()
     }
 
     /// Let go of any game's pointer lock/confine, so the user gets a usable cursor back
@@ -489,6 +502,11 @@ impl State {
         let mut c = std::process::Command::new("sh");
         c.arg("-c").arg(cmd);
         self.app_env(&mut c);
+        // Flatpaks without `--socket=wayland` don't mount the Wayland socket; forcing
+        // ELECTRON_OZONE_PLATFORM_HINT=auto makes Electron crash instead of using X11.
+        if cmd.contains("flatpak ") {
+            c.env_remove("ELECTRON_OZONE_PLATFORM_HINT");
+        }
         if let Err(e) = c.spawn() {
             tracing::warn!("failed to spawn {cmd}: {e}");
         }
@@ -985,7 +1003,27 @@ impl XdgActivationHandler for State {
     }
 }
 
-impl ClientDndGrabHandler for State {}
+impl ClientDndGrabHandler for State {
+    fn started(
+        &mut self,
+        _source: Option<smithay::reexports::wayland_server::protocol::wl_data_source::WlDataSource>,
+        icon: Option<WlSurface>,
+        _seat: Seat<Self>,
+    ) {
+        self.dnd_icon = icon;
+        self.needs_redraw = true;
+    }
+
+    fn dropped(
+        &mut self,
+        _target: Option<WlSurface>,
+        _validated: bool,
+        _seat: Seat<Self>,
+    ) {
+        self.dnd_icon = None;
+        self.needs_redraw = true;
+    }
+}
 impl ServerDndGrabHandler for State {
     fn send(&mut self, _mime_type: String, _fd: OwnedFd, _seat: Seat<Self>) {}
 }

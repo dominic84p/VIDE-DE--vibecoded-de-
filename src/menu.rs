@@ -116,6 +116,7 @@ impl State {
             at.x.clamp(0, (screen.w - size.w).max(0)),
             at.y.clamp(0, (screen.h - size.h).max(0)),
         ));
+        self.release_pointer();
         self.menu = Some(Menu { pos, items, hover: None, size, picture: None });
         self.needs_redraw = true;
     }

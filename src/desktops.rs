@@ -69,6 +69,9 @@ impl State {
     pub fn toggle_desktops(&mut self) {
         self.desktops.open = !self.desktops.open;
         self.desktops.hover = None;
+        if self.desktops.open {
+            self.release_pointer();
+        }
         self.needs_redraw = true;
     }
 

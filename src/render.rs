@@ -166,6 +166,12 @@ pub fn elements_with(renderer: &mut GlesRenderer, state: &mut State, cursor: boo
         }
     }
 
+    // Drag-and-drop icon following the cursor.
+    if let Some(icon) = &state.dnd_icon {
+        let loc = state.pointer_loc.to_i32_round() + Point::from((12, 12));
+        out.extend(surface_tree(renderer, icon, loc, Kind::Unspecified));
+    }
+
     // Start menu.
     if state.start.open {
         let height = (oh - TASKBAR_H).min(620);

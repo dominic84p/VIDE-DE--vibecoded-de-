@@ -22,6 +22,7 @@ It automatically handles all safety isolation:
 - Stubs the keyring daemon so apps don't pop password prompts.
 - Runs in its own process group (`setsid`) and cleans up only that group on exit.
 - Verifies that the host `xdg-document-portal` mount survived unchanged.
+- Gives test apps the nested Xwayland's `DISPLAY`, never the host's, so X11 apps can't open on the real screen.
 - Sets `VIBE_TEST_INPUT=1` so the test script can inject clicks, keys, and diagnostic commands over `$VIDE_IPC`.
 
 **Test file commands** (used in `scripts/nested-tests/*.test`):

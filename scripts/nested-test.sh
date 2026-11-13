@@ -122,9 +122,22 @@ def ipc(cmd):
     s.close()
     return buf.decode(errors="replace")
 
+def xdisplay():
+    """The nested Xwayland's display, latest first (it changes if Xwayland is restarted)."""
+    found = None
+    with open(os.path.join(OUT, "compositor.log"), errors="replace") as f:
+        for line in f:
+            if "Xwayland ready on " in line:
+                found = line.split("Xwayland ready on ", 1)[1].strip().split()[0]
+    return found
+
 def client_env(host):
     e = dict(os.environ)
     e.pop("VIBE_TEST_INPUT", None)
+    # Never the human's X server: an X11 app in a test would open on their real screen.
+    e.pop("DISPLAY", None)
+    if xdisplay():
+        e["DISPLAY"] = xdisplay()
     if host:
         e["XDG_RUNTIME_DIR"] = HOST_RT
         e["WAYLAND_DISPLAY"] = os.path.join(RT, wl)       # absolute path to the nested socket

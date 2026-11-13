@@ -1,73 +1,8 @@
 ---
 import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
-import {
-  Monitor, AppWindow, Cpu, Gamepad2, Box, HardDrive, Code, Shield,
-  Users, GitBranch, ArrowRight, CheckCircle, ExternalLink, Zap, Layers,
-  Terminal, FolderOpen, Activity, ShieldCheck, BookOpen, Sparkles,
-  LayoutDashboard, Settings, HeartPulse, Lock, TestTube2, Sliders
-} from '@lucide/astro';
+import { Monitor, AppWindow, Cpu, Gamepad2, Box, HardDrive, Code, Shield, Users, GitBranch, ArrowRight, CheckCircle, ExternalLink, Zap, Layers, Terminal, FolderOpen, Activity, ShieldCheck, BookOpen, Sparkles, LayoutDashboard, Settings, Bug, Moon, Sun, HeartPulse, Lock, TestTube2, Sliders } from '@lucide/astro';
 
 const BASE = '/vide-de';
-
-const contributors = [
-  {
-    name: 'dominic84p',
-    handle: '@dominic84p',
-    role: 'Project Owner & Chief Prompt Engineer',
-    desc: 'Architecture direction, hardware testing on NVIDIA/TTY, and prompt engineering.',
-    avatar: 'https://github.com/dominic84p.png?size=160',
-    url: 'https://github.com/dominic84p',
-    kind: 'human',
-  },
-  {
-    name: 'notamitgamer',
-    handle: '@notamitgamer',
-    role: 'Virtual Desktops & Docs Prompting',
-    desc: 'Virtual desktops (PR #1); prompted NVIDIA Nemotron 3 Ultra for the docs site & CI workflow.',
-    avatar: 'https://github.com/notamitgamer.png?size=160',
-    url: 'https://github.com/notamitgamer',
-    kind: 'human',
-  },
-  {
-    name: 'Clove Twilight',
-    handle: '@doughmination',
-    role: 'Vector Branding & Logo Set',
-    desc: 'Vector branding & SVG logo set (PR #2); prompted Claude Fable 5.2.',
-    avatar: 'https://github.com/doughmination.png?size=160',
-    url: 'https://github.com/doughmination',
-    kind: 'human',
-  },
-  {
-    name: 'Claude (Anthropic)',
-    handle: 'Opus 5.5 · Sonnet 5.5 · Fable 5.2',
-    role: 'Core Compositor & Health',
-    desc: 'Smithay compositor, WM, popup/focus fixes, health watchdogs, and nested test harness.',
-    monogram: 'C',
-    gradient: 'linear-gradient(135deg, #d97706, #92400e)',
-    url: 'https://www.anthropic.com/',
-    kind: 'ai',
-  },
-  {
-    name: 'Gemini (Google)',
-    handle: '4 Hydrogen · 4 Argon · 3.8 Flash',
-    role: 'Settings, Notifications & Docs',
-    desc: 'Action Center, Wi-Fi/BT tray, Settings system/privacy pages, and docs redesign.',
-    monogram: 'G',
-    gradient: 'linear-gradient(135deg, #4285f4, #1e8e3e)',
-    url: 'https://deepmind.google/',
-    kind: 'ai',
-  },
-  {
-    name: 'Nemotron 3 Ultra',
-    handle: 'NVIDIA',
-    role: 'Docs Foundation & Task Mangler',
-    desc: 'Astro Starlight documentation site, GitHub Actions auto-deploy, and Task Mangler refactor.',
-    monogram: 'N',
-    gradient: 'linear-gradient(135deg, #76b900, #3f6212)',
-    url: 'https://www.nvidia.com/en-us/research/',
-    kind: 'ai',
-  },
-];
 
 const pokedex = [
   { id: '001', agent: 'Claude Opus 5.5', trainer: 'Anthropic', caught: '2026-11-11', tone: 'anthropic' },
@@ -81,512 +16,450 @@ const pokedex = [
 ---
 
 <StarlightPage frontmatter={{ title: "VIDE-DE", template: "splash" }}>
-  <div class="landing">
-    <!-- Hero Section -->
-    <section class="hero-section">
-      <div class="hero-content">
-        <div class="hero-badge">
-          <Sparkles class="icon-sm" />
-          <span>Smithay 0.7 &middot; Rust &middot; 100% Vibecoded</span>
-        </div>
-        <h1 class="hero-title">
-          <span class="hero-title-main">VIDE-DE</span>
-          <span class="hero-title-sub">vibecoded-de</span>
-        </h1>
-        <p class="hero-description">
-          A Wayland compositor and Windows 10-inspired desktop shell built from scratch in Rust on
-          <strong>Smithay 0.7</strong>. Custom window manager, CPU-painted chrome, XWayland gaming,
-          and six built-in apps &mdash; written end to end by AI.
-        </p>
-        <div class="hero-actions">
-          <a href={`${BASE}/getting-started/installation/`} class="btn btn-primary">
-            Get Started
-            <ArrowRight class="icon-sm" />
-          </a>
-          <a href={`${BASE}/overview/`} class="btn btn-secondary">
-            <BookOpen class="icon-sm" />
-            Read the Docs
-          </a>
-          <a href="https://github.com/dominic84p/vide-de" class="btn btn-ghost" target="_blank" rel="noopener">
-            <GitBranch class="icon-sm" />
-            GitHub
-          </a>
-        </div>
-        <div class="hero-links">
-          <a href={`${BASE}/architecture/overview/`} class="hero-link">
-            <Layers class="icon-xs" />
-            Architecture
-          </a>
-          <a href={`${BASE}/components/window-manager/`} class="hero-link">
-            <LayoutDashboard class="icon-xs" />
-            Components
-          </a>
-          <a href={`${BASE}/reference/keybindings/`} class="hero-link">
-            <Code class="icon-xs" />
-            Keybindings
-          </a>
-          <a href={`${BASE}/wiki/faq/`} class="hero-link">
-            <Settings class="icon-xs" />
-            FAQ &amp; Wiki
-          </a>
-        </div>
+  <!-- Hero Section -->
+  <section class="hero-section">
+    <div class="hero-content">
+      <div class="hero-badge">
+        <Sparkles class="icon-sm" />
+        <span>v0.1.0 — Early but usable</span>
       </div>
-
-      <!-- Stylized VIDE-DE Desktop Preview -->
-      <div class="hero-visual" aria-hidden="true">
-        <div class="desktop-frame">
-          <div class="desktop-wallpaper">
-            <div class="bloom-orb bloom-orb-1"></div>
-            <div class="bloom-orb bloom-orb-2"></div>
-
-            <!-- Desktop Icons -->
-            <div class="desktop-icons">
-              <div class="d-icon">
-                <div class="d-icon-box d-icon-bin"></div>
-                <span>Recycle Bin</span>
-              </div>
-              <div class="d-icon">
-                <div class="d-icon-box d-icon-folder"></div>
-                <span>Projects</span>
-              </div>
-            </div>
-
-            <!-- Settings Window (background) -->
-            <div class="win win-settings">
-              <div class="win-titlebar">
-                <span class="win-title">Settings</span>
-                <div class="win-controls">
-                  <span>&#8211;</span><span>&#9633;</span><span class="win-close">&times;</span>
-                </div>
-              </div>
-              <div class="win-settings-body">
-                <div class="win-settings-nav">
-                  <div class="nav-pill active">System</div>
-                  <div class="nav-pill">Privacy</div>
-                  <div class="nav-pill">Personalization</div>
-                  <div class="nav-pill">Gaming</div>
-                </div>
-                <div class="win-settings-pane">
-                  <div class="pane-heading">Display &amp; Notifications</div>
-                  <div class="pane-row"><span>Scale</span><span class="pane-val">100% / 200% (Live)</span></div>
-                  <div class="pane-row"><span>24-Hour Clock</span><span class="pane-toggle on"></span></div>
-                  <div class="pane-row"><span>Toast Popups</span><span class="pane-toggle on"></span></div>
-                </div>
-              </div>
-            </div>
-
-            <!-- PowerSlop Window (foreground) -->
-            <div class="win win-terminal">
-              <div class="win-titlebar">
-                <span class="win-title">PowerSlop</span>
-                <div class="win-controls">
-                  <span>&#8211;</span><span>&#9633;</span><span class="win-close">&times;</span>
-                </div>
-              </div>
-              <div class="win-terminal-body">
-                <div class="term-line dim">Windows PowerSlop &mdash; VIDE-DE</div>
-                <div class="term-line"><span class="term-prompt">PS ~&gt;</span> cargo build --release --workspace</div>
-                <div class="term-line ok">&nbsp;&nbsp;Finished `release` profile in 4.2s</div>
-                <div class="term-line"><span class="term-prompt">PS ~&gt;</span> ./scripts/nested-test.sh smoke.test</div>
-                <div class="term-line ok">&nbsp;&nbsp;[PASS] compositor + portal mount intact</div>
-                <div class="term-line"><span class="term-prompt">PS ~&gt;</span> <span class="term-cursor"></span></div>
-              </div>
-            </div>
-
-            <!-- Taskbar -->
-            <div class="taskbar">
-              <div class="tb-left">
-                <div class="tb-start">
-                  <span class="win-grid"><i></i><i></i><i></i><i></i></span>
-                </div>
-                <div class="tb-search">Type here to search</div>
-                <div class="tb-btn active">PowerSlop</div>
-                <div class="tb-btn">Settings</div>
-              </div>
-              <div class="tb-tray">
-                <span class="tray-dot"></span>
-                <span class="tray-text">22:49</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- What's New Section -->
-    <section class="whats-new-section">
-      <div class="section-header">
-        <span class="section-eyebrow">Latest Updates</span>
-        <h2>What's New in VIDE-DE</h2>
-        <p>Recent improvements across diagnostics, live hardware display switching, settings, and testing</p>
-      </div>
-      <div class="whats-new-grid">
-        <a href={`${BASE}/components/health/`} class="highlight-card">
-          <div class="highlight-icon"><HeartPulse class="icon-md" /></div>
-          <div class="highlight-body">
-            <h3>Health &amp; Freeze Diagnostics</h3>
-            <p>5s xdg-client ping watchdog marks stalled apps with <code>(Not responding)</code>, plus a 3s main-loop and 1.5s TTY page-flip watchdog in <code>~/vibe.log</code>.</p>
-          </div>
+      <h1 class="hero-title">
+        <span class="hero-title-main">VIDE-DE</span>
+        <span class="hero-title-sub">vibecoded-de</span>
+      </h1>
+      <p class="hero-description">
+        A Wayland compositor + desktop shell built on <strong>Smithay 0.7</strong>, written entirely in Rust through AI-assisted "vibecoding". No human-written code accepted.
+      </p>
+      <div class="hero-actions">
+        <a href={`${BASE}/getting-started/installation/`} class="btn btn-primary">
+          <ArrowRight class="icon-sm" />
+          Get Started
         </a>
-        <a href={`${BASE}/configuration/settings/`} class="highlight-card">
-          <div class="highlight-icon"><Lock class="icon-md" /></div>
-          <div class="highlight-body">
-            <h3>Privacy &amp; App Permissions</h3>
-            <p>New Settings Privacy page backed by the portal permission store for camera, microphone, notifications, location, and screen-sharing revokes.</p>
-          </div>
-        </a>
-        <a href={`${BASE}/reference/settings-reference/`} class="highlight-card">
-          <div class="highlight-icon"><Sliders class="icon-md" /></div>
-          <div class="highlight-body">
-            <h3>Live TTY Modes &amp; Real Controls</h3>
-            <p>Live <code>display_mode</code> and <code>display_scale</code> switching in TTY mode, Touchpad &amp; multi-layout XKB Keyboard controls, 24h clock, and toast settings.</p>
-          </div>
-        </a>
-        <a href={`${BASE}/development/testing/`} class="highlight-card">
-          <div class="highlight-icon"><TestTube2 class="icon-md" /></div>
-          <div class="highlight-body">
-            <h3>Safe Nested Testing &amp; Popup Fixes</h3>
-            <p><code>scripts/nested-test.sh</code> runs isolated sessions with <code>VIBE_TEST_INPUT=1</code> click/key injection, plus geometry-accurate popup placement and focus.</p>
-          </div>
+        <a href="https://github.com/dominic84p/vide-de" class="btn btn-secondary" target="_blank" rel="noopener">
+          <GitBranch class="icon-sm" />
+          GitHub Repository
         </a>
       </div>
-    </section>
+      <div class="hero-links">
+        <a href={`${BASE}/architecture/overview/`} class="hero-link">
+          <BookOpen class="icon-xs" />
+          Architecture
+        </a>
+        <a href={`${BASE}/wiki/faq/`} class="hero-link">
+          <Settings class="icon-xs" />
+          FAQ & Wiki
+        </a>
+        <a href={`${BASE}/components/window-manager/`} class="hero-link">
+          <LayoutDashboard class="icon-xs" />
+          Components
+        </a>
+      </div>
+    </div>
+    <div class="hero-visual">
+      <div class="hero-screenshot-placeholder">
+        <Monitor class="icon-xl" />
+        <p>Screenshot placeholder — add your own</p>
+      </div>
+    </div>
+  </section>
 
-    <!-- Features Section -->
-    <section class="features-section">
-      <div class="section-header">
-        <span class="section-eyebrow">Core Capabilities</span>
-        <h2>Features at a Glance</h2>
-        <p>Everything you'd expect from a modern desktop, built from scratch in Rust</p>
+  <!-- AI-Only Badge -->
+  <section class="ai-notice-section">
+    <div class="ai-notice">
+      <div class="ai-notice-icon">
+        <ShieldCheck class="icon-md" />
       </div>
-      <div class="features-grid">
-        <article class="feature-card">
-          <div class="feature-icon"><Monitor class="icon-lg" /></div>
-          <h3>Dual Backend Architecture</h3>
-          <p>Runs nested (for development via winit) or on real hardware (TTY/DRM/KMS/libseat). Both backends share the same rendering pipeline.</p>
-          <div class="feature-tags">
-            <span class="tag">winit</span>
-            <span class="tag">DRM/KMS</span>
-            <span class="tag">libseat</span>
+      <div class="ai-notice-content">
+        <h3>AI-Only Project</h3>
+        <p>This project follows strict contribution rules — see <a href={`${BASE}/development/contributing/`} class="underline">Contributing Rules</a></p>
+        <div class="ai-rules">
+          <div class="ai-rule">
+            <CheckCircle class="icon-xs" />
+            <span>NO HUMAN SLOP — Only AI-written code accepted</span>
           </div>
-        </article>
-        <article class="feature-card">
-          <div class="feature-icon"><AppWindow class="icon-lg" /></div>
-          <h3>Windows 10-Style Desktop</h3>
-          <p>Taskbar, Start menu with search, Action Center &amp; system tray, 10 virtual desktops, Task View panel, and edge/corner window snapping.</p>
-          <div class="feature-tags">
-            <span class="tag">Taskbar</span>
-            <span class="tag">Start Menu</span>
-            <span class="tag">10 Workspaces</span>
+          <div class="ai-rule">
+            <CheckCircle class="icon-xs" />
+            <span>NO AI UNDER 20B PARAMETERS — Small models may watch, not touch</span>
           </div>
-        </article>
-        <article class="feature-card">
-          <div class="feature-icon"><Cpu class="icon-lg" /></div>
-          <h3>CPU-Painted UI</h3>
-          <p>All chrome (taskbar, menus, titlebars) rendered on CPU via custom canvas, cached by key and repainted only when state changes.</p>
-          <div class="feature-tags">
-            <span class="tag">Canvas</span>
-            <span class="tag">Cached</span>
-            <span class="tag">Damage-Tracked</span>
+          <div class="ai-rule">
+            <CheckCircle class="icon-xs" />
+            <span>AI FOR EVERYTHING — Code, commits, PRs, reviews</span>
           </div>
-        </article>
-        <article class="feature-card">
-          <div class="feature-icon"><Gamepad2 class="icon-lg" /></div>
-          <h3>XWayland + Gaming</h3>
-          <p>Full GPU acceleration via linux-dmabuf, explicit sync for NVIDIA, relative pointer + pointer constraints for games, and optional direct scanout.</p>
-          <div class="feature-tags">
-            <span class="tag">dmabuf</span>
-            <span class="tag">Relative Pointer</span>
-            <span class="tag">Explicit Sync</span>
+          <div class="ai-rule">
+            <CheckCircle class="icon-xs" />
+            <span>40K TOKEN MINIMUM — Low-effort PRs get the minimal label</span>
           </div>
-        </article>
-        <article class="feature-card">
-          <div class="feature-icon"><Box class="icon-lg" /></div>
-          <h3>Six Built-in Apps</h3>
-          <p>Settings, PowerSlop (terminal), File Exploder, Task Mangler, Snip &amp; Sketchy, and About VIDE-DE &mdash; all registered as .desktop entries.</p>
-          <div class="feature-tags">
-            <span class="tag">egui</span>
-            <span class="tag">6 Apps</span>
-            <span class="tag">.desktop</span>
+          <div class="ai-rule">
+            <CheckCircle class="icon-xs" />
+            <span>SECURITY BY CLAUDE ONLY — Human-found bugs don't count</span>
           </div>
-        </article>
-        <article class="feature-card">
-          <div class="feature-icon"><HardDrive class="icon-lg" /></div>
-          <h3>StatusNotifierItem</h3>
-          <p>App tray icons via D-Bus. VIDE-DE hosts the SNI watcher and provider, with built-in PipeWire volume and brightness flyouts.</p>
-          <div class="feature-tags">
-            <span class="tag">D-Bus</span>
-            <span class="tag">SNI Watcher</span>
-            <span class="tag">PipeWire</span>
-          </div>
-        </article>
-        <article class="feature-card">
-          <div class="feature-icon"><Layers class="icon-lg" /></div>
-          <h3>Layer Shell Desktop</h3>
-          <p>Separate <code>vide-desktop</code> process via wlr-layer-shell: 6 built-in wallpapers, <code>~/Desktop</code> icons, Recycle Bin, and context menu.</p>
-          <div class="feature-tags">
-            <span class="tag">wlr-layer-shell</span>
-            <span class="tag">Separate Process</span>
-            <span class="tag">Wallpapers</span>
-          </div>
-        </article>
-        <article class="feature-card">
-          <div class="feature-icon"><Code class="icon-lg" /></div>
-          <h3>Control Socket &amp; IPC</h3>
-          <p>Plain-text Unix socket (<code>$VIDE_IPC</code>) for screenshots, snipping, clipboard PNGs, window listing/focus, and gated test input injection.</p>
-          <div class="feature-tags">
-            <span class="tag">Unix Socket</span>
-            <span class="tag">Snip/Screenshot</span>
-            <span class="tag">Test Input</span>
-          </div>
-        </article>
+        </div>
       </div>
-    </section>
+    </div>
+  </section>
 
-    <!-- AI-Only Notice -->
-    <section class="ai-notice-section">
-      <div class="ai-notice">
-        <div class="ai-notice-icon">
-          <ShieldCheck class="icon-md" />
+  <!-- Features Section -->
+  <section class="features-section">
+    <div class="section-header">
+      <h2>Features at a Glance</h2>
+      <p>Everything you'd expect from a modern desktop, built from scratch</p>
+    </div>
+    <div class="features-grid">
+      <article class="feature-card">
+        <div class="feature-icon">
+          <Monitor class="icon-lg" />
         </div>
-        <div class="ai-notice-content">
-          <h3>AI-Only Project Rules</h3>
-          <p>This project follows strict contribution rules &mdash; see <a href={`${BASE}/development/contributing/`} class="underline">Contributing Rules</a></p>
-          <div class="ai-rules">
-            <div class="ai-rule">
-              <CheckCircle class="icon-xs" />
-              <span><strong>NO HUMAN SLOP</strong> &mdash; Only AI-written code accepted</span>
-            </div>
-            <div class="ai-rule">
-              <CheckCircle class="icon-xs" />
-              <span><strong>NO AI UNDER 20B PARAMETERS</strong> &mdash; Small models may watch, not touch</span>
-            </div>
-            <div class="ai-rule">
-              <CheckCircle class="icon-xs" />
-              <span><strong>AI FOR EVERYTHING</strong> &mdash; Code, commits, PRs, reviews</span>
-            </div>
-            <div class="ai-rule">
-              <CheckCircle class="icon-xs" />
-              <span><strong>40K TOKEN MINIMUM</strong> &mdash; Low-effort PRs get the minimal label</span>
-            </div>
-            <div class="ai-rule">
-              <CheckCircle class="icon-xs" />
-              <span><strong>SECURITY BY CLAUDE ONLY</strong> &mdash; Human-found bugs don't count</span>
-            </div>
-          </div>
+        <h3>Dual Backend Architecture</h3>
+        <p>Runs nested (for development via winit) or on real hardware (TTY/DRM/KMS/libseat). Both backends share the same rendering pipeline.</p>
+        <div class="feature-tags">
+          <span class="tag">winit</span>
+          <span class="tag">DRM/KMS</span>
+          <span class="tag">libseat</span>
         </div>
-      </div>
-    </section>
+      </article>
+      <article class="feature-card">
+        <div class="feature-icon">
+          <AppWindow class="icon-lg" />
+        </div>
+        <h3>Windows 10-Style Desktop</h3>
+        <p>Taskbar, Start menu with search, system tray, virtual desktops (10 workspaces), Task View panel, window snapping.</p>
+        <div class="feature-tags">
+          <span class="tag">Taskbar</span>
+          <span class="tag">Start Menu</span>
+          <span class="tag">10 Workspaces</span>
+        </div>
+      </article>
+      <article class="feature-card">
+        <div class="feature-icon">
+          <Cpu class="icon-lg" />
+        </div>
+        <h3>CPU-Painted UI</h3>
+        <p>All chrome (taskbar, menus, titlebars) rendered on CPU via custom canvas, cached by key. Debug builds slow; use release.</p>
+        <div class="feature-tags">
+          <span class="tag">Canvas</span>
+          <span class="tag">Cached</span>
+          <span class="tag">GPU Composited</span>
+        </div>
+      </article>
+      <article class="feature-card">
+        <div class="feature-icon">
+          <Gamepad2 class="icon-lg" />
+        </div>
+        <h3>XWayland + Gaming</h3>
+        <p>Full GPU acceleration via linux-dmabuf. Relative pointer + pointer constraints for games. X11 windows managed natively.</p>
+        <div class="feature-tags">
+          <span class="tag">dmabuf</span>
+          <span class="tag">Relative Pointer</span>
+          <span class="tag">X11 Native</span>
+        </div>
+      </article>
+      <article class="feature-card">
+        <div class="feature-icon">
+          <Box class="icon-lg" />
+        </div>
+        <h3>Built-in Apps</h3>
+        <p>Settings, PowerSlop (terminal), File Exploder, Task Mangler, Snip & Sketchy, About — all registered as .desktop entries.</p>
+        <div class="feature-tags">
+          <span class="tag">6 Apps</span>
+          <span class="tag">egui</span>
+          <span class="tag">.desktop</span>
+        </div>
+      </article>
+      <article class="feature-card">
+        <div class="feature-icon">
+          <HardDrive class="icon-lg" />
+        </div>
+        <h3>StatusNotifierItem</h3>
+        <p>App tray icons via D-Bus. We host the SNI watcher and provide the host. Volume/brightness flyouts built in.</p>
+        <div class="feature-tags">
+          <span class="tag">D-Bus</span>
+          <span class="tag">SNI Watcher</span>
+          <span class="tag">Flyouts</span>
+        </div>
+      </article>
+      <article class="feature-card">
+        <div class="feature-icon">
+          <Layers class="icon-lg" />
+        </div>
+        <h3>Layer Shell Desktop</h3>
+        <p>Separate <code>vide-desktop</code> process via wlr-layer-shell: wallpaper, ~/Desktop icons, Recycle Bin, right-click menu.</p>
+        <div class="feature-tags">
+          <span class="tag">wlr-layer-shell</span>
+          <span class="tag">Separate Process</span>
+          <span class="tag">Wallpapers</span>
+        </div>
+      </article>
+      <article class="feature-card">
+        <div class="feature-icon">
+          <Code class="icon-lg" />
+        </div>
+        <h3>IPC & Extensibility</h3>
+        <p>Control socket (<code>$VIDE_IPC</code>) for screenshots, snipping, clipboard, window control, and gated test input.</p>
+        <div class="feature-tags">
+          <span class="tag">Unix Socket</span>
+          <span class="tag">Snip/Screenshot</span>
+          <span class="tag">Clipboard</span>
+        </div>
+      </article>
+      <article class="feature-card">
+        <div class="feature-icon">
+          <HeartPulse class="icon-lg" />
+        </div>
+        <h3>Health & Freeze Diagnostics</h3>
+        <p>5s xdg client ping watchdog marks stalled apps <code>(Not responding)</code>, plus main-loop and TTY page-flip watchdogs.</p>
+        <div class="feature-tags">
+          <span class="tag">Ping Watchdog</span>
+          <span class="tag">~/vibe.log</span>
+          <span class="tag">Protocol Errors</span>
+        </div>
+      </article>
+      <article class="feature-card">
+        <div class="feature-icon">
+          <Lock class="icon-lg" />
+        </div>
+        <h3>Privacy & App Permissions</h3>
+        <p>Settings Privacy page backed by the portal permission store for camera, mic, notifications, location, and screen sharing.</p>
+        <div class="feature-tags">
+          <span class="tag">Portals</span>
+          <span class="tag">Screen Share</span>
+          <span class="tag">vide-settings</span>
+        </div>
+      </article>
+      <article class="feature-card">
+        <div class="feature-icon">
+          <Sliders class="icon-lg" />
+        </div>
+        <h3>Live TTY Modes & Controls</h3>
+        <p>Live <code>display_mode</code> and <code>display_scale</code> switching in TTY mode, plus Touchpad, multi-layout XKB Keyboard, 24h clock, and toasts.</p>
+        <div class="feature-tags">
+          <span class="tag">Live Mode/Scale</span>
+          <span class="tag">XKB Layouts</span>
+          <span class="tag">24h Clock</span>
+        </div>
+      </article>
+      <article class="feature-card">
+        <div class="feature-icon">
+          <TestTube2 class="icon-lg" />
+        </div>
+        <h3>Safe Nested Testing & Popups</h3>
+        <p><code>scripts/nested-test.sh</code> runs isolated sessions with <code>VIBE_TEST_INPUT=1</code> injection, plus geometry-accurate popup placement.</p>
+        <div class="feature-tags">
+          <span class="tag">nested-test.sh</span>
+          <span class="tag">Popup Focus</span>
+          <span class="tag">Isolated D-Bus</span>
+        </div>
+      </article>
+    </div>
+  </section>
 
-    <!-- Tech Stack -->
-    <section class="tech-section">
-      <div class="section-header">
-        <span class="section-eyebrow">Under the Hood</span>
-        <h2>Tech Stack</h2>
-        <p>Modern Rust ecosystem, zero C++ dependencies</p>
-      </div>
-      <div class="tech-grid">
-        <div class="tech-item">
-          <Terminal class="icon-md" />
-          <div>
-            <h4>Rust Workspace</h4>
-            <p>Compositor + 7 workspace crates</p>
-          </div>
-        </div>
-        <div class="tech-item">
-          <Activity class="icon-md" />
-          <div>
-            <h4>Smithay 0.7</h4>
-            <p>Wayland compositor building blocks</p>
-          </div>
-        </div>
-        <div class="tech-item">
-          <Settings class="icon-md" />
-          <div>
-            <h4>calloop</h4>
-            <p>Event loop for async I/O &amp; timers</p>
-          </div>
-        </div>
-        <div class="tech-item">
-          <FolderOpen class="icon-md" />
-          <div>
-            <h4>egui</h4>
-            <p>Immediate-mode GUI for built-in apps</p>
-          </div>
-        </div>
-        <div class="tech-item">
-          <Zap class="icon-md" />
-          <div>
-            <h4>linux-dmabuf</h4>
-            <p>Zero-copy GPU buffers &amp; explicit sync</p>
-          </div>
-        </div>
-        <div class="tech-item">
-          <Shield class="icon-md" />
-          <div>
-            <h4>libseat &amp; DRM/KMS</h4>
-            <p>Seat &amp; display management for TTY</p>
-          </div>
+  <!-- Tech Stack -->
+  <section class="tech-section">
+    <div class="section-header">
+      <h2>Tech Stack</h2>
+      <p>Modern Rust ecosystem, zero C++ dependencies</p>
+    </div>
+    <div class="tech-grid">
+      <div class="tech-item">
+        <Terminal class="icon-md" />
+        <div>
+          <h4>Rust 2021 Edition</h4>
+          <p>Memory safety without garbage collection</p>
         </div>
       </div>
-    </section>
+      <div class="tech-item">
+        <Activity class="icon-md" />
+        <div>
+          <h4>Smithay 0.7</h4>
+          <p>Wayland compositor building blocks</p>
+        </div>
+      </div>
+      <div class="tech-item">
+        <Settings class="icon-md" />
+        <div>
+          <h4>calloop</h4>
+          <p>Event loop for async I/O</p>
+        </div>
+      </div>
+      <div class="tech-item">
+        <FolderOpen class="icon-md" />
+        <div>
+          <h4>egui 0.31</h4>
+          <p>Immediate mode GUI for built-in apps</p>
+        </div>
+      </div>
+      <div class="tech-item">
+        <Zap class="icon-md" />
+        <div>
+          <h4>ash / wgpu</h4>
+          <p>Vulkan & GPU acceleration</p>
+        </div>
+      </div>
+      <div class="tech-item">
+        <Shield class="icon-md" />
+        <div>
+          <h4>libseat</h4>
+          <p>Seat management for TTY mode</p>
+        </div>
+      </div>
+    </div>
+  </section>
 
-    <!-- Contributors -->
-    <section class="contributors-section">
-      <div class="section-header">
-        <span class="section-eyebrow">The Team</span>
-        <h2>Contributors</h2>
-        <p>Humans who directed, AI models that wrote every line of code</p>
-      </div>
-      <div class="contributors-grid">
-        {contributors.map((c) => (
-          <article class={`contributor-card ${c.kind === 'human' ? 'is-human' : ''}`}>
-            <a href={c.url} class="contributor-avatar-wrap" target="_blank" rel="noopener" aria-label={c.name}>
-              {c.avatar ? (
-                <img
-                  src={c.avatar}
-                  alt={`${c.name} avatar`}
-                  class="contributor-pfp"
-                  width="68"
-                  height="68"
-                  loading="lazy"
-                />
-              ) : (
-                <div class="contributor-avatar" style={`background: ${c.gradient};`}>
-                  <span>{c.monogram}</span>
-                </div>
-              )}
-              <span class={`kind-pill ${c.kind}`}>{c.kind === 'human' ? 'Human' : 'AI'}</span>
-            </a>
-            <h4>{c.name}</h4>
-            <span class="contributor-handle">{c.handle}</span>
-            <p class="contributor-role">{c.role}</p>
-            <p class="contributor-desc">{c.desc}</p>
-            <a href={c.url} class="contributor-link" target="_blank" rel="noopener">
-              {c.kind === 'human' ? <GitBranch class="icon-xs" /> : <ExternalLink class="icon-xs" />}
-              <span>{c.kind === 'human' ? 'GitHub' : 'Trainer'}</span>
-            </a>
-          </article>
-        ))}
-      </div>
-      <div class="contributors-cta">
-        <a href="https://github.com/dominic84p/vide-de/graphs/contributors" class="btn btn-secondary" target="_blank" rel="noopener">
-          View Contributors on GitHub
+  <!-- Contributors -->
+  <section class="contributors-section">
+    <div class="section-header">
+      <h2>Contributors</h2>
+      <p>Humans who directed, models that built</p>
+    </div>
+    <div class="contributors-grid">
+      <article class="contributor-card">
+        <img src="https://github.com/dominic84p.png?size=160" alt="dominic84p" class="contributor-pfp" width="64" height="64" loading="lazy" />
+        <h4>dominic84p</h4>
+        <p class="contributor-role">Project Owner</p>
+        <p class="contributor-desc">Chief prompt engineer, architecture direction</p>
+        <a href="https://github.com/dominic84p" class="contributor-link" target="_blank" rel="noopener">
+          <GitBranch class="icon-xs" />
+        </a>
+      </article>
+      <article class="contributor-card">
+        <img src="https://github.com/notamitgamer.png?size=160" alt="notamitgamer" class="contributor-pfp" width="64" height="64" loading="lazy" />
+        <h4>notamitgamer</h4>
+        <p class="contributor-role">Virtual Desktops</p>
+        <p class="contributor-desc">Virtual desktops (PR #1); prompted Nemotron for docs/workflow</p>
+        <a href="https://github.com/notamitgamer" class="contributor-link" target="_blank" rel="noopener">
+          <GitBranch class="icon-xs" />
+        </a>
+      </article>
+      <article class="contributor-card">
+        <img src="https://github.com/doughmination.png?size=160" alt="Clove Twilight" class="contributor-pfp" width="64" height="64" loading="lazy" />
+        <h4>Clove Twilight</h4>
+        <p class="contributor-role">Vector Branding</p>
+        <p class="contributor-desc">Vector logo set in branding/ (PR #2); prompted Claude Fable 5.2</p>
+        <a href="https://github.com/doughmination" class="contributor-link" target="_blank" rel="noopener">
+          <GitBranch class="icon-xs" />
+        </a>
+      </article>
+      <article class="contributor-card">
+        <div class="contributor-avatar" style="background: linear-gradient(135deg, #76b900, #5a9e00);">
+          <Zap class="icon-lg" />
+        </div>
+        <h4>NVIDIA Nemotron 3 Ultra</h4>
+        <p class="contributor-role">Documentation & Workflow</p>
+        <p class="contributor-desc">Astro Starlight docs site, GitHub Actions CI, Task Mangler refactor</p>
+        <a href="https://www.nvidia.com/en-us/research/" class="contributor-link" target="_blank" rel="noopener">
           <ExternalLink class="icon-xs" />
         </a>
-      </div>
-    </section>
+      </article>
+      <article class="contributor-card">
+        <div class="contributor-avatar" style="background: linear-gradient(135deg, #d97706, #b45309);">
+          <Sparkles class="icon-lg" />
+        </div>
+        <h4>Claude (Anthropic)</h4>
+        <p class="contributor-role">Core Compositor & Health</p>
+        <p class="contributor-desc">Compositor, shell, WM, apps, branding SVGs, health watchdogs</p>
+        <a href="https://www.anthropic.com/" class="contributor-link" target="_blank" rel="noopener">
+          <ExternalLink class="icon-xs" />
+        </a>
+      </article>
+      <article class="contributor-card">
+        <div class="contributor-avatar" style="background: linear-gradient(135deg, #4285f4, #34a853);">
+          <Activity class="icon-lg" />
+        </div>
+        <h4>Gemini (Google)</h4>
+        <p class="contributor-role">Notifications, Settings & Docs</p>
+        <p class="contributor-desc">Action Center, Wi-Fi/Bluetooth tray, Settings pages, docs updates</p>
+        <a href="https://deepmind.google/" class="contributor-link" target="_blank" rel="noopener">
+          <ExternalLink class="icon-xs" />
+        </a>
+      </article>
+    </div>
+    <div class="contributors-cta">
+      <a href="https://github.com/dominic84p/vide-de/graphs/contributors" class="btn btn-secondary" target="_blank" rel="noopener">
+        View All Contributors
+        <ArrowRight class="icon-xs" />
+      </a>
+    </div>
+  </section>
 
-    <!-- AI Agent Pokédex -->
-    <section class="pokedex-section">
-      <div class="section-header">
-        <span class="section-eyebrow">Gotta Catch 'Em All</span>
-        <h2>AI Agent Pokédex</h2>
-        <p>Every AI model that has landed code in VIDE-DE, in the order we caught them</p>
-      </div>
-      <div class="pokedex-grid">
-        {pokedex.map((entry) => (
-          <div class={`pokedex-card tone-${entry.tone}`}>
-            <div class="pokedex-top">
-              <span class="pokedex-num">#{entry.id}</span>
-              <span class={`trainer-badge tone-${entry.tone}`}>{entry.trainer}</span>
-            </div>
-            <div class="pokedex-name">{entry.agent}</div>
-            <div class="pokedex-meta">Caught {entry.caught}</div>
+  <!-- AI Agent Pokédex -->
+  <section class="pokedex-section">
+    <div class="section-header">
+      <h2>AI Agent Pokédex</h2>
+      <p>Every AI agent that has helped build VIDE-DE, in the order we caught them</p>
+    </div>
+    <div class="pokedex-grid">
+      {pokedex.map((entry) => (
+        <div class={`pokedex-card tone-${entry.tone}`}>
+          <div class="pokedex-top">
+            <span class="pokedex-num">#{entry.id}</span>
+            <span class={`trainer-badge tone-${entry.tone}`}>{entry.trainer}</span>
           </div>
-        ))}
-      </div>
-      <p class="pokedex-note">
-        Rule 2 still applies: models under 20B parameters may watch, not touch.
-      </p>
-    </section>
+          <div class="pokedex-name">{entry.agent}</div>
+          <div class="pokedex-meta">Caught {entry.caught}</div>
+        </div>
+      ))}
+    </div>
+    <p class="pokedex-note">Rule 2 still applies: under 20B parameters can't be caught.</p>
+  </section>
 
-    <!-- Footer -->
-    <section class="footer-section">
-      <div class="footer-grid">
-        <div class="footer-brand">
-          <h3>VIDE-DE</h3>
-          <p>A Wayland desktop environment vibecoded end-to-end in Rust. Built on Smithay 0.7.</p>
-          <div class="social-links">
-            <a href="https://github.com/dominic84p/vide-de" class="social-link" target="_blank" rel="noopener" aria-label="GitHub">
-              <GitBranch class="icon-md" />
-            </a>
-          </div>
-        </div>
-        <div class="footer-links">
-          <h4>Documentation</h4>
-          <ul>
-            <li><a href={`${BASE}/getting-started/installation/`}>Installation</a></li>
-            <li><a href={`${BASE}/architecture/overview/`}>Architecture</a></li>
-            <li><a href={`${BASE}/components/window-manager/`}>Components</a></li>
-            <li><a href={`${BASE}/components/health/`}>Health &amp; Diagnostics</a></li>
-            <li><a href={`${BASE}/configuration/settings/`}>Configuration</a></li>
-            <li><a href={`${BASE}/reference/keybindings/`}>Keybindings</a></li>
-            <li><a href={`${BASE}/development/testing/`}>Testing</a></li>
-            <li><a href={`${BASE}/wiki/faq/`}>FAQ &amp; Wiki</a></li>
-          </ul>
-        </div>
-        <div class="footer-links">
-          <h4>Project</h4>
-          <ul>
-            <li><a href="https://github.com/dominic84p/vide-de/blob/main/LICENSE" target="_blank" rel="noopener">MIT License</a></li>
-            <li><a href="https://github.com/dominic84p/vide-de/blob/main/SECURITY.md" target="_blank" rel="noopener">Security Policy</a></li>
-            <li><a href="https://github.com/dominic84p/vide-de/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">Contributing</a></li>
-          </ul>
+  <!-- License & Links -->
+  <section class="footer-section">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <h3>VIDE-DE</h3>
+        <p>A Wayland desktop environment vibecoded end-to-end in Rust. Built on Smithay.</p>
+        <div class="social-links">
+          <a href="https://github.com/dominic84p/vide-de" class="social-link" target="_blank" rel="noopener" aria-label="GitHub">
+            <GitBranch class="icon-md" />
+          </a>
         </div>
       </div>
-      <div class="footer-bottom">
-        <p>Licensed under MIT &mdash; Built with <a href="https://astro.build/" target="_blank" rel="noopener">Astro</a> + <a href="https://starlight.astro.build/" target="_blank" rel="noopener">Starlight</a> + <a href="https://lucide.dev/" target="_blank" rel="noopener">Lucide</a></p>
-        <p class="footer-ai">Made by AI, for AI. No humans were harmed in the making of this desktop.</p>
+      <div class="footer-links">
+        <h4>Documentation</h4>
+        <ul>
+          <li><a href={`${BASE}/getting-started/installation/`}>Installation</a></li>
+          <li><a href={`${BASE}/architecture/overview/`}>Architecture</a></li>
+          <li><a href={`${BASE}/components/window-manager/`}>Components</a></li>
+          <li><a href={`${BASE}/components/health/`}>Health & Diagnostics</a></li>
+          <li><a href={`${BASE}/configuration/settings/`}>Configuration</a></li>
+          <li><a href={`${BASE}/reference/keybindings/`}>Keybindings</a></li>
+          <li><a href={`${BASE}/wiki/faq/`}>FAQ & Wiki</a></li>
+        </ul>
       </div>
-    </section>
-  </div>
+      <div class="footer-links">
+        <h4>Legal</h4>
+        <ul>
+          <li><a href="https://github.com/dominic84p/vide-de/blob/main/LICENSE" target="_blank" rel="noopener">MIT License</a></li>
+          <li><a href="https://github.com/dominic84p/vide-de/blob/main/SECURITY.md" target="_blank" rel="noopener">Security Policy</a></li>
+          <li><a href="https://github.com/dominic84p/vide-de/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">Contributing</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <p>Licensed under MIT — Built with <a href="https://astro.build/" target="_blank" rel="noopener">Astro</a> + <a href="https://starlight.astro.build/" target="_blank" rel="noopener">Starlight</a> + <a href="https://lucide.dev/" target="_blank" rel="noopener">Lucide</a></p>
+      <p class="footer-ai">Made by AI, for AI. No humans were harmed in the making of this desktop.</p>
+    </div>
+  </section>
 </StarlightPage>
 
 <style>
-  .landing {
-    --vibe-blue: #0078d7;
-    --vibe-blue-bright: #3b9eff;
-    --vibe-surface: var(--sl-color-bg-nav);
-    --vibe-border: var(--sl-color-hairline);
-    --vibe-muted: var(--sl-color-gray-3);
-    --vibe-card-bg: color-mix(in srgb, var(--sl-color-bg-nav) 75%, transparent);
-    --vibe-card-hover: color-mix(in srgb, var(--sl-color-bg-nav) 95%, var(--vibe-blue) 5%);
-  }
-
-  :root[data-theme='light'] .landing {
-    --vibe-muted: var(--sl-color-gray-4);
-    --vibe-card-bg: #ffffff;
-    --vibe-card-hover: #f8fafc;
-  }
-
   /* ============================================================================
-     HERO
+     HERO SECTION
      ============================================================================ */
   .hero-section {
     display: grid;
-    grid-template-columns: 1.05fr 0.95fr;
-    gap: 3.5rem;
+    grid-template-columns: 1fr 1fr;
+    gap: 4rem;
     align-items: center;
-    padding: 4.5rem 1.5rem 4rem;
+    padding: 6rem 2rem;
     max-width: 1200px;
     margin: 0 auto;
   }
 
-  @media (max-width: 960px) {
+  @media (max-width: 900px) {
     .hero-section {
       grid-template-columns: 1fr;
       text-align: center;
-      padding: 3rem 1.25rem;
-      gap: 2.5rem;
-    }
-    .hero-description {
-      margin-left: auto;
-      margin-right: auto;
-    }
-    .hero-actions,
-    .hero-links {
-      justify-content: center;
+      padding: 4rem 1.5rem;
     }
   }
 
@@ -594,39 +467,34 @@ const pokedex = [
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
-    background: color-mix(in srgb, var(--vibe-blue) 14%, transparent);
-    color: var(--vibe-blue-bright);
-    padding: 0.4rem 0.9rem;
+    background: var(--sl-color-blue-1);
+    color: var(--sl-color-blue-7);
+    padding: 0.5rem 1rem;
     border-radius: 9999px;
-    font-size: 0.8125rem;
+    font-size: 0.875rem;
     font-weight: 500;
-    margin-bottom: 1.25rem;
-    border: 1px solid color-mix(in srgb, var(--vibe-blue) 35%, transparent);
+    margin-bottom: 1.5rem;
+    border: 1px solid var(--sl-color-blue-2);
   }
 
-  :root[data-theme='light'] .hero-badge {
-    color: var(--vibe-blue);
-    background: color-mix(in srgb, var(--vibe-blue) 10%, transparent);
+  @media (prefers-color-scheme: dark) {
+    .hero-badge {
+      background: var(--sl-color-blue-dark-1);
+      color: var(--sl-color-blue-4);
+      border-color: var(--sl-color-blue-dark-3);
+    }
   }
 
   .hero-title {
-    font-size: clamp(2.75rem, 5.5vw, 4.25rem);
+    font-size: clamp(2.5rem, 5vw, 4rem);
     font-weight: 800;
-    line-height: 1.05;
-    margin: 0 0 1.1rem;
-    letter-spacing: -0.03em;
+    line-height: 1.1;
+    margin-bottom: 1rem;
   }
 
   .hero-title-main {
     display: block;
-    background: linear-gradient(135deg, #ffffff 0%, #7cc4ff 55%, #0078d7 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-  }
-
-  :root[data-theme='light'] .hero-title-main {
-    background: linear-gradient(135deg, #0f172a 0%, #0078d7 60%, #005a9e 100%);
+    background: linear-gradient(135deg, var(--sl-color-blue-6), var(--sl-color-blue-4));
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -634,32 +502,43 @@ const pokedex = [
 
   .hero-title-sub {
     display: block;
-    font-size: 0.38em;
-    font-weight: 600;
-    color: var(--vibe-muted);
+    font-size: 0.6em;
+    font-weight: 500;
+    color: var(--sl-color-gray-6);
     text-transform: uppercase;
-    letter-spacing: 0.16em;
-    margin-top: 0.35rem;
+    letter-spacing: 0.1em;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .hero-title-sub {
+      color: var(--sl-color-gray-4);
+    }
   }
 
   .hero-description {
-    font-size: 1.1rem;
-    color: var(--vibe-muted);
+    font-size: 1.25rem;
+    color: var(--sl-color-gray-6);
     line-height: 1.7;
-    margin: 0 0 1.75rem;
-    max-width: 520px;
+    margin-bottom: 2rem;
+    max-width: 500px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .hero-description {
+      color: var(--sl-color-gray-4);
+    }
   }
 
   .hero-actions {
     display: flex;
-    gap: 0.75rem;
+    gap: 1rem;
     flex-wrap: wrap;
-    margin-bottom: 1.5rem;
+    margin-bottom: 2rem;
   }
 
   .hero-links {
     display: flex;
-    gap: 1.25rem;
+    gap: 1.5rem;
     flex-wrap: wrap;
   }
 
@@ -667,335 +546,742 @@ const pokedex = [
     display: inline-flex;
     align-items: center;
     gap: 0.375rem;
-    color: var(--vibe-muted);
+    color: var(--sl-color-gray-6);
     font-size: 0.875rem;
     text-decoration: none;
     transition: color 0.15s ease;
   }
 
   .hero-link:hover {
-    color: var(--vibe-blue-bright);
+    color: var(--sl-color-blue-6);
   }
 
-  :root[data-theme='light'] .hero-link:hover {
-    color: var(--vibe-blue);
+  @media (prefers-color-scheme: dark) {
+    .hero-link {
+      color: var(--sl-color-gray-4);
+    }
+    .hero-link:hover {
+      color: var(--sl-color-blue-4);
+    }
   }
 
-  /* ============================================================================
-     DESKTOP PREVIEW MOCKUP
-     ============================================================================ */
   .hero-visual {
     display: flex;
     justify-content: center;
     align-items: center;
   }
 
-  .desktop-frame {
+  .hero-screenshot-placeholder {
+    aspect-ratio: 16/9;
+    max-width: 500px;
     width: 100%;
-    max-width: 540px;
-    aspect-ratio: 16 / 10;
+    background: var(--sl-color-gray-1);
+    border: 1px solid var(--sl-color-gray-2);
     border-radius: 12px;
-    overflow: hidden;
-    border: 1px solid color-mix(in srgb, var(--vibe-blue) 35%, var(--vibe-border));
-    box-shadow:
-      0 24px 60px -15px rgba(0, 0, 0, 0.55),
-      0 0 0 1px rgba(255, 255, 255, 0.06) inset;
-    background: #071324;
-    position: relative;
-    text-align: left;
-  }
-
-  .desktop-wallpaper {
-    width: 100%;
-    height: 100%;
-    position: relative;
-    background: radial-gradient(circle at 70% 35%, #0e4a8a 0%, #071b38 52%, #040b18 100%);
-    overflow: hidden;
-    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
-  }
-
-  .bloom-orb {
-    position: absolute;
-    border-radius: 50%;
-    filter: blur(28px);
-    opacity: 0.55;
-    pointer-events: none;
-  }
-  .bloom-orb-1 {
-    width: 190px;
-    height: 190px;
-    background: radial-gradient(circle, #38bdf8, #0078d7);
-    top: 12%;
-    right: 16%;
-  }
-  .bloom-orb-2 {
-    width: 140px;
-    height: 140px;
-    background: radial-gradient(circle, #6366f1, #1d4ed8);
-    bottom: 18%;
-    left: 18%;
-  }
-
-  .desktop-icons {
-    position: absolute;
-    top: 14px;
-    left: 12px;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-
-  .d-icon {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 3px;
-    width: 48px;
+    justify-content: center;
+    gap: 1rem;
+    color: var(--sl-color-gray-5);
+    font-size: 1.125rem;
   }
 
-  .d-icon span {
-    font-size: 9px;
-    color: #e2e8f0;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
-    text-align: center;
-    line-height: 1.1;
+  @media (prefers-color-scheme: dark) {
+    .hero-screenshot-placeholder {
+      background: var(--sl-color-blue-dark-1);
+      border-color: var(--sl-color-blue-dark-3);
+      color: var(--sl-color-gray-4);
+    }
   }
 
-  .d-icon-box {
-    width: 24px;
-    height: 24px;
-    border-radius: 4px;
-    border: 1px solid rgba(255, 255, 255, 0.25);
-  }
-  .d-icon-bin {
-    background: linear-gradient(135deg, #94a3b8, #475569);
-  }
-  .d-icon-folder {
-    background: linear-gradient(135deg, #fbbf24, #d97706);
+  .hero-screenshot-placeholder .icon-xl {
+    width: 64px;
+    height: 64px;
+    opacity: 0.5;
   }
 
-  .win {
-    position: absolute;
-    border-radius: 6px;
-    overflow: hidden;
-    box-shadow: 0 14px 32px rgba(0, 0, 0, 0.55);
-    border: 1px solid rgba(255, 255, 255, 0.16);
-    background: #141820;
+  /* ============================================================================
+     AI NOTICE
+     ============================================================================ */
+  .ai-notice-section {
+    padding: 2rem;
+    background: linear-gradient(135deg, var(--sl-color-blue-1) 0%, var(--sl-color-blue-2) 100%);
+    border: 1px solid var(--sl-color-blue-3);
   }
 
-  .win-titlebar {
-    height: 22px;
-    background: #f1f5f9;
-    color: #0f172a;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0 8px;
-    font-size: 10px;
-    font-weight: 600;
+  @media (prefers-color-scheme: dark) {
+    .ai-notice-section {
+      background: linear-gradient(135deg, var(--sl-color-blue-dark-1) 0%, var(--sl-color-blue-dark-2) 100%);
+      border-color: var(--sl-color-blue-dark-3);
+    }
   }
 
-  .win-controls {
-    display: flex;
-    gap: 8px;
-    font-size: 10px;
-    color: #475569;
-  }
-
-  .win-close {
-    color: #dc2626;
-    font-weight: 700;
-  }
-
-  .win-settings {
-    top: 18px;
-    right: 18px;
-    width: 62%;
-    height: 54%;
-    background: #ffffff;
-    color: #0f172a;
-  }
-
-  .win-settings-body {
+  .ai-notice {
+    max-width: 1200px;
+    margin: 0 auto;
     display: grid;
-    grid-template-columns: 36% 1fr;
-    height: calc(100% - 22px);
-    font-size: 9px;
+    grid-template-columns: auto 1fr;
+    gap: 2rem;
+    align-items: start;
   }
 
-  .win-settings-nav {
-    background: #f8fafc;
-    border-right: 1px solid #e2e8f0;
-    padding: 6px;
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
+  @media (max-width: 700px) {
+    .ai-notice {
+      grid-template-columns: 1fr;
+      text-align: center;
+    }
   }
 
-  .nav-pill {
-    padding: 4px 6px;
-    border-radius: 3px;
-    color: #475569;
-  }
-
-  .nav-pill.active {
-    background: #e0f2fe;
-    color: #005a9e;
-    font-weight: 600;
-  }
-
-  .win-settings-pane {
-    padding: 8px 10px;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-
-  .pane-heading {
-    font-weight: 700;
-    font-size: 10px;
-    color: #0f172a;
-    margin-bottom: 2px;
-  }
-
-  .pane-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 3px 0;
-    border-bottom: 1px solid #f1f5f9;
-    color: #334155;
-  }
-
-  .pane-val {
-    color: #0078d7;
-    font-weight: 600;
-  }
-
-  .pane-toggle {
-    width: 20px;
-    height: 10px;
-    border-radius: 999px;
-    background: #0078d7;
-    position: relative;
-  }
-  .pane-toggle::after {
-    content: '';
-    position: absolute;
-    right: 2px;
-    top: 2px;
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: #fff;
-  }
-
-  .win-terminal {
-    bottom: 42px;
-    left: 64px;
-    width: 66%;
-    height: 54%;
-    background: #012456;
-    z-index: 2;
-  }
-
-  .win-terminal-body {
-    padding: 8px 10px;
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 9px;
-    line-height: 1.5;
-    color: #e2e8f0;
-  }
-
-  .term-line.dim { color: #93c5fd; margin-bottom: 2px; }
-  .term-line.ok { color: #4ade80; }
-  .term-prompt { color: #facc15; font-weight: 600; }
-  .term-cursor {
-    display: inline-block;
-    width: 5px;
-    height: 9px;
-    background: #e2e8f0;
-    vertical-align: middle;
-  }
-
-  .taskbar {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    height: 28px;
-    background: rgba(15, 23, 42, 0.92);
-    backdrop-filter: blur(8px);
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0 8px 0 0;
-    z-index: 3;
-  }
-
-  .tb-left {
-    display: flex;
-    align-items: center;
-    height: 100%;
-    gap: 4px;
-  }
-
-  .tb-start {
-    width: 28px;
-    height: 100%;
+  .ai-notice-icon {
+    width: 64px;
+    height: 64px;
+    background: var(--sl-color-blue-6);
+    border-radius: 16px;
     display: flex;
     align-items: center;
     justify-content: center;
+    flex-shrink: 0;
   }
 
-  .win-grid {
+  @media (prefers-color-scheme: dark) {
+    .ai-notice-icon {
+      background: var(--sl-color-blue-4);
+    }
+  }
+
+  .ai-notice-icon .icon-md {
+    width: 32px;
+    height: 32px;
+    color: white;
+  }
+
+  .ai-notice-content h3 {
+    font-size: 1.5rem;
+    margin-bottom: 0.5rem;
+    color: var(--sl-color-blue-7);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .ai-notice-content h3 {
+      color: var(--sl-color-blue-3);
+    }
+  }
+
+  .ai-notice-content p {
+    color: var(--sl-color-gray-6);
+    margin-bottom: 1.5rem;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .ai-notice-content p {
+      color: var(--sl-color-gray-4);
+    }
+  }
+
+  .ai-rules {
     display: grid;
-    grid-template-columns: repeat(2, 5px);
-    gap: 1.5px;
-  }
-  .win-grid i {
-    display: block;
-    width: 5px;
-    height: 5px;
-    background: #38bdf8;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 0.75rem;
   }
 
-  .tb-search {
-    background: rgba(255, 255, 255, 0.92);
-    color: #475569;
-    font-size: 8.5px;
-    padding: 2px 8px;
-    border-radius: 2px;
-    width: 96px;
+  .ai-rule {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+    color: var(--sl-color-gray-7);
+    background: var(--sl-color-white);
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    border: 1px solid var(--sl-color-blue-2);
   }
 
-  .tb-btn {
-    font-size: 9px;
-    color: #cbd5e1;
-    padding: 3px 8px;
-    border-bottom: 2px solid transparent;
+  @media (prefers-color-scheme: dark) {
+    .ai-rule {
+      background: var(--sl-color-blue-dark-2);
+      color: var(--sl-color-gray-3);
+      border-color: var(--sl-color-blue-dark-3);
+    }
   }
 
-  .tb-btn.active {
-    background: rgba(255, 255, 255, 0.12);
-    color: #ffffff;
-    border-bottom-color: #38bdf8;
+  .ai-rule .icon-xs {
+    width: 16px;
+    height: 16px;
+    color: var(--sl-color-blue-6);
+    flex-shrink: 0;
   }
 
-  .tb-tray {
+  @media (prefers-color-scheme: dark) {
+    .ai-rule .icon-xs {
+      color: var(--sl-color-blue-4);
+    }
+  }
+
+  /* ============================================================================
+     FEATURES SECTION
+     ============================================================================ */
+  .features-section {
+    padding: 6rem 2rem;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+
+  .section-header {
+    text-align: center;
+    margin-bottom: 3rem;
+  }
+
+  .section-header h2 {
+    font-size: clamp(2rem, 4vw, 2.5rem);
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+    color: var(--sl-color-black);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .section-header h2 {
+      color: var(--sl-color-white);
+    }
+  }
+
+  .section-header p {
+    font-size: 1.125rem;
+    color: var(--sl-color-gray-6);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .section-header p {
+      color: var(--sl-color-gray-4);
+    }
+  }
+
+  .features-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 1.5rem;
+  }
+
+  .feature-card {
+    background: var(--sl-color-white);
+    border: 1px solid var(--sl-color-gray-2);
+    border-radius: 16px;
+    padding: 2rem;
+    transition: all 0.2s ease;
+  }
+
+  .feature-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.08);
+    border-color: var(--sl-color-blue-3);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .feature-card {
+      background: var(--sl-color-blue-dark-1);
+      border-color: var(--sl-color-blue-dark-3);
+    }
+    .feature-card:hover {
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+      border-color: var(--sl-color-blue-4);
+    }
+  }
+
+  .feature-icon {
+    width: 56px;
+    height: 56px;
+    background: linear-gradient(135deg, var(--sl-color-blue-5), var(--sl-color-blue-7));
+    border-radius: 12px;
     display: flex;
     align-items: center;
-    gap: 8px;
-    color: #e2e8f0;
-    font-size: 9px;
+    justify-content: center;
+    margin-bottom: 1rem;
   }
 
-  .tray-dot {
-    width: 6px;
-    height: 6px;
+  .feature-icon .icon-lg {
+    width: 28px;
+    height: 28px;
+    color: white;
+  }
+
+  .feature-card h3 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin-bottom: 0.75rem;
+    color: var(--sl-color-black);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .feature-card h3 {
+      color: var(--sl-color-white);
+    }
+  }
+
+  .feature-card p {
+    color: var(--sl-color-gray-6);
+    line-height: 1.7;
+    margin-bottom: 1rem;
+    font-size: 0.9375rem;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .feature-card p {
+      color: var(--sl-color-gray-4);
+    }
+  }
+
+  .feature-tags {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .tag {
+    font-size: 0.75rem;
+    font-weight: 500;
+    padding: 0.25rem 0.625rem;
+    background: var(--sl-color-gray-1);
+    color: var(--sl-color-gray-7);
+    border-radius: 9999px;
+    border: 1px solid var(--sl-color-gray-2);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .tag {
+      background: var(--sl-color-blue-dark-2);
+      color: var(--sl-color-gray-3);
+      border-color: var(--sl-color-blue-dark-3);
+    }
+  }
+
+  /* ============================================================================
+     TECH STACK
+     ============================================================================ */
+  .tech-section {
+    padding: 6rem 2rem;
+    background: var(--sl-color-gray-1);
+    border-top: 1px solid var(--sl-color-gray-2);
+    border-bottom: 1px solid var(--sl-color-gray-2);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .tech-section {
+      background: var(--sl-color-blue-dark-1);
+      border-color: var(--sl-color-blue-dark-3);
+    }
+  }
+
+  .tech-grid {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1.5rem;
+  }
+
+  .tech-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: 1.5rem;
+    background: var(--sl-color-white);
+    border: 1px solid var(--sl-color-gray-2);
+    border-radius: 12px;
+    transition: all 0.2s ease;
+  }
+
+  .tech-item:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.08);
+    border-color: var(--sl-color-blue-3);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .tech-item {
+      background: var(--sl-color-blue-dark-1);
+      border-color: var(--sl-color-blue-dark-3);
+    }
+    .tech-item:hover {
+      box-shadow: 0 12px 24px rgba(0, 0, 0, 0.3);
+      border-color: var(--sl-color-blue-4);
+    }
+  }
+
+  .tech-item .icon-md {
+    width: 32px;
+    height: 32px;
+    color: var(--sl-color-blue-6);
+    margin-bottom: 0.75rem;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .tech-item .icon-md {
+      color: var(--sl-color-blue-4);
+    }
+  }
+
+  .tech-item h4 {
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+    color: var(--sl-color-black);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .tech-item h4 {
+      color: var(--sl-color-white);
+    }
+  }
+
+  .tech-item p {
+    font-size: 0.875rem;
+    color: var(--sl-color-gray-6);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .tech-item p {
+      color: var(--sl-color-gray-4);
+    }
+  }
+
+  /* ============================================================================
+     CONTRIBUTORS
+     ============================================================================ */
+  .contributors-section {
+    padding: 6rem 2rem;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+
+  .contributors-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+  }
+
+  .contributor-card {
+    background: var(--sl-color-white);
+    border: 1px solid var(--sl-color-gray-2);
+    border-radius: 16px;
+    padding: 1.5rem;
+    text-align: center;
+    transition: all 0.2s ease;
+  }
+
+  .contributor-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.08);
+    border-color: var(--sl-color-blue-3);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .contributor-card {
+      background: var(--sl-color-blue-dark-1);
+      border-color: var(--sl-color-blue-dark-3);
+    }
+    .contributor-card:hover {
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+      border-color: var(--sl-color-blue-4);
+    }
+  }
+
+  .contributor-avatar {
+    width: 72px;
+    height: 72px;
     border-radius: 50%;
-    background: #4ade80;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 1rem;
+  }
+
+  .contributor-avatar .icon-lg {
+    width: 36px;
+    height: 36px;
+    color: white;
+  }
+
+  .contributor-card h4 {
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+    color: var(--sl-color-black);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .contributor-card h4 {
+      color: var(--sl-color-white);
+    }
+  }
+
+  .contributor-role {
+    font-size: 0.875rem;
+    color: var(--sl-color-blue-6);
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .contributor-role {
+      color: var(--sl-color-blue-4);
+    }
+  }
+
+  .contributor-desc {
+    font-size: 0.8125rem;
+    color: var(--sl-color-gray-6);
+    margin-bottom: 1rem;
+    line-height: 1.5;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .contributor-desc {
+      color: var(--sl-color-gray-4);
+    }
+  }
+
+  .contributor-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    background: var(--sl-color-gray-1);
+    color: var(--sl-color-gray-6);
+    border: 1px solid var(--sl-color-gray-2);
+    border-radius: 50%;
+    transition: all 0.15s ease;
+  }
+
+  .contributor-link:hover {
+    background: var(--sl-color-blue-1);
+    color: var(--sl-color-blue-7);
+    border-color: var(--sl-color-blue-3);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .contributor-link {
+      background: var(--sl-color-blue-dark-2);
+      color: var(--sl-color-gray-4);
+      border-color: var(--sl-color-blue-dark-3);
+    }
+    .contributor-link:hover {
+      background: var(--sl-color-blue-dark-1);
+      color: var(--sl-color-blue-4);
+      border-color: var(--sl-color-blue-4);
+    }
+  }
+
+  .contributor-link .icon-xs {
+    width: 18px;
+    height: 18px;
+  }
+
+  .contributors-cta {
+    text-align: center;
+  }
+
+  /* ============================================================================
+     FOOTER
+     ============================================================================ */
+  .footer-section {
+    padding: 4rem 2rem 2rem;
+    background: var(--sl-color-gray-1);
+    border-top: 1px solid var(--sl-color-gray-2);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .footer-section {
+      background: var(--sl-color-blue-dark-1);
+      border-color: var(--sl-color-blue-dark-3);
+    }
+  }
+
+  .footer-grid {
+    max-width: 1200px;
+    margin: 0 auto 3rem;
+    display: grid;
+    grid-template-columns: 2fr repeat(3, 1fr);
+    gap: 2rem;
+  }
+
+  @media (max-width: 900px) {
+    .footer-grid {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+
+  @media (max-width: 600px) {
+    .footer-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .footer-brand h3 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+    color: var(--sl-color-black);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .footer-brand h3 {
+      color: var(--sl-color-white);
+    }
+  }
+
+  .footer-brand p {
+    color: var(--sl-color-gray-6);
+    margin-bottom: 1.5rem;
+    line-height: 1.6;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .footer-brand p {
+      color: var(--sl-color-gray-4);
+    }
+  }
+
+  .social-links {
+    display: flex;
+    gap: 0.75rem;
+  }
+
+  .social-link {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    background: var(--sl-color-white);
+    color: var(--sl-color-gray-6);
+    border: 1px solid var(--sl-color-gray-2);
+    border-radius: 8px;
+    transition: all 0.15s ease;
+  }
+
+  .social-link:hover {
+    background: var(--sl-color-blue-1);
+    color: var(--sl-color-blue-7);
+    border-color: var(--sl-color-blue-3);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .social-link {
+      background: var(--sl-color-blue-dark-2);
+      color: var(--sl-color-gray-4);
+      border-color: var(--sl-color-blue-dark-3);
+    }
+    .social-link:hover {
+      background: var(--sl-color-blue-dark-1);
+      color: var(--sl-color-blue-4);
+      border-color: var(--sl-color-blue-4);
+    }
+  }
+
+  .social-link .icon-md {
+    width: 20px;
+    height: 20px;
+  }
+
+  .footer-links h4 {
+    font-size: 0.875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--sl-color-gray-7);
+    margin-bottom: 1rem;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .footer-links h4 {
+      color: var(--sl-color-gray-3);
+    }
+  }
+
+  .footer-links ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  .footer-links li {
+    margin-bottom: 0.5rem;
+  }
+
+  .footer-links a {
+    color: var(--sl-color-gray-6);
+    text-decoration: none;
+    font-size: 0.9375rem;
+    transition: color 0.15s ease;
+  }
+
+  .footer-links a:hover {
+    color: var(--sl-color-blue-6);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .footer-links a {
+      color: var(--sl-color-gray-4);
+    }
+    .footer-links a:hover {
+      color: var(--sl-color-blue-4);
+    }
+  }
+
+  .footer-bottom {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding-top: 2rem;
+    border-top: 1px solid var(--sl-color-gray-2);
+    text-align: center;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .footer-bottom {
+      border-color: var(--sl-color-blue-dark-3);
+    }
+  }
+
+  .footer-bottom p {
+    color: var(--sl-color-gray-6);
+    font-size: 0.875rem;
+    margin: 0 0 0.5rem;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .footer-bottom p {
+      color: var(--sl-color-gray-4);
+    }
+  }
+
+  .footer-bottom a {
+    color: var(--sl-color-blue-6);
+    text-decoration: none;
+  }
+
+  .footer-bottom a:hover {
+    text-decoration: underline;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .footer-bottom a {
+      color: var(--sl-color-blue-4);
+    }
+  }
+
+  .footer-ai {
+    font-size: 0.8125rem;
+    color: var(--sl-color-gray-5) !important;
+    font-style: italic;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .footer-ai {
+      color: var(--sl-color-gray-5) !important;
+    }
   }
 
   /* ============================================================================
@@ -1005,687 +1291,172 @@ const pokedex = [
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
-    padding: 0.7rem 1.35rem;
+    padding: 0.875rem 1.75rem;
     border-radius: 8px;
     font-weight: 600;
-    font-size: 0.9375rem;
+    font-size: 1rem;
     text-decoration: none;
     transition: all 0.15s ease;
+    border: none;
     cursor: pointer;
-    border: 1px solid transparent;
+  }
+
+  .btn .icon-sm {
+    width: 18px;
+    height: 18px;
   }
 
   .btn-primary {
-    background: var(--vibe-blue);
-    color: #ffffff;
+    background: var(--sl-color-blue-6);
+    color: white;
   }
 
   .btn-primary:hover {
-    background: #0066b8;
-    transform: translateY(-1px);
-    box-shadow: 0 6px 20px -4px rgba(0, 120, 215, 0.45);
+    background: var(--sl-color-blue-7);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 16px rgba(0, 120, 215, 0.3);
   }
 
   .btn-secondary {
-    background: var(--vibe-card-bg);
-    color: var(--sl-color-text);
-    border-color: var(--vibe-border);
+    background: var(--sl-color-gray-1);
+    color: var(--sl-color-gray-7);
+    border: 1px solid var(--sl-color-gray-2);
   }
 
   .btn-secondary:hover {
-    border-color: var(--vibe-blue);
-    background: var(--vibe-card-hover);
+    background: var(--sl-color-gray-2);
+    border-color: var(--sl-color-gray-3);
   }
 
-  .btn-ghost {
-    background: transparent;
-    color: var(--vibe-muted);
-    border-color: var(--vibe-border);
-  }
-
-  .btn-ghost:hover {
-    color: var(--sl-color-text);
-    border-color: var(--vibe-muted);
-  }
-
-  /* ============================================================================
-     SHARED SECTION HEADERS
-     ============================================================================ */
-  .section-header {
-    text-align: center;
-    max-width: 680px;
-    margin: 0 auto 2.75rem;
-  }
-
-  .section-eyebrow {
-    display: inline-block;
-    font-size: 0.75rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.12em;
-    color: var(--vibe-blue-bright);
-    margin-bottom: 0.5rem;
-  }
-
-  :root[data-theme='light'] .section-eyebrow {
-    color: var(--vibe-blue);
-  }
-
-  .section-header h2 {
-    font-size: clamp(1.75rem, 3vw, 2.25rem);
-    font-weight: 750;
-    margin: 0 0 0.5rem;
-    letter-spacing: -0.02em;
-  }
-
-  .section-header p {
-    color: var(--vibe-muted);
-    font-size: 1.05rem;
-    margin: 0;
-  }
-
-  /* ============================================================================
-     WHAT'S NEW
-     ============================================================================ */
-  .whats-new-section {
-    padding: 3.5rem 1.5rem;
-    max-width: 1200px;
-    margin: 0 auto;
-    border-top: 1px solid var(--vibe-border);
-  }
-
-  .whats-new-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-    gap: 1.25rem;
-  }
-
-  .highlight-card {
-    display: flex;
-    gap: 1rem;
-    align-items: flex-start;
-    padding: 1.35rem;
-    border-radius: 10px;
-    border: 1px solid var(--vibe-border);
-    background: var(--vibe-card-bg);
-    text-decoration: none;
-    color: inherit;
-    transition: border-color 0.15s ease, transform 0.15s ease, background 0.15s ease;
-  }
-
-  .highlight-card:hover {
-    border-color: var(--vibe-blue);
-    background: var(--vibe-card-hover);
-    transform: translateY(-2px);
-  }
-
-  .highlight-icon {
-    flex-shrink: 0;
-    width: 40px;
-    height: 40px;
-    border-radius: 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: color-mix(in srgb, var(--vibe-blue) 15%, transparent);
-    color: var(--vibe-blue-bright);
-  }
-
-  :root[data-theme='light'] .highlight-icon {
-    color: var(--vibe-blue);
-  }
-
-  .highlight-body h3 {
-    font-size: 1rem;
-    font-weight: 650;
-    margin: 0 0 0.35rem;
-    color: var(--sl-color-text);
-  }
-
-  .highlight-body p {
-    font-size: 0.875rem;
-    line-height: 1.55;
-    color: var(--vibe-muted);
-    margin: 0;
-  }
-
-  /* ============================================================================
-     FEATURES GRID
-     ============================================================================ */
-  .features-section {
-    padding: 3.5rem 1.5rem;
-    max-width: 1200px;
-    margin: 0 auto;
-    border-top: 1px solid var(--vibe-border);
-  }
-
-  .features-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-    gap: 1.25rem;
-  }
-
-  .feature-card {
-    background: var(--vibe-card-bg);
-    border: 1px solid var(--vibe-border);
-    border-radius: 10px;
-    padding: 1.5rem;
-    display: flex;
-    flex-direction: column;
-    transition: border-color 0.15s ease, transform 0.15s ease;
-  }
-
-  .feature-card:hover {
-    border-color: color-mix(in srgb, var(--vibe-blue) 60%, var(--vibe-border));
-    transform: translateY(-2px);
-  }
-
-  .feature-icon {
-    width: 44px;
-    height: 44px;
-    border-radius: 8px;
-    background: color-mix(in srgb, var(--vibe-blue) 14%, transparent);
-    color: var(--vibe-blue-bright);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-bottom: 1rem;
-  }
-
-  :root[data-theme='light'] .feature-icon {
-    color: var(--vibe-blue);
-  }
-
-  .feature-card h3 {
-    font-size: 1.075rem;
-    font-weight: 650;
-    margin: 0 0 0.5rem;
-  }
-
-  .feature-card p {
-    font-size: 0.9rem;
-    line-height: 1.6;
-    color: var(--vibe-muted);
-    margin: 0 0 1rem;
-    flex-grow: 1;
-  }
-
-  .feature-tags {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.4rem;
-  }
-
-  .tag {
-    font-size: 0.75rem;
-    padding: 0.2rem 0.55rem;
-    border-radius: 9999px;
-    border: 1px solid var(--vibe-border);
-    color: var(--vibe-muted);
-    background: transparent;
-  }
-
-  /* ============================================================================
-     AI NOTICE
-     ============================================================================ */
-  .ai-notice-section {
-    padding: 2.25rem 1.5rem;
-    max-width: 1200px;
-    margin: 1rem auto 0;
-  }
-
-  .ai-notice {
-    border-radius: 12px;
-    padding: 2rem;
-    background: color-mix(in srgb, var(--vibe-blue) 8%, var(--vibe-surface));
-    border: 1px solid color-mix(in srgb, var(--vibe-blue) 35%, var(--vibe-border));
-    display: grid;
-    grid-template-columns: auto 1fr;
-    gap: 1.5rem;
-    align-items: start;
-  }
-
-  @media (max-width: 700px) {
-    .ai-notice {
-      grid-template-columns: 1fr;
-      text-align: center;
+  @media (prefers-color-scheme: dark) {
+    .btn-secondary {
+      background: var(--sl-color-blue-dark-2);
+      color: var(--sl-color-gray-3);
+      border-color: var(--sl-color-blue-dark-3);
     }
-    .ai-notice-icon {
-      margin: 0 auto;
-    }
-    .ai-rule {
-      justify-content: center;
+    .btn-secondary:hover {
+      background: var(--sl-color-blue-dark-3);
+      border-color: var(--sl-color-blue-dark-4);
     }
   }
 
-  .ai-notice-icon {
-    width: 44px;
-    height: 44px;
-    border-radius: 10px;
-    background: var(--vibe-blue);
-    color: #ffffff;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+  /* ============================================================================
+     ICON SIZES
+     ============================================================================ */
+  .icon-xs { width: 14px; height: 14px; }
+  .icon-sm { width: 18px; height: 18px; }
+  .icon-md { width: 24px; height: 24px; }
+  .icon-lg { width: 32px; height: 32px; }
+  .icon-xl { width: 48px; height: 48px; }
+
+  /* ============================================================================
+     UTILITIES
+     ============================================================================ */
+  .underline {
+    text-decoration: underline;
+    text-underline-offset: 2px;
   }
 
-  .ai-notice-content h3 {
-    margin: 0 0 0.35rem;
-    font-size: 1.2rem;
-  }
-
-  .ai-notice-content p {
-    margin: 0 0 1rem;
-    color: var(--vibe-muted);
-    font-size: 0.9375rem;
-  }
-
-  .ai-rules {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-    gap: 0.6rem 1.25rem;
-  }
-
-  .ai-rule {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-size: 0.875rem;
-    color: var(--sl-color-text);
-  }
-
-  .ai-rule :global(svg) {
-    color: var(--vibe-blue-bright);
-    flex-shrink: 0;
+  .underline:hover {
+    text-decoration-thickness: 2px;
   }
 
   /* ============================================================================
-     TECH STACK
+     CONTRIBUTOR PFPS & AI AGENT POKEDEX
      ============================================================================ */
-  .tech-section {
-    padding: 3.5rem 1.5rem;
-    max-width: 1200px;
-    margin: 0 auto;
-  }
-
-  .tech-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 1rem;
-  }
-
-  .tech-item {
-    display: flex;
-    align-items: center;
-    gap: 0.9rem;
-    padding: 1.1rem 1.25rem;
-    border-radius: 10px;
-    border: 1px solid var(--vibe-border);
-    background: var(--vibe-card-bg);
-  }
-
-  .tech-item :global(svg) {
-    color: var(--vibe-blue-bright);
-    flex-shrink: 0;
-  }
-
-  .tech-item h4 {
-    margin: 0 0 0.15rem;
-    font-size: 0.95rem;
-  }
-
-  .tech-item p {
-    margin: 0;
-    font-size: 0.825rem;
-    color: var(--vibe-muted);
-  }
-
-  /* ============================================================================
-     CONTRIBUTORS
-     ============================================================================ */
-  .contributors-section {
-    padding: 3.5rem 1.5rem;
-    max-width: 1200px;
-    margin: 0 auto;
-    border-top: 1px solid var(--vibe-border);
-  }
-
-  .contributors-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-    gap: 1.15rem;
-    margin-bottom: 2rem;
-  }
-
-  .contributor-card {
-    border: 1px solid var(--vibe-border);
-    background: var(--vibe-card-bg);
-    border-radius: 12px;
-    padding: 1.5rem 1.15rem 1.25rem;
-    text-align: center;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    transition: border-color 0.15s ease, transform 0.15s ease;
-  }
-
-  .contributor-card:hover {
-    border-color: color-mix(in srgb, var(--vibe-blue) 60%, var(--vibe-border));
-    transform: translateY(-2px);
-  }
-
-  .contributor-card.is-human {
-    border-color: color-mix(in srgb, var(--vibe-blue) 35%, var(--vibe-border));
-  }
-
-  .contributor-avatar-wrap {
-    position: relative;
-    display: inline-flex;
-    margin-bottom: 0.9rem;
-    text-decoration: none;
-  }
-
   .contributor-pfp {
-    width: 68px;
-    height: 68px;
+    width: 64px;
+    height: 64px;
     border-radius: 50%;
     object-fit: cover;
-    border: 2px solid color-mix(in srgb, var(--vibe-blue) 65%, transparent);
-    box-shadow: 0 6px 18px rgba(0, 120, 215, 0.25);
-    background: var(--vibe-surface);
+    margin: 0 auto 1rem;
+    border: 2px solid var(--sl-color-blue-6);
   }
 
-  .contributor-avatar {
-    width: 68px;
-    height: 68px;
-    border-radius: 50%;
-    color: #ffffff;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.5rem;
-    font-weight: 800;
-    letter-spacing: -0.02em;
-    border: 2px solid rgba(255, 255, 255, 0.18);
-  }
-
-  .kind-pill {
-    position: absolute;
-    bottom: -4px;
-    right: -6px;
-    font-size: 0.65rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    padding: 0.12rem 0.42rem;
-    border-radius: 9999px;
-    border: 1.5px solid var(--sl-color-bg);
-  }
-
-  .kind-pill.human {
-    background: var(--vibe-blue);
-    color: #ffffff;
-  }
-
-  .kind-pill.ai {
-    background: #1e293b;
-    color: #93c5fd;
-  }
-
-  :root[data-theme='light'] .kind-pill.ai {
-    background: #e2e8f0;
-    color: #0f172a;
-  }
-
-  .contributor-card h4 {
-    margin: 0 0 0.15rem;
-    font-size: 1.02rem;
-  }
-
-  .contributor-handle {
-    font-size: 0.75rem;
-    color: var(--vibe-muted);
-    margin-bottom: 0.45rem;
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  }
-
-  .contributor-role {
-    font-size: 0.8rem;
-    font-weight: 600;
-    color: var(--vibe-blue-bright);
-    margin: 0 0 0.5rem;
-  }
-
-  :root[data-theme='light'] .contributor-role {
-    color: var(--vibe-blue);
-  }
-
-  .contributor-desc {
-    font-size: 0.825rem;
-    line-height: 1.5;
-    color: var(--vibe-muted);
-    margin: 0 0 0.9rem;
-    flex-grow: 1;
-  }
-
-  .contributor-link {
-    color: var(--vibe-muted);
-    padding: 0.35rem 0.75rem;
-    border-radius: 6px;
-    border: 1px solid var(--vibe-border);
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    font-size: 0.78rem;
-    font-weight: 500;
-    text-decoration: none;
-    transition: color 0.15s ease, border-color 0.15s ease;
-  }
-
-  .contributor-link:hover {
-    color: var(--vibe-blue-bright);
-    border-color: var(--vibe-blue);
-  }
-
-  .contributors-cta {
-    text-align: center;
-  }
-
-  /* ============================================================================
-     AI AGENT POKEDEX
-     ============================================================================ */
   .pokedex-section {
-    padding: 3.5rem 1.5rem;
+    padding: 5rem 2rem;
     max-width: 1200px;
     margin: 0 auto;
-    border-top: 1px solid var(--vibe-border);
+    border-top: 1px solid var(--sl-color-gray-2);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .pokedex-section {
+      border-top-color: var(--sl-color-blue-dark-3);
+    }
   }
 
   .pokedex-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(235px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
     gap: 1rem;
   }
 
   .pokedex-card {
-    border: 1px solid var(--vibe-border);
-    background: var(--vibe-card-bg);
+    background: var(--sl-color-white);
+    border: 1px solid var(--sl-color-gray-2);
     border-radius: 10px;
-    padding: 1.1rem 1.2rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.45rem;
-    transition: transform 0.15s ease, border-color 0.15s ease;
+    padding: 1.25rem;
+    transition: all 0.2s ease;
   }
 
   .pokedex-card:hover {
     transform: translateY(-2px);
+    border-color: var(--sl-color-blue-6);
   }
 
-  .pokedex-card.tone-anthropic:hover { border-color: #d97706; }
-  .pokedex-card.tone-nvidia:hover { border-color: #76b900; }
-  .pokedex-card.tone-google:hover { border-color: #4285f4; }
+  @media (prefers-color-scheme: dark) {
+    .pokedex-card {
+      background: var(--sl-color-blue-dark-1);
+      border-color: var(--sl-color-blue-dark-3);
+    }
+    .pokedex-card:hover {
+      border-color: var(--sl-color-blue-4);
+    }
+  }
 
   .pokedex-top {
     display: flex;
-    align-items: center;
     justify-content: space-between;
-    gap: 0.5rem;
+    align-items: center;
+    margin-bottom: 0.6rem;
   }
 
   .pokedex-num {
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 0.85rem;
+    font-family: monospace;
     font-weight: 700;
-    color: var(--vibe-muted);
+    font-size: 0.875rem;
+    color: var(--sl-color-gray-5);
   }
 
   .trainer-badge {
     font-size: 0.7rem;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.06em;
-    padding: 0.18rem 0.55rem;
+    padding: 0.15rem 0.55rem;
     border-radius: 9999px;
   }
 
-  .trainer-badge.tone-anthropic {
-    background: rgba(217, 119, 6, 0.16);
-    color: #fbbf24;
-    border: 1px solid rgba(217, 119, 6, 0.35);
-  }
-
-  .trainer-badge.tone-nvidia {
-    background: rgba(118, 185, 0, 0.16);
-    color: #a3e635;
-    border: 1px solid rgba(118, 185, 0, 0.35);
-  }
-
-  .trainer-badge.tone-google {
-    background: rgba(66, 133, 244, 0.16);
-    color: #60a5fa;
-    border: 1px solid rgba(66, 133, 244, 0.35);
-  }
-
-  :root[data-theme='light'] .trainer-badge.tone-anthropic { color: #b45309; }
-  :root[data-theme='light'] .trainer-badge.tone-nvidia { color: #4d7c0f; }
-  :root[data-theme='light'] .trainer-badge.tone-google { color: #1d4ed8; }
+  .trainer-badge.tone-anthropic { background: rgba(217, 119, 6, 0.15); color: #d97706; }
+  .trainer-badge.tone-nvidia { background: rgba(118, 185, 0, 0.15); color: #76b900; }
+  .trainer-badge.tone-google { background: rgba(66, 133, 244, 0.15); color: #4285f4; }
 
   .pokedex-name {
+    font-weight: 700;
     font-size: 1rem;
-    font-weight: 650;
-    color: var(--sl-color-text);
+    margin-bottom: 0.25rem;
   }
 
   .pokedex-meta {
     font-size: 0.8rem;
-    color: var(--vibe-muted);
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: var(--sl-color-gray-5);
+    font-family: monospace;
   }
 
   .pokedex-note {
     text-align: center;
-    margin: 1.5rem 0 0;
-    font-size: 0.85rem;
-    color: var(--vibe-muted);
+    margin-top: 1.5rem;
+    font-size: 0.875rem;
+    color: var(--sl-color-gray-5);
   }
-
-  /* ============================================================================
-     FOOTER
-     ============================================================================ */
-  .footer-section {
-    padding: 3rem 1.5rem 2rem;
-    max-width: 1200px;
-    margin: 0 auto;
-    border-top: 1px solid var(--vibe-border);
-  }
-
-  .footer-grid {
-    display: grid;
-    grid-template-columns: 1.5fr 1fr 1fr;
-    gap: 2.5rem;
-    margin-bottom: 2rem;
-  }
-
-  @media (max-width: 720px) {
-    .footer-grid {
-      grid-template-columns: 1fr;
-      gap: 1.5rem;
-    }
-  }
-
-  .footer-brand h3 {
-    margin: 0 0 0.5rem;
-  }
-
-  .footer-brand p {
-    color: var(--vibe-muted);
-    font-size: 0.9rem;
-    margin: 0 0 1rem;
-    max-width: 320px;
-  }
-
-  .social-link {
-    display: inline-flex;
-    padding: 0.45rem;
-    border-radius: 8px;
-    border: 1px solid var(--vibe-border);
-    color: var(--vibe-muted);
-  }
-
-  .social-link:hover {
-    color: var(--sl-color-text);
-    border-color: var(--vibe-blue);
-  }
-
-  .footer-links h4 {
-    margin: 0 0 0.75rem;
-    font-size: 0.9rem;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--vibe-muted);
-  }
-
-  .footer-links ul {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-    display: grid;
-    gap: 0.45rem;
-  }
-
-  .footer-links a {
-    color: var(--sl-color-text);
-    text-decoration: none;
-    font-size: 0.9rem;
-  }
-
-  .footer-links a:hover {
-    color: var(--vibe-blue-bright);
-    text-decoration: underline;
-  }
-
-  .footer-bottom {
-    border-top: 1px solid var(--vibe-border);
-    padding-top: 1.5rem;
-    display: flex;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: 0.75rem;
-    font-size: 0.85rem;
-    color: var(--vibe-muted);
-  }
-
-  .footer-bottom p {
-    margin: 0;
-  }
-
-  .underline {
-    text-decoration: underline;
-  }
-
-  .icon-xs { width: 14px; height: 14px; }
-  .icon-sm { width: 16px; height: 16px; }
-  .icon-md { width: 20px; height: 20px; }
-  .icon-lg { width: 24px; height: 24px; }
 </style>

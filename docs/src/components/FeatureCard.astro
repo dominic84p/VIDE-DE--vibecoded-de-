@@ -1,0 +1,78 @@
+---
+interface Props {
+  title: string;
+  icon?: any;
+}
+const { title, icon: Icon } = Astro.props;
+---
+
+<article class="vide-card">
+  <div class="vide-card-head">
+    {Icon && (
+      <span class="vide-card-icon" aria-hidden="true">
+        <Icon size={16} />
+      </span>
+    )}
+    <p class="vide-card-title">{title}</p>
+  </div>
+  <div class="vide-card-body"><slot /></div>
+</article>
+
+<style>
+  .vide-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    min-width: 0;
+    padding: 1.25rem;
+    border-radius: calc(var(--radius, 0.5rem) + 0.25rem);
+    background-color: var(--code-background, var(--sl-color-bg-nav));
+    transition: background-color 0.15s;
+  }
+
+  .vide-card:hover {
+    background-color: color-mix(in oklab, var(--code-background, var(--sl-color-bg-nav)) 75%, var(--secondary, var(--sl-color-gray-5)));
+  }
+
+  .vide-card-head {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .vide-card-icon {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: calc(var(--radius, 0.5rem) - 2px);
+    color: var(--foreground, var(--sl-color-white));
+    background-color: var(--secondary, var(--sl-color-gray-5));
+  }
+
+  .vide-card-icon :global(svg) {
+    display: block;
+  }
+
+  .vide-card-title {
+    margin: 0 !important;
+    font-size: 0.875rem;
+    font-weight: 600;
+    line-height: 1.25rem;
+    color: var(--foreground, var(--sl-color-white));
+    overflow-wrap: anywhere;
+  }
+
+  .vide-card-body {
+    font-size: 0.875rem;
+    line-height: 1.6;
+    color: var(--muted-foreground, var(--sl-color-gray-3));
+    overflow-wrap: anywhere;
+  }
+
+  .vide-card-body :global(p) {
+    margin: 0;
+  }
+</style>

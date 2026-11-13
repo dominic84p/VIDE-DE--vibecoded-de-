@@ -21,8 +21,9 @@ hero:
       icon: github
 ---
 
-import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
 import '../../styles/home.css';
+import FeatureCard from '../../components/FeatureCard.astro';
 import HomeSections from '../../components/HomeSections.astro';
 import {
   Bot,
@@ -56,26 +57,21 @@ import {
 This project follows strict contribution rules — see [Contributing Rules](/vide-de/development/contributing/).
 
 <CardGrid>
-  <Card title="NO HUMAN SLOP">
-    <Bot size={16} style="display:inline;vertical-align:text-bottom;margin-right:6px;" />
+  <FeatureCard title="NO HUMAN SLOP" icon={Bot}>
     Only AI-written code accepted. If a human typed it, it doesn't ship.
-  </Card>
-  <Card title="NO AI UNDER 20B PARAMETERS">
-    <Ruler size={16} style="display:inline;vertical-align:text-bottom;margin-right:6px;" />
+  </FeatureCard>
+  <FeatureCard title="NO AI UNDER 20B PARAMETERS" icon={Ruler}>
     Small models may watch, but they may not touch.
-  </Card>
-  <Card title="AI FOR EVERYTHING">
-    <Zap size={16} style="display:inline;vertical-align:text-bottom;margin-right:6px;" />
+  </FeatureCard>
+  <FeatureCard title="AI FOR EVERYTHING" icon={Zap}>
     Code, commits, PRs, reviews. If you run <code>git commit</code> with your own hands, see Rule 1.
-  </Card>
-  <Card title="40K TOKEN MINIMUM">
-    <Target size={16} style="display:inline;vertical-align:text-bottom;margin-right:6px;" />
+  </FeatureCard>
+  <FeatureCard title="40K TOKEN MINIMUM" icon={Target}>
     Low-effort PRs get the <code>minimal</code> label. Show token count in PR description.
-  </Card>
-  <Card title="SECURITY BY CLAUDE ONLY">
-    <Lock size={16} style="display:inline;vertical-align:text-bottom;margin-right:6px;" />
+  </FeatureCard>
+  <FeatureCard title="SECURITY BY CLAUDE ONLY" icon={Lock}>
     Human-found bugs don't count. See <a href="https://github.com/dominic84p/vide-de/blob/main/SECURITY.md">SECURITY.md</a>.
-  </Card>
+  </FeatureCard>
 </CardGrid>
 
 ## Features at a Glance
@@ -85,22 +81,18 @@ This project follows strict contribution rules — see [Contributing Rules](/vid
 <p class="vide-group-intro">The compositor, rendering pipeline and display modes.</p>
 
 <CardGrid>
-  <Card title="Dual Backend Architecture">
-    <Monitor size={18} style="display:inline;vertical-align:text-bottom;margin-right:6px;" />
+  <FeatureCard title="Dual Backend Architecture" icon={Monitor}>
     Runs nested (via <code>winit</code>) or on real hardware (TTY / DRM / KMS / libseat), sharing one rendering pipeline.
-  </Card>
-  <Card title="CPU-Painted UI">
-    <Cpu size={18} style="display:inline;vertical-align:text-bottom;margin-right:6px;" />
+  </FeatureCard>
+  <FeatureCard title="CPU-Painted UI" icon={Cpu}>
     Taskbar, menus, and titlebars rendered on CPU via <code>canvas.rs</code> and cached by key for fast GPU compositing.
-  </Card>
-  <Card title="XWayland + Gaming">
-    <Gamepad2 size={18} style="display:inline;vertical-align:text-bottom;margin-right:6px;" />
+  </FeatureCard>
+  <FeatureCard title="XWayland + Gaming" icon={Gamepad2}>
     Full GPU acceleration via <code>linux-dmabuf</code> with explicit sync, relative pointer + pointer constraints, and optional direct scanout.
-  </Card>
-  <Card title="Live TTY Modes & Controls">
-    <Sliders size={18} style="display:inline;vertical-align:text-bottom;margin-right:6px;" />
+  </FeatureCard>
+  <FeatureCard title="Live TTY Modes & Controls" icon={Sliders}>
     Live <code>display_mode</code> and <code>display_scale</code> switching in TTY mode, plus Touchpad, multi-layout XKB Keyboard, 24h clock, and toasts.
-  </Card>
+  </FeatureCard>
 </CardGrid>
 
 ### Desktop &amp; Apps
@@ -108,26 +100,21 @@ This project follows strict contribution rules — see [Contributing Rules](/vid
 <p class="vide-group-intro">What you see and use day to day.</p>
 
 <CardGrid>
-  <Card title="Windows 10-Style Desktop">
-    <AppWindow size={18} style="display:inline;vertical-align:text-bottom;margin-right:6px;" />
+  <FeatureCard title="Windows 10-Style Desktop" icon={AppWindow}>
     Taskbar, Start menu with search, Action Center &amp; system tray, 10 virtual desktops, Task View, and edge/corner snapping.
-  </Card>
-  <Card title="Layer Shell Desktop">
-    <Layers size={18} style="display:inline;vertical-align:text-bottom;margin-right:6px;" />
+  </FeatureCard>
+  <FeatureCard title="Layer Shell Desktop" icon={Layers}>
     Separate <code>vide-desktop</code> process on <code>wlr-layer-shell</code>: 6 wallpapers, <code>~/Desktop</code> icons, Recycle Bin, and context menu.
-  </Card>
-  <Card title="Six Built-in Apps">
-    <Box size={18} style="display:inline;vertical-align:text-bottom;margin-right:6px;" />
+  </FeatureCard>
+  <FeatureCard title="Six Built-in Apps" icon={Box}>
     Settings, PowerSlop, File Exploder, Task Mangler, Snip &amp; Sketchy, and About VIDE-DE — all registered as <code>.desktop</code> entries.
-  </Card>
-  <Card title="StatusNotifierItem & Tray">
-    <Radio size={18} style="display:inline;vertical-align:text-bottom;margin-right:6px;" />
+  </FeatureCard>
+  <FeatureCard title="StatusNotifierItem & Tray" icon={Radio}>
     App tray icons via D-Bus (SNI watcher + host), plus built-in PipeWire volume and brightness flyouts.
-  </Card>
-  <Card title="Privacy & App Permissions">
-    <ShieldCheck size={18} style="display:inline;vertical-align:text-bottom;margin-right:6px;" />
+  </FeatureCard>
+  <FeatureCard title="Privacy & App Permissions" icon={ShieldCheck}>
     Settings <strong>Privacy</strong> page backed by the portal permission store for camera, mic, notifications, location, and screen-sharing revokes.
-  </Card>
+  </FeatureCard>
 </CardGrid>
 
 ### Developer Tools
@@ -135,18 +122,15 @@ This project follows strict contribution rules — see [Contributing Rules](/vid
 <p class="vide-group-intro">Scripting, diagnostics and safe testing.</p>
 
 <CardGrid>
-  <Card title="Control Socket & IPC">
-    <Terminal size={18} style="display:inline;vertical-align:text-bottom;margin-right:6px;" />
+  <FeatureCard title="Control Socket & IPC" icon={Terminal}>
     Plain-text Unix socket (<code>$VIDE_IPC</code>) for screenshots, snipping, clipboard PNGs, window control, and gated test input.
-  </Card>
-  <Card title="Health & Freeze Diagnostics">
-    <HeartPulse size={18} style="display:inline;vertical-align:text-bottom;margin-right:6px;" />
+  </FeatureCard>
+  <FeatureCard title="Health & Freeze Diagnostics" icon={HeartPulse}>
     5s <code>xdg</code> client ping watchdog (<code>(Not responding)</code> titlebars), 3s main-loop &amp; 1.5s TTY page-flip watchdogs, and protocol error logging.
-  </Card>
-  <Card title="Safe Nested Testing & Popups">
-    <TestTube2 size={18} style="display:inline;vertical-align:text-bottom;margin-right:6px;" />
+  </FeatureCard>
+  <FeatureCard title="Safe Nested Testing & Popups" icon={TestTube2}>
     <code>scripts/nested-test.sh</code> runs isolated sessions with <code>VIBE_TEST_INPUT=1</code> injection, plus geometry-accurate popup placement and focus.
-  </Card>
+  </FeatureCard>
 </CardGrid>
 
 <HomeSections />

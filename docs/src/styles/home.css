@@ -81,3 +81,25 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* ---------- Page padding (theme removes side padding on wide screens) ---------- */
+:root:not([data-has-sidebar]) .main-pane {
+  padding-inline: clamp(1rem, 4vw, 2rem);
+  max-width: 72rem;
+}
+
+/* ---------- Hero logo: centred, and above the title on narrow screens ---------- */
+.hero .hero-image {
+  display: flex;
+  justify-content: center;
+}
+
+@media (max-width: 63.99rem) {
+  .hero .hero-image {
+    order: -1;
+  }
+
+  .hero .hero-image img {
+    width: min(45%, 9rem);
+  }
+}

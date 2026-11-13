@@ -44,13 +44,28 @@ import {
 
 This project follows strict contribution rules — see [Contributing Rules](/vide-de/development/contributing/).
 
-| Rule | Description |
-|------|-------------|
-| <Bot size={16} style="display:inline;vertical-align:text-bottom;margin-right:6px;" /> **NO HUMAN SLOP** | Only AI-written code accepted. If a human typed it, it doesn't ship. |
-| <Ruler size={16} style="display:inline;vertical-align:text-bottom;margin-right:6px;" /> **NO AI UNDER 20B PARAMETERS** | Small models may watch, but they may not touch. |
-| <Zap size={16} style="display:inline;vertical-align:text-bottom;margin-right:6px;" /> **AI FOR EVERYTHING** | Code, commits, PRs, reviews. If you run `git commit` with your own hands, see Rule 1. |
-| <Target size={16} style="display:inline;vertical-align:text-bottom;margin-right:6px;" /> **40K TOKEN MINIMUM** | Low-effort PRs get the `minimal` label. Show token count in PR description. |
-| <Lock size={16} style="display:inline;vertical-align:text-bottom;margin-right:6px;" /> **SECURITY BY CLAUDE ONLY** | Human-found bugs don't count. See [SECURITY.md](https://github.com/dominic84p/vide-de/blob/main/SECURITY.md). |
+<CardGrid>
+  <Card title="NO HUMAN SLOP">
+    <Bot size={16} style="display:inline;vertical-align:text-bottom;margin-right:6px;" />
+    Only AI-written code accepted. If a human typed it, it doesn't ship.
+  </Card>
+  <Card title="NO AI UNDER 20B PARAMETERS">
+    <Ruler size={16} style="display:inline;vertical-align:text-bottom;margin-right:6px;" />
+    Small models may watch, but they may not touch.
+  </Card>
+  <Card title="AI FOR EVERYTHING">
+    <Zap size={16} style="display:inline;vertical-align:text-bottom;margin-right:6px;" />
+    Code, commits, PRs, reviews. If you run <code>git commit</code> with your own hands, see Rule 1.
+  </Card>
+  <Card title="40K TOKEN MINIMUM">
+    <Target size={16} style="display:inline;vertical-align:text-bottom;margin-right:6px;" />
+    Low-effort PRs get the <code>minimal</code> label. Show token count in PR description.
+  </Card>
+  <Card title="SECURITY BY CLAUDE ONLY">
+    <Lock size={16} style="display:inline;vertical-align:text-bottom;margin-right:6px;" />
+    Human-found bugs don't count. See <a href="https://github.com/dominic84p/vide-de/blob/main/SECURITY.md">SECURITY.md</a>.
+  </Card>
+</CardGrid>
 
 ## Features at a Glance
 

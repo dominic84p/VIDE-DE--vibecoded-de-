@@ -133,6 +133,11 @@ const pokedex = [
     display: flex;
     flex-direction: column;
     gap: 3rem;
+    min-width: 0;
+  }
+
+  .vibe-block {
+    min-width: 0;
   }
 
   .vibe-block-head {
@@ -151,11 +156,13 @@ const pokedex = [
 
   .vibe-contrib-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
     gap: 1rem;
   }
 
   .vibe-card {
+    min-width: 0;
+    overflow-wrap: anywhere;
     border: 1px solid var(--sl-color-hairline);
     background: var(--sl-color-bg-nav);
     border-radius: 0.625rem;
@@ -242,7 +249,7 @@ const pokedex = [
 
   .vibe-pokedex-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(220px, 100%), 1fr));
     gap: 0.85rem;
   }
 
@@ -254,6 +261,7 @@ const pokedex = [
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 0.5rem;
     margin-bottom: 0.45rem;
   }
 
@@ -271,6 +279,7 @@ const pokedex = [
     letter-spacing: 0.05em;
     padding: 0.12rem 0.5rem;
     border-radius: 9999px;
+    white-space: nowrap;
   }
 
   .vibe-trainer.tone-anthropic { background: rgba(217, 119, 6, 0.18); color: #fbbf24; }
@@ -292,5 +301,27 @@ const pokedex = [
     font-size: 0.78rem;
     font-family: var(--sl-font-mono);
     color: var(--sl-color-gray-3);
+  }
+
+  @media (max-width: 640px) {
+    .vibe-home-sections {
+      gap: 2rem;
+      margin-top: 2rem;
+    }
+
+    .vibe-contrib-grid,
+    .vibe-pokedex-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .vibe-card {
+      padding: 1rem;
+    }
+
+    .vibe-pfp,
+    .vibe-ai-badge {
+      width: 52px;
+      height: 52px;
+    }
   }
 </style>

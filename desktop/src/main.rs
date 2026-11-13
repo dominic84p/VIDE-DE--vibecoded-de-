@@ -117,7 +117,11 @@ fn main() {
         .expect("timer");
 
     while !desktop.exit {
-        event_loop.dispatch(Duration::from_millis(500), &mut desktop).expect("dispatch");
+        // The compositor going away (session end) shows up as a broken pipe: just exit.
+        if let Err(e) = event_loop.dispatch(Duration::from_millis(500), &mut desktop) {
+            eprintln!("vide-desktop: lost the compositor: {e}");
+            break;
+        }
         if desktop.dirty && desktop.configured {
             desktop.draw(&qh);
         }

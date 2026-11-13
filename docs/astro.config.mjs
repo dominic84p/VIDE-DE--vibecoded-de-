@@ -1,6 +1,7 @@
 // @ts-check
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
+import starlightThemeBlack from 'starlight-theme-black';
 
 // https://astro.build/config
 export default defineConfig({
@@ -105,7 +106,7 @@ export default defineConfig({
 					],
 				},
 			],
-			customCss: ['./src/styles/custom.css'],
+			plugins: [starlightThemeBlack({})],
 			head: [
 				{ tag: 'meta', attrs: { name: 'theme-color', content: '#0078d7' } },
 			],

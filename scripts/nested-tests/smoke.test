@@ -1,0 +1,6 @@
+# Does the harness work at all: a window opens and a screenshot lands in the output folder.
+run ./target/release/vide-about
+expect-window vide-about 20
+wait 3
+shot about
+windows

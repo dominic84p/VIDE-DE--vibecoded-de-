@@ -4,6 +4,8 @@
 //! - `snip`: start a region screenshot (Snip & Sketchy's "New")
 //! - `screenshot`: capture the whole screen
 //! - `copy-png <path>`: put a PNG on the clipboard
+//! - with `VIBE_TEST_INPUT=1` only: `pointer-move X Y`, `pointer-click [left|right|middle]`, `pointer-down`/`pointer-up`,
+//!   `key ctrl+shift+t`, `type text`, `pointer-pos`, and `screenshot /path.png` (for the nested test script)
 //! - `windows`: replies with one line per window, `id<TAB>pid<TAB>minimized<TAB>app_id<TAB>title`
 //!   (Task Mangler's "Apps" are the processes that own a window)
 //! - `focus-window <id>` / `close-window <id>`: Task Mangler's "Switch to" and polite End task
@@ -60,7 +62,24 @@ fn handle_client(state: &mut State, stream: UnixStream) {
     let (cmd, arg) = line.split_once(' ').unwrap_or((line, ""));
     match cmd {
         "snip" => state.start_screenshot(true),
-        "screenshot" => state.start_screenshot(false),
+        "screenshot" => {
+            // `screenshot /some/file.png` is for tests only.
+            if !arg.is_empty() {
+                if !state.test_control {
+                    return tracing::warn!("control socket: screenshot <path> needs VIBE_TEST_INPUT");
+                }
+                state.screenshot_path = Some(PathBuf::from(arg));
+            }
+            state.start_screenshot(false)
+        }
+        "pointer-move" | "pointer-click" | "pointer-down" | "pointer-up" | "key" | "type" | "pointer-pos" => {
+            if !state.test_control {
+                return tracing::warn!("control socket: {cmd} needs VIBE_TEST_INPUT");
+            }
+            if let Some(reply) = state.inject(cmd, arg) {
+                let _ = (&stream).write_all(reply.as_bytes());
+            }
+        }
         "screencast-start" => {
             state.screencast_clients += 1;
             state.needs_redraw = true;
@@ -99,5 +118,110 @@ fn handle_client(state: &mut State, stream: UnixStream) {
             }
         }
         other => tracing::warn!("control socket: unknown command {other:?}"),
+    }
+}
+
+/// Evdev key codes for the names tests use.
+fn evdev_key(name: &str) -> Option<u32> {
+    Some(match name {
+        "esc" | "escape" => 1,
+        "backspace" => 14,
+        "tab" => 15,
+        "enter" | "return" => 28,
+        "ctrl" => 29,
+        "shift" => 42,
+        "alt" => 56,
+        "space" => 57,
+        "super" | "win" => 125,
+        "up" => 103,
+        "left" => 105,
+        "right" => 106,
+        "down" => 108,
+        "-" | "minus" => 12,
+        "=" | "equal" => 13,
+        "," | "comma" => 51,
+        "." | "dot" => 52,
+        "/" | "slash" => 53,
+        "0" => 11,
+        d if d.len() == 1 && d.as_bytes()[0].is_ascii_digit() => 1 + (d.as_bytes()[0] - b'0') as u32,
+        c if c.len() == 1 && c.as_bytes()[0].is_ascii_lowercase() => {
+            // Letters follow the keyboard rows, not the alphabet.
+            const ROWS: [(&str, u32); 3] = [("qwertyuiop", 16), ("asdfghjkl", 30), ("zxcvbnm", 44)];
+            ROWS.iter().find_map(|(row, first)| row.find(c).map(|i| first + i as u32))?
+        }
+        _ => return None,
+    })
+}
+
+impl State {
+    fn now_ms(&self) -> u32 {
+        self.start_time.elapsed().as_millis() as u32
+    }
+
+    fn key_event(&mut self, evdev: u32, down: bool) {
+        use smithay::backend::input::KeyState;
+        let t = self.now_ms();
+        // xkb keycodes are evdev codes plus 8.
+        self.on_key(smithay::input::keyboard::Keycode::new(evdev + 8), if down { KeyState::Pressed } else { KeyState::Released }, t);
+    }
+
+    /// Input for tests, through the same handlers real devices use. Gated by `test_control`.
+    pub fn inject(&mut self, cmd: &str, arg: &str) -> Option<String> {
+        use smithay::backend::input::ButtonState;
+        let t = self.now_ms();
+        match cmd {
+            "pointer-pos" => return Some(format!("{} {}\n", self.pointer_loc.x.round(), self.pointer_loc.y.round())),
+            "pointer-move" => {
+                let mut it = arg.split_whitespace().filter_map(|v| v.parse::<f64>().ok());
+                if let (Some(x), Some(y)) = (it.next(), it.next()) {
+                    self.pointer_to((x, y).into(), t);
+                }
+            }
+            "pointer-click" | "pointer-down" | "pointer-up" => {
+                let button = match arg.split_whitespace().next() {
+                    Some("right") => 0x111,
+                    Some("middle") => 0x112,
+                    _ => 0x110,
+                };
+                if cmd != "pointer-up" {
+                    self.on_button(button, ButtonState::Pressed, t);
+                }
+                if cmd != "pointer-down" {
+                    self.on_button(button, ButtonState::Released, t + 1);
+                }
+            }
+            "key" => {
+                // `key ctrl+shift+t`: modifiers down, the key, then everything back up.
+                let parts: Vec<&str> = arg.split('+').collect();
+                let codes: Vec<u32> = parts.iter().filter_map(|p| evdev_key(p.trim())).collect();
+                if codes.len() == parts.len() {
+                    for c in &codes {
+                        self.key_event(*c, true);
+                    }
+                    for c in codes.iter().rev() {
+                        self.key_event(*c, false);
+                    }
+                } else {
+                    tracing::warn!("control socket: unknown key {arg:?}");
+                }
+            }
+            "type" => {
+                for ch in arg.chars() {
+                    let (shift, name) = if ch.is_ascii_uppercase() { (true, ch.to_ascii_lowercase().to_string()) } else if ch == ' ' { (false, "space".into()) } else { (false, ch.to_string()) };
+                    let Some(code) = evdev_key(&name) else { continue };
+                    if shift {
+                        self.key_event(42, true);
+                    }
+                    self.key_event(code, true);
+                    self.key_event(code, false);
+                    if shift {
+                        self.key_event(42, false);
+                    }
+                }
+            }
+            _ => {}
+        }
+        self.needs_redraw = true;
+        None
     }
 }

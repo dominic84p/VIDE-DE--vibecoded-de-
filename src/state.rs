@@ -232,6 +232,11 @@ pub struct State {
     pub supervisor: crate::supervisor::Supervisor,
     /// Settings changed the monitor mode or scale; the backend applies it when idle.
     pub display_dirty: bool,
+    /// `VIBE_TEST_INPUT=1`: the control socket may inject input and write screenshots to a path.
+    /// Off in a normal session, where a socket that can type for you shouldn't exist.
+    pub test_control: bool,
+    /// Where the next screenshot goes instead of ~/Pictures/Screenshots (test control only).
+    pub screenshot_path: Option<std::path::PathBuf>,
     /// Command to launch once the session is fully up (`VIBE_STARTUP`).
     pub startup: Option<String>,
     pub running: bool,
@@ -342,6 +347,8 @@ impl State {
             ipc_path: None,
             supervisor: Default::default(),
             display_dirty: false,
+            test_control: std::env::var_os("VIBE_TEST_INPUT").is_some(),
+            screenshot_path: None,
             startup: None,
             running: true,
             tty: false,

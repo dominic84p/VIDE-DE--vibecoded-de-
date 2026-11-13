@@ -345,7 +345,7 @@ impl State {
 
     // ------------------------------------------------------------ keyboard
 
-    fn on_key(&mut self, code: smithay::input::keyboard::Keycode, key_state: KeyState, time: u32) {
+    pub(crate) fn on_key(&mut self, code: smithay::input::keyboard::Keycode, key_state: KeyState, time: u32) {
         let serial = SERIAL_COUNTER.next_serial();
         let pressed = key_state == KeyState::Pressed;
         let super_mod = self.tty;
@@ -805,7 +805,7 @@ impl State {
         }
     }
 
-    fn pointer_to(&mut self, pos: Point<f64, Logical>, time: u32) {
+    pub(crate) fn pointer_to(&mut self, pos: Point<f64, Logical>, time: u32) {
         self.pointer_loc = pos;
         self.needs_redraw = true;
 
@@ -908,7 +908,7 @@ impl State {
         ptr.frame(self);
     }
 
-    fn on_button(&mut self, button: u32, state: ButtonState, time: u32) {
+    pub(crate) fn on_button(&mut self, button: u32, state: ButtonState, time: u32) {
         let serial = SERIAL_COUNTER.next_serial();
         let forward = |s: &mut Self| {
             let ptr = s.pointer.clone();

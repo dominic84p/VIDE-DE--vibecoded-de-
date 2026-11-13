@@ -175,6 +175,20 @@ fn save(state: &mut State, w: u32, h: u32, rgba: Vec<u8>) -> Option<PathBuf> {
         }
     }
 
+    // A test asked for a specific file: write only that, and leave the clipboard alone.
+    if let Some(path) = state.screenshot_path.take() {
+        return match std::fs::write(&path, &png_bytes) {
+            Ok(()) => {
+                tracing::info!("screenshot saved to {}", path.display());
+                Some(path)
+            }
+            Err(e) => {
+                tracing::warn!("couldn't save screenshot to {}: {e}", path.display());
+                None
+            }
+        };
+    }
+
     let dir = std::env::var("HOME").map(PathBuf::from).unwrap_or_default().join("Pictures/Screenshots");
     let path = dir.join(chrono::Local::now().format("Screenshot_%Y-%m-%d_%H-%M-%S.png").to_string());
     let res = std::fs::create_dir_all(&dir).and_then(|_| std::fs::File::create(&path)?.write_all(&png_bytes));

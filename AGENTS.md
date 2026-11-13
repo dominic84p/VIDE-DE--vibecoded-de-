@@ -62,6 +62,14 @@ the WM in `src/wm.rs` is deliberately our own.
 
 ## Testing
 
+- **Use `scripts/nested-test.sh` for anything that opens the compositor.** It runs `vibe-comp --nested`
+  isolated from the human's session (own runtime dir, D-Bus and config, own process group, a check
+  that the document portal mount survived) and drives it with a small test file: `run` an app,
+  `click X Y`, `key ctrl+l`, `type text`, `shot NAME`. See the header of the script, and
+  `scripts/nested-tests/` for examples. Injection works through the control socket, which only
+  accepts it when the compositor was started with `VIBE_TEST_INPUT=1` (the script sets it); a normal
+  session never exposes input injection. The rules below are why the script exists; if you must
+  run the compositor by hand, follow them.
 - Build both configs: `cargo build --release` and `cargo build --release --features tty`.
 - Test nested from inside a desktop. It keeps running until you stop it, so
   wrap it in `timeout`:

@@ -1,0 +1,8 @@
+# Click injection works: pressing the Start button opens the menu, typing searches it.
+wait 4
+click 24 780
+wait 1
+shot start-open
+type about
+wait 1
+shot start-search

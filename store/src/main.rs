@@ -494,124 +494,141 @@ impl StoreApp {
             });
     }
 
-    /// Windows 10 Store Home: Mosaic Hero Spotlight + Top Free Apps horizontal/grid tiles.
+    /// Windows 10 Store Home: Mosaic Hero Spotlight + Top Free Apps vertical product tiles.
     fn render_home_view(&mut self, ui: &mut egui::Ui) {
-        let avail = (ui.available_width() - 12.0).max(200.0);
+        let avail = ui.available_width().max(200.0);
         let catalog = featured_catalog(&self.backends, &self.sets);
 
         // Windows 10 Store Spotlight Mosaic
-        if avail > 640.0 {
-            let left_w = avail * 0.60;
-            let right_w = avail - left_w - 8.0;
+        if avail > 620.0 {
+            let gap = 8.0;
+            let left_w = ((avail - gap) * 0.62).floor();
+            let right_w = (avail - gap - left_w).max(200.0);
+            let mosaic_h = 220.0;
+            let tile_h = (mosaic_h - gap) * 0.5;
+
             ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = gap;
+
                 // Big featured hero tile
                 let hero_item = catalog.first().cloned();
-                let resp = egui::Frame::new()
-                    .fill(WIN10_BLUE_DARK)
-                    .corner_radius(CornerRadius::same(2))
-                    .inner_margin(Margin::same(24))
-                    .show(ui, |ui| {
-                        ui.set_width((left_w - 48.0).max(200.0));
-                        ui.set_min_height(186.0);
-                        ui.horizontal(|ui| {
-                            ui.vertical(|ui| {
-                                ui.set_max_width((left_w - 150.0).max(160.0));
-                                ui.label(
-                                    RichText::new("FEATURED ON WINDOW SHOPPING")
-                                        .font(FontId::proportional(10.5))
-                                        .strong()
-                                        .color(Color32::from_rgb(0xb4, 0xd9, 0xff)),
-                                );
-                                ui.add_space(6.0);
-                                ui.label(
-                                    RichText::new("Get essential apps & games")
-                                        .font(FontId::proportional(24.0))
-                                        .strong()
-                                        .color(Color32::WHITE),
-                                );
-                                ui.add_space(6.0);
-                                ui.label(
-                                    RichText::new(format!(
-                                        "Powered by {} — search, install, and update in one place.",
-                                        self.backends.summary()
-                                    ))
-                                    .font(FontId::proportional(13.0))
-                                    .color(Color32::from_rgb(0xe3, 0xf2, 0xfd)),
-                                );
-                                ui.add_space(16.0);
+                ui.allocate_ui_with_layout(
+                    egui::vec2(left_w, mosaic_h),
+                    egui::Layout::top_down(egui::Align::Min),
+                    |ui| {
+                        egui::Frame::new()
+                            .fill(WIN10_BLUE_DARK)
+                            .corner_radius(CornerRadius::same(2))
+                            .inner_margin(Margin::same(22))
+                            .show(ui, |ui| {
+                                ui.set_width((left_w - 44.0).max(200.0));
+                                ui.set_height((mosaic_h - 44.0).max(120.0));
                                 ui.horizontal(|ui| {
-                                    if ui
-                                        .add(
-                                            egui::Button::new(
-                                                RichText::new(if self.updates.is_empty() {
-                                                    "Explore Apps"
-                                                } else {
-                                                    "Get Updates"
-                                                })
-                                                .color(Color32::WHITE)
-                                                .strong(),
-                                            )
-                                            .fill(WIN10_BLUE)
-                                            .corner_radius(CornerRadius::same(2)),
-                                        )
-                                        .clicked()
-                                    {
-                                        self.tab = if self.updates.is_empty() {
-                                            NavTab::Apps
-                                        } else {
-                                            NavTab::Updates
-                                        };
-                                    }
-                                    if !self.updates.is_empty() {
-                                        ui.label(
-                                            RichText::new(format!(
-                                                "{} updates ready",
-                                                self.updates.len()
-                                            ))
-                                            .font(FontId::proportional(12.5))
-                                            .color(Color32::from_rgb(0xc8, 0xe4, 0xff)),
+                                    let text_w = (left_w - 156.0).max(160.0);
+                                    ui.allocate_ui_with_layout(
+                                        egui::vec2(text_w, mosaic_h - 44.0),
+                                        egui::Layout::top_down(egui::Align::Min),
+                                        |ui| {
+                                            ui.label(
+                                                RichText::new("FEATURED ON WINDOW SHOPPING")
+                                                    .font(FontId::proportional(10.5))
+                                                    .strong()
+                                                    .color(Color32::from_rgb(0xb4, 0xd9, 0xff)),
+                                            );
+                                            ui.add_space(6.0);
+                                            ui.label(
+                                                RichText::new("Get essential apps & games")
+                                                    .font(FontId::proportional(22.0))
+                                                    .strong()
+                                                    .color(Color32::WHITE),
+                                            );
+                                            ui.add_space(6.0);
+                                            ui.label(
+                                                RichText::new(format!(
+                                                    "Powered by {} — search, install, and update in one place.",
+                                                    self.backends.summary()
+                                                ))
+                                                .font(FontId::proportional(12.5))
+                                                .color(Color32::from_rgb(0xe3, 0xf2, 0xfd)),
+                                            );
+                                            ui.add_space(14.0);
+                                            ui.horizontal(|ui| {
+                                                if ui
+                                                    .add(
+                                                        egui::Button::new(
+                                                            RichText::new(if self.updates.is_empty() {
+                                                                "Explore Apps"
+                                                            } else {
+                                                                "Get Updates"
+                                                            })
+                                                            .color(Color32::WHITE)
+                                                            .strong(),
+                                                        )
+                                                        .fill(WIN10_BLUE)
+                                                        .corner_radius(CornerRadius::same(2)),
+                                                    )
+                                                    .clicked()
+                                                {
+                                                    self.tab = if self.updates.is_empty() {
+                                                        NavTab::Apps
+                                                    } else {
+                                                        NavTab::Updates
+                                                    };
+                                                }
+                                                if !self.updates.is_empty() {
+                                                    ui.label(
+                                                        RichText::new(format!(
+                                                            "{} updates ready",
+                                                            self.updates.len()
+                                                        ))
+                                                        .font(FontId::proportional(12.0))
+                                                        .color(Color32::from_rgb(0xc8, 0xe4, 0xff)),
+                                                    );
+                                                }
+                                            });
+                                        },
+                                    );
+                                    if let Some(h) = &hero_item {
+                                        ui.with_layout(
+                                            egui::Layout::right_to_left(egui::Align::Center),
+                                            |ui| {
+                                                self.draw_app_icon(ui, h, 80.0);
+                                            },
                                         );
                                     }
                                 });
                             });
-                            if let Some(h) = &hero_item {
-                                ui.with_layout(
-                                    egui::Layout::right_to_left(egui::Align::Center),
-                                    |ui| {
-                                        self.draw_app_icon(ui, h, 84.0);
-                                    },
-                                );
-                            }
-                        });
-                    })
-                    .response;
-                let _ = resp;
+                    },
+                );
 
-                // Right column: 2 stacked Win10 promo tiles (Gaming + Creative)
-                ui.vertical(|ui| {
-                    let tile_h = 87.0;
-                    self.render_promo_tile(
-                        ui,
-                        right_w,
-                        tile_h,
-                        Color32::from_rgb(0x1b, 0x28, 0x38),
-                        "PC Gaming",
-                        "Steam, Prism Launcher & Lutris",
-                        catalog.iter().find(|a| a.category == "Gaming"),
-                        NavTab::Gaming,
-                    );
-                    ui.add_space(4.0);
-                    self.render_promo_tile(
-                        ui,
-                        right_w,
-                        tile_h,
-                        Color32::from_rgb(0x5c, 0x2d, 0x91),
-                        "Your Library",
-                        &format!("{} installed apps & packages", self.installed.len()),
-                        catalog.get(1),
-                        NavTab::Library,
-                    );
-                });
+                // Right column: 2 stacked Win10 promo tiles (Gaming + Library)
+                ui.allocate_ui_with_layout(
+                    egui::vec2(right_w, mosaic_h),
+                    egui::Layout::top_down(egui::Align::Min),
+                    |ui| {
+                        ui.spacing_mut().item_spacing.y = gap;
+                        self.render_promo_tile(
+                            ui,
+                            right_w,
+                            tile_h,
+                            Color32::from_rgb(0x1b, 0x28, 0x38),
+                            "PC Gaming",
+                            "Steam, Prism Launcher & Lutris",
+                            catalog.iter().find(|a| a.category == "Gaming"),
+                            NavTab::Gaming,
+                        );
+                        self.render_promo_tile(
+                            ui,
+                            right_w,
+                            tile_h,
+                            Color32::from_rgb(0x5c, 0x2d, 0x91),
+                            "Your Library",
+                            &format!("{} installed apps & packages", self.installed.len()),
+                            catalog.get(1),
+                            NavTab::Library,
+                        );
+                    },
+                );
             });
         } else {
             // Compact hero for narrow windows
@@ -672,35 +689,50 @@ impl StoreApp {
         icon_item: Option<&AppItem>,
         target_tab: NavTab,
     ) {
-        let resp = egui::Frame::new()
-            .fill(bg)
-            .corner_radius(CornerRadius::same(2))
-            .inner_margin(Margin::same(14))
-            .show(ui, |ui| {
-                ui.set_width((width - 28.0).max(140.0));
-                ui.set_min_height(height);
-                ui.horizontal(|ui| {
-                    ui.vertical(|ui| {
-                        ui.label(
-                            RichText::new(title)
-                                .font(FontId::proportional(16.0))
-                                .strong()
-                                .color(Color32::WHITE),
-                        );
-                        ui.add_space(2.0);
-                        ui.label(
-                            RichText::new(subtitle)
-                                .font(FontId::proportional(12.0))
-                                .color(Color32::from_rgb(0xe0, 0xe0, 0xe0)),
-                        );
-                    });
-                    if let Some(item) = icon_item {
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            self.draw_app_icon(ui, item, 46.0);
+        let resp = ui
+            .allocate_ui_with_layout(
+                egui::vec2(width, height),
+                egui::Layout::top_down(egui::Align::Min),
+                |ui| {
+                    egui::Frame::new()
+                        .fill(bg)
+                        .corner_radius(CornerRadius::same(2))
+                        .inner_margin(Margin::same(14))
+                        .show(ui, |ui| {
+                            ui.set_width((width - 28.0).max(120.0));
+                            ui.set_height((height - 28.0).max(60.0));
+                            ui.horizontal(|ui| {
+                                let text_w = (width - 96.0).max(100.0);
+                                ui.allocate_ui_with_layout(
+                                    egui::vec2(text_w, height - 28.0),
+                                    egui::Layout::top_down(egui::Align::Min),
+                                    |ui| {
+                                        ui.label(
+                                            RichText::new(title)
+                                                .font(FontId::proportional(15.5))
+                                                .strong()
+                                                .color(Color32::WHITE),
+                                        );
+                                        ui.add_space(3.0);
+                                        ui.label(
+                                            RichText::new(subtitle)
+                                                .font(FontId::proportional(12.0))
+                                                .color(Color32::from_rgb(0xe0, 0xe0, 0xe0)),
+                                        );
+                                    },
+                                );
+                                if let Some(item) = icon_item {
+                                    ui.with_layout(
+                                        egui::Layout::right_to_left(egui::Align::Center),
+                                        |ui| {
+                                            self.draw_app_icon(ui, item, 46.0);
+                                        },
+                                    );
+                                }
+                            });
                         });
-                    }
-                });
-            })
+                },
+            )
             .response
             .interact(egui::Sense::click());
         if resp.clicked() {
@@ -932,25 +964,30 @@ impl StoreApp {
 
     /// Windows 10 Store rectangular vertical product tiles (icon stage top, title/stars/Free-or-Installed bottom).
     fn render_win10_tile_grid(&mut self, ui: &mut egui::Ui, items: &[AppItem]) {
-        let avail = (ui.available_width() - 12.0).max(170.0);
-        let cols = ((avail / 182.0).floor() as usize).clamp(1, 6);
+        let avail = ui.available_width().max(170.0);
         let gap = 10.0;
-        let tile_outer_w = (avail - (cols as f32 - 1.0) * gap) / cols as f32;
+        let cols = (((avail + gap) / (168.0 + gap)).floor() as usize).clamp(1, 6);
+        let tile_outer_w = ((avail - (cols as f32 - 1.0) * gap) / cols as f32).floor();
+        let tile_h = 224.0;
 
         for row in items.chunks(cols) {
             ui.horizontal(|ui| {
-                for (idx, item) in row.iter().enumerate() {
-                    if idx > 0 {
-                        ui.add_space(gap - 8.0);
-                    }
-                    self.render_win10_product_tile(ui, item, tile_outer_w);
+                ui.spacing_mut().item_spacing.x = gap;
+                for item in row {
+                    self.render_win10_product_tile(ui, item, tile_outer_w, tile_h);
                 }
             });
-            ui.add_space(6.0);
+            ui.add_space(gap);
         }
     }
 
-    fn render_win10_product_tile(&mut self, ui: &mut egui::Ui, item: &AppItem, outer_width: f32) {
+    fn render_win10_product_tile(
+        &mut self,
+        ui: &mut egui::Ui,
+        item: &AppItem,
+        outer_width: f32,
+        outer_height: f32,
+    ) {
         let card_id = ui.make_persistent_id(("win10_tile", item.source, &item.id));
         let hovered = ui
             .ctx()
@@ -967,79 +1004,108 @@ impl StoreApp {
             Stroke::new(1.0, WIN10_BORDER)
         };
 
-        let inner_w = (outer_width - 2.0).max(130.0);
-        let resp = egui::Frame::new()
-            .fill(fill)
-            .stroke(stroke)
-            .corner_radius(CornerRadius::same(2))
-            .inner_margin(Margin::ZERO)
-            .show(ui, |ui| {
-                ui.set_width(inner_w);
-                // Top icon stage (Windows 10 Store square-ish art box)
-                egui::Frame::new()
-                    .fill(WIN10_TILE_STAGE)
-                    .inner_margin(Margin::symmetric(0, 18))
-                    .show(ui, |ui| {
-                        ui.set_width(inner_w);
-                        ui.vertical_centered(|ui| {
-                            self.draw_app_icon(ui, item, 64.0);
-                        });
-                    });
+        let inner_w = (outer_width - 2.0).max(120.0);
+        let stage_h = 116.0;
+        let meta_h = (outer_height - stage_h - 2.0).max(96.0);
+        let meta_inner_w = (inner_w - 20.0).max(96.0);
 
-                // Bottom metadata block
-                egui::Frame::new()
-                    .inner_margin(Margin::same(10))
-                    .show(ui, |ui| {
-                        ui.set_width((inner_w - 20.0).max(100.0));
-                        ui.set_min_height(78.0);
-                        ui.label(
-                            RichText::new(truncate(&item.name, 19))
-                                .font(FontId::proportional(13.5))
-                                .strong()
-                                .color(WIN10_TEXT),
-                        );
-                        ui.add_space(2.0);
-                        ui.label(
-                            RichText::new(format!("★★★★☆  {}", item.rating))
-                                .font(FontId::proportional(11.0))
-                                .color(WIN10_GOLD),
-                        );
-                        ui.add_space(10.0);
-                        ui.horizontal(|ui| {
-                            if item.has_update() {
-                                ui.label(
-                                    RichText::new("Update")
-                                        .font(FontId::proportional(12.0))
-                                        .strong()
-                                        .color(WIN10_BLUE),
-                                );
-                            } else if item.installed {
-                                ui.label(
-                                    RichText::new("Installed")
-                                        .font(FontId::proportional(12.0))
-                                        .strong()
-                                        .color(WIN10_GREEN),
-                                );
-                            } else {
-                                ui.label(
-                                    RichText::new("Free")
-                                        .font(FontId::proportional(12.0))
-                                        .color(WIN10_TEXT),
-                                );
-                            }
-                            ui.with_layout(
-                                egui::Layout::right_to_left(egui::Align::Center),
-                                |ui| {
-                                    ui.label(
-                                        RichText::new(item.source.label())
-                                            .font(FontId::proportional(10.5))
-                                            .color(WIN10_MUTED),
+        let resp = ui
+            .allocate_ui_with_layout(
+                egui::vec2(outer_width, outer_height),
+                egui::Layout::top_down(egui::Align::Min),
+                |ui| {
+                    egui::Frame::new()
+                        .fill(fill)
+                        .stroke(stroke)
+                        .corner_radius(CornerRadius::same(2))
+                        .inner_margin(Margin::ZERO)
+                        .show(ui, |ui| {
+                            ui.set_width(inner_w);
+                            ui.set_height(outer_height - 2.0);
+                            ui.spacing_mut().item_spacing.y = 0.0;
+
+                            // Top icon stage (fixed-height Windows 10 Store art box)
+                            egui::Frame::new()
+                                .fill(WIN10_TILE_STAGE)
+                                .inner_margin(Margin::ZERO)
+                                .show(ui, |ui| {
+                                    ui.allocate_ui_with_layout(
+                                        egui::vec2(inner_w, stage_h),
+                                        egui::Layout::centered_and_justified(
+                                            egui::Direction::TopDown,
+                                        ),
+                                        |ui| {
+                                            self.draw_app_icon(ui, item, 60.0);
+                                        },
                                     );
-                                },
-                            );
+                                });
+
+                            // Bottom metadata block (vertical, fixed height)
+                            egui::Frame::new()
+                                .inner_margin(Margin::same(10))
+                                .show(ui, |ui| {
+                                    ui.allocate_ui_with_layout(
+                                        egui::vec2(meta_inner_w, (meta_h - 20.0).max(76.0)),
+                                        egui::Layout::top_down(egui::Align::Min),
+                                        |ui| {
+                                            ui.spacing_mut().item_spacing.y = 3.0;
+                                            ui.label(
+                                                RichText::new(truncate(&item.name, 18))
+                                                    .font(FontId::proportional(13.5))
+                                                    .strong()
+                                                    .color(WIN10_TEXT),
+                                            );
+                                            ui.label(
+                                                RichText::new(format!("★★★★☆  {}", item.rating))
+                                                    .font(FontId::proportional(11.0))
+                                                    .color(WIN10_GOLD),
+                                            );
+                                            ui.add_space(16.0);
+                                            ui.allocate_ui_with_layout(
+                                                egui::vec2(meta_inner_w, 18.0),
+                                                egui::Layout::left_to_right(egui::Align::Center),
+                                                |ui| {
+                                                    if item.has_update() {
+                                                        ui.label(
+                                                            RichText::new("Update")
+                                                                .font(FontId::proportional(12.0))
+                                                                .strong()
+                                                                .color(WIN10_BLUE),
+                                                        );
+                                                    } else if item.installed {
+                                                        ui.label(
+                                                            RichText::new("Installed")
+                                                                .font(FontId::proportional(12.0))
+                                                                .strong()
+                                                                .color(WIN10_GREEN),
+                                                        );
+                                                    } else {
+                                                        ui.label(
+                                                            RichText::new("Free")
+                                                                .font(FontId::proportional(12.0))
+                                                                .color(WIN10_TEXT),
+                                                        );
+                                                    }
+                                                    ui.with_layout(
+                                                        egui::Layout::right_to_left(
+                                                            egui::Align::Center,
+                                                        ),
+                                                        |ui| {
+                                                            ui.label(
+                                                                RichText::new(item.source.label())
+                                                                    .font(FontId::proportional(10.5))
+                                                                    .color(WIN10_MUTED),
+                                                            );
+                                                        },
+                                                    );
+                                                },
+                                            );
+                                        },
+                                    );
+                                });
                         });
-                    });
-            })
+                },
+            )
             .response
             .interact(egui::Sense::click());
 

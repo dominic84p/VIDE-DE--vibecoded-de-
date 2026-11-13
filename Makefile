@@ -3,7 +3,7 @@ DESTDIR ?=
 CARGO ?= cargo
 TARGET = target/release
 
-BINS = vibe-comp vide-desktop powerslop file-exploder task-mangler vide-settings vide-about snip-and-sketchy
+BINS = vibe-comp vide-desktop powerslop file-exploder task-mangler vide-settings vide-about snip-and-sketchy window-shopping
 
 .PHONY: all build install uninstall clean
 

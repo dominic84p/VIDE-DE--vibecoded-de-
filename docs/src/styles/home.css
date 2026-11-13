@@ -1,0 +1,83 @@
+/* VIDE-DE docs home page styles.
+   Imported only by src/content/docs/index.mdx, so nothing here affects other pages.
+   Uses Starlight / theme tokens so it follows the light and dark toggle. */
+
+/* ---------- Hero ---------- */
+.hero {
+  padding-block: 1rem 0.5rem;
+}
+
+.hero .hero-image img {
+  width: min(70%, 15rem);
+  height: auto;
+  margin-inline: auto;
+}
+
+.hero .tagline {
+  max-width: 40rem;
+}
+
+.hero .tagline strong {
+  color: var(--sl-color-text-accent);
+}
+
+/* ---------- Facts strip (under hero) ---------- */
+.vide-facts {
+  list-style: none;
+  margin: 1.5rem 0 0 !important;
+  padding: 0 !important;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.vide-facts li {
+  margin: 0 !important;
+  padding: 0.85rem 0.5rem;
+  text-align: center;
+  border: 1px solid var(--sl-color-hairline);
+  border-radius: 0.625rem;
+  background: var(--sl-color-bg-nav);
+  min-width: 0;
+}
+
+.vide-facts strong {
+  display: block;
+  font-size: 1.5rem;
+  line-height: 1.1;
+  color: var(--sl-color-text-accent);
+}
+
+.vide-facts span {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.78rem;
+  color: var(--sl-color-gray-3);
+}
+
+/* ---------- Feature groups ---------- */
+.vide-group-intro {
+  margin: -0.25rem 0 0.9rem !important;
+  color: var(--sl-color-gray-3);
+  font-size: 0.92rem;
+}
+
+.vide-group-label {
+  display: inline-block;
+  margin-right: 0.5rem;
+  padding: 0.1rem 0.55rem;
+  border-radius: 9999px;
+  border: 1px solid var(--sl-color-hairline);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  vertical-align: middle;
+  color: var(--sl-color-text-accent);
+}
+
+@media (max-width: 640px) {
+  .vide-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

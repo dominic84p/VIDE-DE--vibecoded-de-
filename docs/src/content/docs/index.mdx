@@ -4,14 +4,17 @@ description: 'A Wayland desktop environment with its own compositor, written in 
 template: splash
 hero:
   title: VIDE-DE
-  tagline: A Wayland compositor + desktop shell built on <strong>Smithay 0.7</strong>, written entirely in Rust through AI-assisted "vibecoding". No human-written code accepted.
+  tagline: A Windows 10-style desktop for Linux. Its own Wayland compositor and shell, built on <strong>Smithay 0.7</strong> and written entirely in Rust through AI-assisted "vibecoding". No human-written code accepted.
   image:
     file: ../../../public/logo.png
   actions:
     - text: Get Started
-      link: /vide-de/overview/
+      link: /vide-de/getting-started/installation/
       variant: primary
       icon: right-arrow
+    - text: Overview
+      link: /vide-de/overview/
+      variant: secondary
     - text: GitHub Repository
       link: https://github.com/dominic84p/vide-de
       variant: secondary
@@ -19,6 +22,7 @@ hero:
 ---
 
 import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+import '../../styles/home.css';
 import HomeSections from '../../components/HomeSections.astro';
 import {
   Bot,
@@ -39,6 +43,13 @@ import {
   Sliders,
   TestTube2,
 } from '@lucide/astro';
+
+<ul class="vide-facts">
+  <li><strong>10</strong><span>virtual desktops</span></li>
+  <li><strong>6</strong><span>built-in apps</span></li>
+  <li><strong>2</strong><span>backends: nested &amp; TTY</span></li>
+  <li><strong>100%</strong><span>AI-written code</span></li>
+</ul>
 
 ## AI-Only Project
 
@@ -69,14 +80,14 @@ This project follows strict contribution rules — see [Contributing Rules](/vid
 
 ## Features at a Glance
 
+### Core
+
+<p class="vide-group-intro">The compositor, rendering pipeline and display modes.</p>
+
 <CardGrid>
   <Card title="Dual Backend Architecture">
     <Monitor size={18} style="display:inline;vertical-align:text-bottom;margin-right:6px;" />
     Runs nested (via <code>winit</code>) or on real hardware (TTY / DRM / KMS / libseat), sharing one rendering pipeline.
-  </Card>
-  <Card title="Windows 10-Style Desktop">
-    <AppWindow size={18} style="display:inline;vertical-align:text-bottom;margin-right:6px;" />
-    Taskbar, Start menu with search, Action Center &amp; system tray, 10 virtual desktops, Task View, and edge/corner snapping.
   </Card>
   <Card title="CPU-Painted UI">
     <Cpu size={18} style="display:inline;vertical-align:text-bottom;margin-right:6px;" />
@@ -86,6 +97,25 @@ This project follows strict contribution rules — see [Contributing Rules](/vid
     <Gamepad2 size={18} style="display:inline;vertical-align:text-bottom;margin-right:6px;" />
     Full GPU acceleration via <code>linux-dmabuf</code> with explicit sync, relative pointer + pointer constraints, and optional direct scanout.
   </Card>
+  <Card title="Live TTY Modes & Controls">
+    <Sliders size={18} style="display:inline;vertical-align:text-bottom;margin-right:6px;" />
+    Live <code>display_mode</code> and <code>display_scale</code> switching in TTY mode, plus Touchpad, multi-layout XKB Keyboard, 24h clock, and toasts.
+  </Card>
+</CardGrid>
+
+### Desktop &amp; Apps
+
+<p class="vide-group-intro">What you see and use day to day.</p>
+
+<CardGrid>
+  <Card title="Windows 10-Style Desktop">
+    <AppWindow size={18} style="display:inline;vertical-align:text-bottom;margin-right:6px;" />
+    Taskbar, Start menu with search, Action Center &amp; system tray, 10 virtual desktops, Task View, and edge/corner snapping.
+  </Card>
+  <Card title="Layer Shell Desktop">
+    <Layers size={18} style="display:inline;vertical-align:text-bottom;margin-right:6px;" />
+    Separate <code>vide-desktop</code> process on <code>wlr-layer-shell</code>: 6 wallpapers, <code>~/Desktop</code> icons, Recycle Bin, and context menu.
+  </Card>
   <Card title="Six Built-in Apps">
     <Box size={18} style="display:inline;vertical-align:text-bottom;margin-right:6px;" />
     Settings, PowerSlop, File Exploder, Task Mangler, Snip &amp; Sketchy, and About VIDE-DE — all registered as <code>.desktop</code> entries.
@@ -94,10 +124,17 @@ This project follows strict contribution rules — see [Contributing Rules](/vid
     <Radio size={18} style="display:inline;vertical-align:text-bottom;margin-right:6px;" />
     App tray icons via D-Bus (SNI watcher + host), plus built-in PipeWire volume and brightness flyouts.
   </Card>
-  <Card title="Layer Shell Desktop">
-    <Layers size={18} style="display:inline;vertical-align:text-bottom;margin-right:6px;" />
-    Separate <code>vide-desktop</code> process on <code>wlr-layer-shell</code>: 6 wallpapers, <code>~/Desktop</code> icons, Recycle Bin, and context menu.
+  <Card title="Privacy & App Permissions">
+    <ShieldCheck size={18} style="display:inline;vertical-align:text-bottom;margin-right:6px;" />
+    Settings <strong>Privacy</strong> page backed by the portal permission store for camera, mic, notifications, location, and screen-sharing revokes.
   </Card>
+</CardGrid>
+
+### Developer Tools
+
+<p class="vide-group-intro">Scripting, diagnostics and safe testing.</p>
+
+<CardGrid>
   <Card title="Control Socket & IPC">
     <Terminal size={18} style="display:inline;vertical-align:text-bottom;margin-right:6px;" />
     Plain-text Unix socket (<code>$VIDE_IPC</code>) for screenshots, snipping, clipboard PNGs, window control, and gated test input.
@@ -105,14 +142,6 @@ This project follows strict contribution rules — see [Contributing Rules](/vid
   <Card title="Health & Freeze Diagnostics">
     <HeartPulse size={18} style="display:inline;vertical-align:text-bottom;margin-right:6px;" />
     5s <code>xdg</code> client ping watchdog (<code>(Not responding)</code> titlebars), 3s main-loop &amp; 1.5s TTY page-flip watchdogs, and protocol error logging.
-  </Card>
-  <Card title="Privacy & App Permissions">
-    <ShieldCheck size={18} style="display:inline;vertical-align:text-bottom;margin-right:6px;" />
-    Settings <strong>Privacy</strong> page backed by the portal permission store for camera, mic, notifications, location, and screen-sharing revokes.
-  </Card>
-  <Card title="Live TTY Modes & Controls">
-    <Sliders size={18} style="display:inline;vertical-align:text-bottom;margin-right:6px;" />
-    Live <code>display_mode</code> and <code>display_scale</code> switching in TTY mode, plus Touchpad, multi-layout XKB Keyboard, 24h clock, and toasts.
   </Card>
   <Card title="Safe Nested Testing & Popups">
     <TestTube2 size={18} style="display:inline;vertical-align:text-bottom;margin-right:6px;" />

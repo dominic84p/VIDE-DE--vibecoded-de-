@@ -73,6 +73,7 @@ const pokedex = [
       <p>Humans who directed, AI models that wrote every line of code</p>
     </div>
 
+    <h3 class="vibe-subhead">Humans <span class="vibe-count">{humanContributors.length}</span></h3>
     <div class="vibe-contrib-grid">
       {humanContributors.map((c) => (
         <a href={c.url} class="vibe-card vibe-contrib-card" target="_blank" rel="noopener">
@@ -86,7 +87,10 @@ const pokedex = [
           </span>
         </a>
       ))}
+    </div>
 
+    <h3 class="vibe-subhead">AI models <span class="vibe-count">{aiLeads.length}</span></h3>
+    <div class="vibe-contrib-grid">
       {aiLeads.map((m) => (
         <a href={m.url} class="vibe-card vibe-contrib-card" target="_blank" rel="noopener">
           <div class={`vibe-ai-badge tone-${m.tone}`}>
@@ -112,6 +116,7 @@ const pokedex = [
       <p>Every AI agent that has helped build VIDE-DE, in the order we caught them. Rule 2 still applies: under 20B parameters can't be caught.</p>
     </div>
 
+    <h3 class="vibe-subhead">Caught <span class="vibe-count">{pokedex.length}</span></h3>
     <div class="vibe-pokedex-grid">
       {pokedex.map((entry) => (
         <div class={`vibe-card vibe-pokedex-card tone-${entry.tone}`}>
@@ -129,7 +134,7 @@ const pokedex = [
 
 <style>
   .vibe-home-sections {
-    margin-top: 2.5rem;
+    margin-top: 3rem;
     display: flex;
     flex-direction: column;
     gap: 3rem;
@@ -141,7 +146,7 @@ const pokedex = [
   }
 
   .vibe-block-head {
-    margin-bottom: 1.25rem;
+    margin-bottom: 0.5rem;
   }
 
   .vibe-block-head h2 {
@@ -154,9 +159,30 @@ const pokedex = [
     font-size: 0.95rem;
   }
 
+  .vibe-subhead {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 1.5rem 0 0.75rem !important;
+    font-size: 0.8rem !important;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--sl-color-gray-3);
+  }
+
+  .vibe-count {
+    font-family: var(--sl-font-mono);
+    font-size: 0.72rem;
+    padding: 0.05rem 0.5rem;
+    border-radius: 9999px;
+    border: 1px solid var(--sl-color-hairline);
+    letter-spacing: 0;
+  }
+
   .vibe-contrib-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(230px, 100%), 1fr));
     gap: 1rem;
   }
 
@@ -172,8 +198,9 @@ const pokedex = [
     transition: border-color 0.15s ease, transform 0.15s ease;
   }
 
-  .vibe-card:hover {
-    border-color: var(--sl-color-gray-4);
+  a.vibe-card:hover,
+  a.vibe-card:focus-visible {
+    border-color: var(--sl-color-text-accent);
     transform: translateY(-2px);
   }
 
@@ -249,13 +276,18 @@ const pokedex = [
 
   .vibe-pokedex-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(min(220px, 100%), 1fr));
-    gap: 0.85rem;
+    grid-template-columns: repeat(auto-fill, minmax(min(210px, 100%), 1fr));
+    gap: 0.75rem;
   }
 
   .vibe-pokedex-card {
-    padding: 1rem 1.1rem;
+    padding: 0.9rem 1rem;
+    border-left-width: 3px;
   }
+
+  .vibe-pokedex-card.tone-anthropic { border-left-color: #d97706; }
+  .vibe-pokedex-card.tone-google { border-left-color: #4285f4; }
+  .vibe-pokedex-card.tone-nvidia { border-left-color: #76b900; }
 
   .vibe-pokedex-top {
     display: flex;
@@ -323,31 +355,5 @@ const pokedex = [
       width: 52px;
       height: 52px;
     }
-  }
-</style>
-
-<style is:global>
-  .hero {
-    flex-direction: column !important;
-    align-items: center !important;
-  }
-
-  .hero-image {
-    order: -1 !important;
-    display: flex;
-    justify-content: center;
-  }
-
-  .hero-image img {
-    width: 80% !important;
-    max-width: 320px !important;
-    height: auto !important;
-  }
-
-  .hero-info,
-  .hero-title-container,
-  .hero-content-container {
-    align-items: center !important;
-    text-align: center !important;
   }
 </style>

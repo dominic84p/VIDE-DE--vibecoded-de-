@@ -16,6 +16,8 @@ export ELECTRON_OZONE_PLATFORM_HINT="wayland"
 export PATH="$HOME/.local/bin:$PATH:/usr/local/bin:/usr/bin"
 
 LOG="$HOME/vibe.log"
+# Keep the previous session's log: after a crash, that is the one worth reading.
+[ -f "$LOG" ] && mv -f "$LOG" "$LOG.old"
 
 if [ -z "$DBUS_SESSION_BUS_ADDRESS" ]; then
     # Prefer the user's systemd session bus when present so PipeWire/WirePlumber

@@ -330,23 +330,17 @@ impl Settings {
         });
 
         section_title(ui, "Scale and layout");
-        changed |= setting_block(ui, "Change the size of text, apps, and other items", "100% is native monitor scale. Quick presets or fine slider:", |ui| {
+        changed |= setting_block(ui, "Change the size of text, apps, and other items", "Whole-number scaling: 100% is native size, 200% doubles everything. In-between sizes aren't supported yet.", |ui| {
             let mut c = false;
             ui.horizontal(|ui| {
-                for pct in [100, 125, 150, 175, 200] {
-                    let cur = (self.config.display_scale * 100.0).round() as i32;
+                let cur = self.config.display_scale.round().max(1.0) as i32 * 100;
+                for pct in [100, 200] {
                     if ui.selectable_label(cur == pct, format!("{pct}%")).clicked() {
                         self.config.display_scale = pct as f64 / 100.0;
                         c = true;
                     }
                 }
             });
-            ui.add_space(6.0);
-            let mut pct = (self.config.display_scale * 100.0).round() as i32;
-            if ui.add(egui::Slider::new(&mut pct, 50..=300).suffix("%").step_by(5.0)).changed() {
-                self.config.display_scale = pct as f64 / 100.0;
-                c = true;
-            }
             c
         });
 
@@ -513,27 +507,7 @@ impl Settings {
     }
 
     fn page_power(&mut self, ui: &mut egui::Ui) -> bool {
-        let mut changed = false;
-        section_title(ui, "Screen and sleep");
-        changed |= setting_block(ui, "Lock screen after idle", "Automatically lock or dim after inactivity (0 = Never).", |ui| {
-            let mut c = false;
-            let choices = [(0, "Never"), (1, "1 minute"), (3, "3 minutes"), (5, "5 minutes"), (10, "10 minutes"), (15, "15 minutes"), (30, "30 minutes"), (60, "1 hour")];
-            let current_label = choices
-                .iter()
-                .find(|(m, _)| *m == self.config.idle_lock_minutes)
-                .map(|(_, l)| *l)
-                .unwrap_or("Custom");
-            egui::ComboBox::from_id_salt("idle_lock").selected_text(current_label).width(180.0).show_ui(ui, |ui| {
-                for (mins, label) in choices {
-                    if ui.selectable_label(self.config.idle_lock_minutes == mins, label).clicked() {
-                        self.config.idle_lock_minutes = mins;
-                        c = true;
-                    }
-                }
-            });
-            c
-        });
-
+        let changed = false;
         if let Some(profile) = self.system.power_profile.clone() {
             section_title(ui, "Power mode");
             ui.horizontal(|ui| {
@@ -571,7 +545,8 @@ impl Settings {
             card_frame().show(ui, |ui| {
                 ui.set_width(ui.available_width());
                 ui.horizontal(|ui| {
-                    ui.label(RichText::new(&disk.mount).color(TEXT).size(15.0));
+                    let name = if disk.mount == "/" { "System drive (/)".to_string() } else { disk.mount.clone() };
+                    ui.label(RichText::new(name).color(TEXT).size(15.0));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         ui.label(
                             RichText::new(format!("{} / {} ({:.0}%)", fmt_bytes(disk.used_bytes), fmt_bytes(disk.total_bytes), disk.pct))
@@ -1104,11 +1079,18 @@ impl Settings {
     fn page_ease_display(&mut self, ui: &mut egui::Ui) -> bool {
         let mut changed = false;
         section_title(ui, "Make everything bigger");
-        changed |= setting_block(ui, "Display scaling", "Scale text, windows, and UI elements.", |ui| {
-            let mut pct = (self.config.display_scale * 100.0).round() as i32;
-            let r = ui.add(egui::Slider::new(&mut pct, 50..=300).suffix("%").step_by(5.0));
-            self.config.display_scale = pct as f64 / 100.0;
-            r.changed()
+        changed |= setting_block(ui, "Display scaling", "Whole-number scaling: 100% is native size, 200% doubles everything.", |ui| {
+            let mut c = false;
+            ui.horizontal(|ui| {
+                let cur = self.config.display_scale.round().max(1.0) as i32 * 100;
+                for pct in [100, 200] {
+                    if ui.selectable_label(cur == pct, format!("{pct}%")).clicked() {
+                        self.config.display_scale = pct as f64 / 100.0;
+                        c = true;
+                    }
+                }
+            });
+            c
         });
         changed |= setting_block(ui, "Night light", "Reduce blue light strain.", |ui| win10_toggle(ui, &mut self.config.night_light));
         changed
@@ -1168,12 +1150,16 @@ impl Settings {
         card_frame().show(ui, |ui| {
             ui.set_width(ui.available_width());
             for svc in &self.system.services {
-                let status = if svc.active { "Running" } else { "Inactive" };
+                let status = match svc.state {
+                    crate::system::ServiceState::Running => "Running",
+                    crate::system::ServiceState::Stopped => "Not running",
+                    crate::system::ServiceState::Unknown => "Couldn't check",
+                };
                 kv_row(ui, svc.name, status);
             }
         });
 
-        section_title(ui, "Compositor log tail");
+        section_title(ui, "Recent compositor activity");
         ui.horizontal(|ui| {
             if ui.button("Refresh logs").clicked() {
                 self.system.invalidate();

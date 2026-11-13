@@ -123,6 +123,65 @@ pub enum SubPage {
 }
 
 impl SubPage {
+    const ALL: [Self; 25] = [
+        Self::Display,
+        Self::Sound,
+        Self::Notifications,
+        Self::Power,
+        Self::Storage,
+        Self::About,
+        Self::Bluetooth,
+        Self::Mouse,
+        Self::Keyboard,
+        Self::NetStatus,
+        Self::Wifi,
+        Self::Ethernet,
+        Self::Background,
+        Self::Start,
+        Self::Taskbar,
+        Self::AppsFeatures,
+        Self::DefaultApps,
+        Self::YourInfo,
+        Self::DateTime,
+        Self::Language,
+        Self::GameMode,
+        Self::Captures,
+        Self::EaseDisplay,
+        Self::EaseMouse,
+        Self::UpdateStatus,
+    ];
+
+    /// The name `--page` takes, so the compositor and other apps can deep-link into any page.
+    fn slug(self) -> &'static str {
+        match self {
+            Self::Display => "display",
+            Self::Sound => "sound",
+            Self::Notifications => "notifications",
+            Self::Power => "power",
+            Self::Storage => "storage",
+            Self::About => "about",
+            Self::Bluetooth => "bluetooth",
+            Self::Mouse => "mouse",
+            Self::Keyboard => "keyboard",
+            Self::NetStatus => "network-status",
+            Self::Wifi => "wifi",
+            Self::Ethernet => "ethernet",
+            Self::Background => "background",
+            Self::Start => "start",
+            Self::Taskbar => "taskbar",
+            Self::AppsFeatures => "apps",
+            Self::DefaultApps => "default-apps",
+            Self::YourInfo => "your-info",
+            Self::DateTime => "date-time",
+            Self::Language => "language",
+            Self::GameMode => "gaming",
+            Self::Captures => "captures",
+            Self::EaseDisplay => "ease-display",
+            Self::EaseMouse => "ease-mouse",
+            Self::UpdateStatus => "update",
+        }
+    }
+
     fn title(self) -> &'static str {
         match self {
             Self::Display => "Display",
@@ -448,22 +507,16 @@ fn parse_cli_page() -> Option<(Category, SubPage)> {
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         if a == "--page" {
-            return match args.next().as_deref() {
-                Some("personalization" | "background") => Some((Category::Personalization, SubPage::Background)),
-                Some("display") => Some((Category::System, SubPage::Display)),
-                Some("sound") => Some((Category::System, SubPage::Sound)),
-                Some("network" | "wifi") => Some((Category::Network, SubPage::Wifi)),
-                Some("bluetooth") => Some((Category::Devices, SubPage::Bluetooth)),
-                Some("mouse") => Some((Category::Devices, SubPage::Mouse)),
-                Some("gaming") => Some((Category::Gaming, SubPage::GameMode)),
-                Some("start") => Some((Category::Personalization, SubPage::Start)),
-                Some("about") => Some((Category::System, SubPage::About)),
-                Some("storage") => Some((Category::System, SubPage::Storage)),
-                Some("power") => Some((Category::System, SubPage::Power)),
-                Some("apps") => Some((Category::Apps, SubPage::AppsFeatures)),
-                Some("update") => Some((Category::UpdateSecurity, SubPage::UpdateStatus)),
-                _ => None,
+            let name = args.next()?;
+            // Names older callers (the tray, the start menu) already use.
+            let name = match name.as_str() {
+                "personalization" => "background",
+                "network" => "wifi",
+                n => n,
             };
+            let sub = SubPage::ALL.into_iter().find(|p| p.slug() == name)?;
+            let cat = Category::ALL.into_iter().find(|c| c.subpages().contains(&sub))?;
+            return Some((cat, sub));
         }
     }
     None

@@ -78,7 +78,15 @@ pub struct SystemSpecs {
 #[derive(Clone, Debug)]
 pub struct ServiceStatus {
     pub name: &'static str,
-    pub active: bool,
+    pub state: ServiceState,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ServiceState {
+    Running,
+    Stopped,
+    /// systemctl couldn't be asked (no user bus, say): not the same as stopped.
+    Unknown,
 }
 
 #[derive(Default)]
@@ -296,13 +304,21 @@ impl System {
             }
             let fs = parts[0];
             let fstype = parts[1];
-            if matches!(fstype, "tmpfs" | "devtmpfs" | "efivarfs" | "squashfs" | "overlay") {
+            if matches!(fstype, "tmpfs" | "devtmpfs" | "efivarfs" | "squashfs" | "overlay") || fstype == "fuse" || fstype.starts_with("fuse.") {
                 continue;
             }
             let total: u64 = parts[2].parse().unwrap_or(0);
             let used: u64 = parts[3].parse().unwrap_or(0);
             let mount = parts[6..].join(" ");
-            if total == 0 || self.disks.iter().any(|d| d.mount == mount) {
+            if total == 0 {
+                continue;
+            }
+            // Btrfs subvolumes (/, /home, /var/log, swap...) share one device and one set of numbers:
+            // show the drive once, under its most general mount.
+            if let Some(existing) = self.disks.iter_mut().find(|d| d.fs == fs) {
+                if mount == "/" || (existing.mount != "/" && mount.len() < existing.mount.len()) {
+                    existing.mount = mount;
+                }
                 continue;
             }
             let pct = (used as f64 / total as f64 * 100.0) as f32;
@@ -398,17 +414,24 @@ impl System {
     }
 
     fn refresh_update(&mut self) {
-        let names = ["pipewire", "wireplumber", "xdg-desktop-portal", "NetworkManager"];
-        self.services = names
+        // (unit, runs in the user's systemd?). Each lives in one place; asking the other manager about
+        // a unit it doesn't own just says "inactive", which would read as a false "not running".
+        let units: [(&'static str, bool); 4] = [("pipewire", true), ("wireplumber", true), ("xdg-desktop-portal", true), ("NetworkManager", false)];
+        self.services = units
             .iter()
-            .map(|&name| {
-                let user_active = run("systemctl", &["--user", "is-active", name]).is_some_and(|s| s.trim() == "active");
-                let sys_active = if !user_active {
-                    run("systemctl", &["is-active", name]).is_some_and(|s| s.trim() == "active")
-                } else {
-                    false
+            .map(|&(name, user)| {
+                let mut args = vec!["show", "-p", "ActiveState", "--value", name];
+                if user {
+                    args.insert(0, "--user");
+                }
+                // `show` exits 0 with a state even for stopped units, unlike `is-active`, so a failure
+                // here means we couldn't ask at all.
+                let state = match Command::new("systemctl").args(&args).output().ok().filter(|o| o.status.success()) {
+                    Some(o) if String::from_utf8_lossy(&o.stdout).trim() == "active" => ServiceState::Running,
+                    Some(_) => ServiceState::Stopped,
+                    None => ServiceState::Unknown,
                 };
-                ServiceStatus { name, active: user_active || sys_active }
+                ServiceStatus { name, state }
             })
             .collect();
 
@@ -419,9 +442,7 @@ impl System {
         ];
         for path in candidates.into_iter().flatten() {
             if let Ok(content) = std::fs::read_to_string(&path) {
-                let lines: Vec<&str> = content.lines().collect();
-                let start = lines.len().saturating_sub(25);
-                log_text = format!("-- {} --\n{}", path.display(), lines[start..].join("\n"));
+                log_text = compositor_lines(&content, 30);
                 break;
             }
         }
@@ -430,6 +451,55 @@ impl System {
         }
         self.log_tail = log_text;
     }
+}
+
+/// Drop colour codes: the log is written with ANSI escapes.
+fn strip_ansi(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut chars = s.chars();
+    while let Some(c) = chars.next() {
+        if c == '\u{1b}' {
+            for n in chars.by_ref() {
+                if n.is_ascii_alphabetic() {
+                    break;
+                }
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
+/// The last `max` lines the compositor itself wrote (they start with a timestamp), with runs of
+/// the same message folded into one. Apps share the log file, and their output would bury these.
+fn compositor_lines(log: &str, max: usize) -> String {
+    let mut rows: Vec<(String, String, u32)> = Vec::new(); // (time, message, repeats)
+    for raw in log.lines() {
+        let line = strip_ansi(raw);
+        let b = line.as_bytes();
+        if line.len() < 30 || b[4] != b'-' || b[10] != b'T' {
+            continue;
+        }
+        let (time, msg) = line.split_once(' ').map(|(t, m)| (t[11..19.min(t.len())].to_string(), m.trim().to_string())).unwrap_or_default();
+        if let Some(last) = rows.last_mut().filter(|l| l.1 == msg) {
+            last.2 += 1;
+        } else {
+            rows.push((time, msg, 1));
+        }
+    }
+    let start = rows.len().saturating_sub(max);
+    if rows.is_empty() {
+        return "Nothing from the compositor yet.".into();
+    }
+    rows[start..]
+        .iter()
+        .map(|(t, m, n)| {
+            let m: String = m.chars().take(170).collect();
+            if *n > 1 { format!("{t}  {m}  (x{n})") } else { format!("{t}  {m}") }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn detect_gpu() -> String {
@@ -526,7 +596,12 @@ pub fn run(cmd: &str, args: &[&str]) -> Option<String> {
 }
 
 pub fn spawn(cmd: &str, args: &[&str]) {
-    let _ = Command::new(cmd).args(args).spawn();
+    // Wait for it in a thread: a child nobody waits for stays a zombie after it exits.
+    if let Ok(mut child) = Command::new(cmd).args(args).spawn() {
+        std::thread::spawn(move || {
+            let _ = child.wait();
+        });
+    }
 }
 
 pub fn volume_percent(v: &serde_json::Value) -> u32 {
@@ -577,5 +652,33 @@ pub fn fmt_bytes(b: u64) -> String {
         format!("{:.1} GB", b as f64 / GB)
     } else {
         format!("{:.0} MB", b as f64 / MB)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn services_report_running_when_systemd_says_active() {
+        let mut s = System::default();
+        s.refresh_update();
+        // Only meaningful where systemd runs; elsewhere every state is Unknown.
+        for svc in &s.services {
+            eprintln!("{} -> {:?}", svc.name, svc.state);
+        }
+    }
+
+    #[test]
+    fn log_lines_are_filtered_and_folded() {
+        let log = "Warning: some app noise\n\
+                   \u{1b}[2m2026-11-13T03:22:10.1Z\u{1b}[0m \u{1b}[32m INFO\u{1b}[0m vibe_comp: one\n\
+                   \u{1b}[2m2026-11-13T03:22:11.2Z\u{1b}[0m \u{1b}[32m INFO\u{1b}[0m vibe_comp: same\n\
+                   \u{1b}[2m2026-11-13T03:22:12.3Z\u{1b}[0m \u{1b}[32m INFO\u{1b}[0m vibe_comp: same\n\
+                   info: Roblox: more app noise\n";
+        let out = compositor_lines(log, 10);
+        assert!(!out.contains("Roblox") && !out.contains("app noise"));
+        assert!(out.contains("(x2)"), "{out}");
+        assert_eq!(out.lines().count(), 2, "{out}");
     }
 }

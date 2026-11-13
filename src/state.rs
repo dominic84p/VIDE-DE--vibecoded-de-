@@ -417,9 +417,11 @@ impl State {
         if self.pointer_focus.as_ref().map(|(s, _)| s) != surface.as_ref() {
             self.release_pointer();
         }
+        let mut restored = false;
         if let Some(s) = &surface {
             self.wm.raise(s);
             if let Some(w) = self.wm.find_mut(s) {
+                restored = w.minimized;
                 w.minimized = false;
                 // Focusing a window on another workspace takes you there, so focus is never invisible.
                 let ws = w.workspace;
@@ -441,7 +443,11 @@ impl State {
             None => FocusTarget::Wayland(s),
         });
         let kb = self.keyboard.clone();
-        if kb.current_focus() == target && target.is_some() {
+        // A window restored from minimized may still hold keyboard focus; re-enter so it
+        // notices. Only then: a leave/enter on every click into the focused window makes
+        // Firefox close its <select> dropdowns (GTK subsurfaces, not xdg popups) before the
+        // click lands. See scripts/nested-tests/popup-select-firefox.test.
+        if restored && kb.current_focus() == target && target.is_some() {
             kb.set_focus(self, None, serial);
         }
         kb.set_focus(self, target, serial);

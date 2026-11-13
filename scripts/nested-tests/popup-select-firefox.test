@@ -1,0 +1,17 @@
+# Regression: clicking an item in a Firefox <select> dropdown must select it. Firefox draws the
+# list as a subsurface of its window, not an xdg popup, so the click lands on the focused window
+# itself; it used to bounce keyboard focus (leave + enter), which closes the list first.
+run python3 -m http.server 8766 --bind 127.0.0.1 --directory scripts/nested-tests/pages
+run rm -rf /tmp/vide-nt-ffs && mkdir -p /tmp/vide-nt-ffs && cp scripts/nested-tests/pages/firefox-user.js /tmp/vide-nt-ffs/user.js && exec /usr/lib/firefox/firefox --no-remote --profile /tmp/vide-nt-ffs http://127.0.0.1:8766/select.html
+expect-window "select test" 90
+wait 4
+click 85 142
+wait 1.5
+shot opened
+move 85 310
+wait 0.5
+down
+wait 0.15
+up
+expect-window "picked three" 8
+shot selected

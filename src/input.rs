@@ -727,6 +727,14 @@ impl State {
         self.needs_redraw = true;
     }
 
+    /// Our shell is up over a fullscreen app (Start over a game, say). The app then gets no
+    /// pointer at all, wherever the mouse is, until the shell closes again.
+    fn shell_over_fullscreen(&self) -> bool {
+        let focused = self.focused();
+        (self.shell_overlay_open() || self.action_center.open)
+            && self.wm.top().is_some_and(|w| w.fullscreen.is_some() && Some(w.surface()) == focused.as_ref())
+    }
+
     fn taskbar_visible(&self) -> bool {
         let focused = self.focused();
         self.start.open || !self.wm.top().is_some_and(|w| w.fullscreen.is_some() && Some(w.surface()) == focused.as_ref())
@@ -857,7 +865,9 @@ impl State {
                 Target::Start(h) => Hover::Start(h),
                 Target::Taskbar(h) => Hover::Taskbar(h),
                 Target::Window(Hit::Client(s, origin)) => {
-                    focus = Some((s, origin));
+                    if !self.shell_over_fullscreen() {
+                        focus = Some((s, origin));
+                    }
                     Hover::None
                 }
                 Target::Window(Hit::Button(s, b)) => Hover::Title(s, b),

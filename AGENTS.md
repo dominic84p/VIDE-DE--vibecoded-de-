@@ -121,6 +121,9 @@ the WM in `src/wm.rs` is deliberately our own.
   so clicks on them land on the already-focused toplevel. Never bounce keyboard focus
   (leave + enter) on a click into the focused window; Firefox closes the list on the leave.
   See `scripts/nested-tests/popup-select-firefox.test`.
+- **While our shell is open over a fullscreen app (Start, flyouts, Task View, menus, Action
+  Center), that app gets no pointer focus anywhere**, not even where the mouse is over it.
+  `shell_over_fullscreen` in `input.rs`; the human has had to ask for this more than once.
 - **NVIDIA:** hardware cursor and overlay planes are unreliable, and direct
   scanout of client buffers skips our sync wait, so `tty.rs` renders with
   `FrameFlags::empty()` (always composite). Don't switch back to `DEFAULT`.

@@ -23,11 +23,12 @@ pub enum Category {
     TimeLanguage,
     Gaming,
     EaseOfAccess,
+    Privacy,
     UpdateSecurity,
 }
 
 impl Category {
-    const ALL: [Self; 10] = [
+    const ALL: [Self; 11] = [
         Self::System,
         Self::Devices,
         Self::Network,
@@ -37,6 +38,7 @@ impl Category {
         Self::TimeLanguage,
         Self::Gaming,
         Self::EaseOfAccess,
+        Self::Privacy,
         Self::UpdateSecurity,
     ];
 
@@ -51,6 +53,7 @@ impl Category {
             Self::TimeLanguage => "Time & Language",
             Self::Gaming => "Gaming",
             Self::EaseOfAccess => "Ease of Access",
+            Self::Privacy => "Privacy",
             Self::UpdateSecurity => "Update & Security",
         }
     }
@@ -66,6 +69,7 @@ impl Category {
             Self::TimeLanguage => "Date & time, region, language",
             Self::Gaming => "Game Mode, captures",
             Self::EaseOfAccess => "Display scale, night light, cursor",
+            Self::Privacy => "Camera, microphone, location, notifications",
             Self::UpdateSecurity => "Health status, services, logs",
         }
     }
@@ -88,6 +92,7 @@ impl Category {
             Self::TimeLanguage => &[SubPage::DateTime, SubPage::Language],
             Self::Gaming => &[SubPage::GameMode, SubPage::Captures],
             Self::EaseOfAccess => &[SubPage::EaseDisplay, SubPage::EaseMouse],
+            Self::Privacy => &[SubPage::AppPermissions],
             Self::UpdateSecurity => &[SubPage::UpdateStatus],
         }
     }
@@ -119,11 +124,12 @@ pub enum SubPage {
     Captures,
     EaseDisplay,
     EaseMouse,
+    AppPermissions,
     UpdateStatus,
 }
 
 impl SubPage {
-    const ALL: [Self; 25] = [
+    const ALL: [Self; 26] = [
         Self::Display,
         Self::Sound,
         Self::Notifications,
@@ -148,6 +154,7 @@ impl SubPage {
         Self::Captures,
         Self::EaseDisplay,
         Self::EaseMouse,
+        Self::AppPermissions,
         Self::UpdateStatus,
     ];
 
@@ -178,6 +185,7 @@ impl SubPage {
             Self::Captures => "captures",
             Self::EaseDisplay => "ease-display",
             Self::EaseMouse => "ease-mouse",
+            Self::AppPermissions => "privacy",
             Self::UpdateStatus => "update",
         }
     }
@@ -208,6 +216,7 @@ impl SubPage {
             Self::Captures => "Captures",
             Self::EaseDisplay => "Display",
             Self::EaseMouse => "Mouse pointer",
+            Self::AppPermissions => "App permissions",
             Self::UpdateStatus => "VIDE-DE Status & Logs",
         }
     }
@@ -223,6 +232,7 @@ impl SubPage {
             Self::DefaultApps => RefreshKind::Defaults,
             Self::About | Self::YourInfo => RefreshKind::About,
             Self::DateTime | Self::Language => RefreshKind::Time,
+            Self::AppPermissions => RefreshKind::Privacy,
             Self::UpdateStatus => RefreshKind::Update,
             _ => RefreshKind::None,
         }
@@ -260,6 +270,7 @@ const SEARCH_INDEX: &[SearchItem] = &[
     SearchItem { label: "Game Mode & direct scanout", keywords: "gaming game mode direct scanout ultra performance fps", cat: Category::Gaming, page: SubPage::GameMode },
     SearchItem { label: "Captures & screenshots", keywords: "captures screenshot snip", cat: Category::Gaming, page: SubPage::Captures },
     SearchItem { label: "Ease of Access display scale", keywords: "ease of access accessibility scale night light", cat: Category::EaseOfAccess, page: SubPage::EaseDisplay },
+    SearchItem { label: "App permissions: camera, microphone, location, notifications", keywords: "privacy permissions camera microphone mic location notifications screen sharing screenshare allow block", cat: Category::Privacy, page: SubPage::AppPermissions },
     SearchItem { label: "VIDE-DE status, screenshare permissions & logs", keywords: "update security logs services health screenshare permissions privacy", cat: Category::UpdateSecurity, page: SubPage::UpdateStatus },
 ];
 

@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use eframe::egui::{self, Color32, FontId, Pos2, Rect, RichText, Stroke, StrokeKind, Vec2};
 use vide_config::Config;
 
-use crate::system::{display_modes, fmt_bytes, fmt_res, launch_desktop_exec, spawn};
+use crate::system::{display_modes, fmt_bytes, fmt_res, launch_desktop_exec, run, spawn};
 use crate::{Category, Settings, SubPage};
 
 pub const ACCENT: Color32 = Color32::from_rgb(0x00, 0x78, 0xd7);
@@ -38,6 +38,19 @@ pub fn apply_win10_style(ctx: &egui::Context) {
 }
 
 /// Windows 10 pill toggle switch with "On" / "Off" label.
+/// "io.github.astralvixen.geforce-infinity" -> "Geforce Infinity": the last part, spaced and capitalised.
+fn humanize_app_id(id: &str) -> String {
+    let last = id.rsplit('.').next().unwrap_or(id);
+    last.split(['-', '_'])
+        .filter(|w| !w.is_empty())
+        .map(|w| {
+            let mut c = w.chars();
+            c.next().map(|f| f.to_uppercase().collect::<String>() + c.as_str()).unwrap_or_default()
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 pub fn win10_toggle(ui: &mut egui::Ui, value: &mut bool) -> bool {
     let mut changed = false;
     ui.horizontal(|ui| {
@@ -190,6 +203,14 @@ pub fn draw_category_icon(painter: &egui::Painter, rect: Rect, cat: Category, co
             painter.line_segment([Pos2::new(c.x, c.y - s * 0.05), Pos2::new(c.x - s * 0.22, c.y + s * 0.45)], stroke);
             painter.line_segment([Pos2::new(c.x, c.y - s * 0.05), Pos2::new(c.x + s * 0.22, c.y + s * 0.45)], stroke);
         }
+        Category::Privacy => {
+            // Padlock
+            let body = Rect::from_center_size(Pos2::new(c.x, c.y + s * 0.3), Vec2::new(s * 1.35, s * 1.0));
+            painter.rect_stroke(body, 2.0, stroke, StrokeKind::Inside);
+            let shackle = Rect::from_center_size(Pos2::new(c.x, c.y - s * 0.38), Vec2::new(s * 0.85, s * 0.9));
+            painter.rect_stroke(shackle, s * 0.42, stroke, StrokeKind::Inside);
+            painter.circle_filled(Pos2::new(c.x, c.y + s * 0.3), 2.2, color);
+        }
         Category::UpdateSecurity => {
             // Sync / circular arrows
             painter.circle_stroke(c, s * 0.72, stroke);
@@ -309,6 +330,10 @@ impl Settings {
             }
             SubPage::EaseDisplay => self.page_ease_display(ui),
             SubPage::EaseMouse => self.page_mouse(ui),
+            SubPage::AppPermissions => {
+                self.page_privacy(ui);
+                false
+            }
             SubPage::UpdateStatus => {
                 self.page_update_status(ui);
                 false
@@ -1096,8 +1121,115 @@ impl Settings {
         changed
     }
 
-    fn page_update_status(&mut self, ui: &mut egui::Ui) {
-        section_title(ui, "Screen sharing permissions");
+    /// Who asked for what: camera, microphone, location, notifications and screen sharing, from the
+    /// portal permission store, with the controls to change your mind. Websites aren't here: a
+    /// browser keeps its own site permissions.
+    fn page_privacy(&mut self, ui: &mut egui::Ui) {
+        ui.label(RichText::new("Apps ask the first time they need these. Change your mind here.").color(DIM).size(12.5));
+        ui.label(RichText::new("Websites are managed in the browser itself, under its site settings.").color(DIM).size(12.5));
+        ui.add_space(8.0);
+
+        section_title(ui, "Camera");
+        self.permission_rows(ui, "devices", "camera", &[("yes", "Allow"), ("no", "Block"), ("ask", "Ask")]);
+        ui.add_space(8.0);
+        section_title(ui, "Microphone");
+        self.permission_rows(ui, "devices", "microphone", &[("yes", "Allow"), ("no", "Block"), ("ask", "Ask")]);
+        ui.add_space(8.0);
+        section_title(ui, "Notifications");
+        self.permission_rows(ui, "notifications", "notification", &[("yes", "Allow"), ("no", "Block")]);
+        ui.add_space(8.0);
+
+        section_title(ui, "Location");
+        let places: Vec<crate::system::PermEntry> = self.system.privacy.iter().filter(|e| e.table == "location").cloned().collect();
+        if places.is_empty() {
+            ui.label(RichText::new("No app has asked yet.").color(DIM).size(12.5));
+        }
+        for e in places {
+            let name = self.app_label(&e.app);
+            card_frame().show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new(name).color(TEXT).size(14.0));
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        // The store can only clear everything for an app at once.
+                        if !e.app.is_empty() && ui.button("Reset all for this app").clicked() {
+                            run("flatpak", &["permission-reset", &e.app]);
+                            self.system.invalidate();
+                        }
+                    });
+                });
+            });
+            ui.add_space(4.0);
+        }
+        ui.add_space(8.0);
+
+        section_title(ui, "Screen sharing & recording");
+        let casts: Vec<crate::system::PermEntry> = self.system.privacy.iter().filter(|e| e.table == "screencast").cloned().collect();
+        if casts.is_empty() {
+            ui.label(RichText::new("No app has been allowed to share the screen.").color(DIM).size(12.5));
+        }
+        for e in casts {
+            let name = self.app_label(&e.app);
+            card_frame().show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new(name).color(TEXT).size(14.0));
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui.button("Revoke").clicked() {
+                            run("flatpak", &["permission-remove", "screencast", &e.object]);
+                            self.system.invalidate();
+                        }
+                    });
+                });
+            });
+            ui.add_space(4.0);
+        }
+        ui.add_space(4.0);
+        self.vide_screenshare_permissions(ui);
+    }
+
+    /// The name people know an app by: flatpak's, else the id, else a note for apps outside a sandbox.
+    fn app_label(&self, app: &str) -> String {
+        if app.is_empty() {
+            return "Desktop app (not sandboxed)".into();
+        }
+        self.system.app_names.get(app).cloned().unwrap_or_else(|| humanize_app_id(app))
+    }
+
+    /// One row per app that has asked for `object` in `table`, with a button per choice.
+    fn permission_rows(&mut self, ui: &mut egui::Ui, table: &str, object: &str, choices: &[(&str, &str)]) {
+        let rows: Vec<crate::system::PermEntry> = self.system.privacy.iter().filter(|e| e.table == table && e.object == object).cloned().collect();
+        if rows.is_empty() {
+            ui.label(RichText::new("No app has asked yet.").color(DIM).size(12.5));
+            return;
+        }
+        for e in rows {
+            let name = self.app_label(&e.app);
+            card_frame().show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new(name).color(TEXT).size(14.0));
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if e.app.is_empty() {
+                            // The store has no app id to change for these.
+                            ui.label(RichText::new(if e.value == "yes" { "Allowed" } else { "Blocked" }).color(DIM));
+                            return;
+                        }
+                        for (value, label) in choices.iter().rev() {
+                            if ui.selectable_label(e.value == *value, *label).clicked() && e.value != *value {
+                                run("flatpak", &["permission-set", table, object, &e.app, value]);
+                                self.system.invalidate();
+                            }
+                        }
+                    });
+                });
+            });
+            ui.add_space(4.0);
+        }
+    }
+
+    /// Apps VIDE's own screen-sharing portal has remembered (vide-portal keeps this file).
+    fn vide_screenshare_permissions(&mut self, ui: &mut egui::Ui) {
         let perms_path = {
             let base = std::env::var("XDG_CONFIG_HOME")
                 .map(PathBuf::from)
@@ -1145,7 +1277,9 @@ impl Settings {
             }
         }
         ui.add_space(8.0);
+    }
 
+    fn page_update_status(&mut self, ui: &mut egui::Ui) {
         section_title(ui, "Session & services health");
         card_frame().show(ui, |ui| {
             ui.set_width(ui.available_width());
@@ -1170,5 +1304,17 @@ impl Settings {
             ui.set_width(ui.available_width());
             ui.label(RichText::new(&self.system.log_tail).font(FontId::monospace(11.5)).color(DIM));
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::humanize_app_id;
+
+    #[test]
+    fn app_ids_become_names() {
+        assert_eq!(humanize_app_id("io.github.astralvixen.geforce-infinity"), "Geforce Infinity");
+        assert_eq!(humanize_app_id("org.kde.konsole"), "Konsole");
+        assert_eq!(humanize_app_id("plain"), "Plain");
     }
 }

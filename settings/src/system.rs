@@ -43,6 +43,18 @@ pub struct DiskInfo {
     pub pct: f32,
 }
 
+/// One row of the portal permission store (`flatpak permissions`). The data column is never
+/// read: for files it holds paths from the user's disk.
+#[derive(Clone, Debug)]
+pub struct PermEntry {
+    pub table: String,
+    pub object: String,
+    /// Empty for apps that aren't sandboxed.
+    pub app: String,
+    /// "yes", "no", "ask", or table-specific.
+    pub value: String,
+}
+
 #[derive(Clone, Debug)]
 pub struct AppEntry {
     pub name: String,
@@ -110,6 +122,9 @@ pub struct System {
     pub specs_loaded: bool,
     pub services: Vec<ServiceStatus>,
     pub log_tail: String,
+    pub privacy: Vec<PermEntry>,
+    /// Flatpak application id -> the name people know it by.
+    pub app_names: std::collections::HashMap<String, String>,
     pub default_browser: String,
     pub default_files: String,
     pub default_text: String,
@@ -130,6 +145,7 @@ pub enum RefreshKind {
     About,
     Time,
     Update,
+    Privacy,
     None,
 }
 
@@ -147,7 +163,7 @@ impl System {
         let interval = match kind {
             RefreshKind::Network | RefreshKind::Bluetooth => Duration::from_secs(3),
             RefreshKind::Sound => Duration::from_secs(1),
-            RefreshKind::Storage | RefreshKind::Power | RefreshKind::Update | RefreshKind::Time => Duration::from_secs(4),
+            RefreshKind::Storage | RefreshKind::Power | RefreshKind::Update | RefreshKind::Time | RefreshKind::Privacy => Duration::from_secs(4),
             RefreshKind::Defaults | RefreshKind::About => Duration::from_secs(10),
             RefreshKind::Apps | RefreshKind::None => return,
         };
@@ -164,6 +180,7 @@ impl System {
             RefreshKind::Defaults => self.refresh_defaults(),
             RefreshKind::About | RefreshKind::Time => self.refresh_specs(),
             RefreshKind::Update => self.refresh_update(),
+            RefreshKind::Privacy => self.refresh_privacy(),
             RefreshKind::Apps | RefreshKind::None => {}
         }
     }
@@ -411,6 +428,31 @@ impl System {
             ntp_enabled,
             locale,
         };
+    }
+
+    fn refresh_privacy(&mut self) {
+        // `flatpak permissions` prints Table, Object, App, Permissions, Data, tab-separated.
+        // Only the first four are used; Data can hold file paths and stays unread.
+        let wanted = ["devices", "location", "notifications", "screencast", "documents"];
+        self.privacy = run("flatpak", &["permissions"])
+            .unwrap_or_default()
+            .lines()
+            .filter_map(|l| {
+                let mut f = l.split('\t');
+                let (table, object, app, value) = (f.next()?, f.next()?, f.next()?, f.next()?);
+                wanted.contains(&table).then(|| PermEntry { table: table.into(), object: object.into(), app: app.into(), value: value.trim().into() })
+            })
+            .collect();
+        if self.app_names.is_empty() {
+            self.app_names = run("flatpak", &["list", "--app", "--columns=application,name"])
+                .unwrap_or_default()
+                .lines()
+                .filter_map(|l| {
+                    let (id, name) = l.split_once('\t')?;
+                    Some((id.trim().to_string(), name.trim().to_string()))
+                })
+                .collect();
+        }
     }
 
     fn refresh_update(&mut self) {

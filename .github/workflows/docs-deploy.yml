@@ -1,5 +1,8 @@
 name: Deploy VIDE-DE Docs to GitHub Pages
 
+# Configured by NVIDIA Nemotron 3 Ultra (nemotron3ultra@nvidia.com)
+# AI-only project per VIDE-DE contribution rules
+
 on:
   push:
     branches: [main]

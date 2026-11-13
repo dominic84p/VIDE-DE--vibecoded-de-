@@ -70,6 +70,7 @@ fn main() -> eframe::Result {
         "Task Mangler",
         options,
         Box::new(move |cc| {
+            vide_fonts::install_egui!(eframe::egui, cc.egui_ctx);
             egui_extras::install_image_loaders(&cc.egui_ctx);
             cc.egui_ctx.all_styles_mut(|s| s.interaction.selectable_labels = false);
             // Noto Sans is what the shell uses, and the nearest installed thing to Seg-whoa UI.

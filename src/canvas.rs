@@ -157,7 +157,24 @@ impl Canvas {
         let baseline = y as f32 + (h as f32 + lm.ascent + lm.descent) / 2.0;
         let mut pen = x as f32;
         for ch in text.chars() {
-            let (m, cov) = font.rasterize(ch, size);
+            if vide_fonts::invisible(ch) {
+                continue;
+            }
+            // Characters our font lacks (Japanese, emoji, Arabic...) come from a fallback font.
+            let glyph_font = match vide_fonts::pick(font, ch) {
+                vide_fonts::Pick::Font(f) => f,
+                vide_fonts::Pick::Missing => font,
+                vide_fonts::Pick::Emoji => {
+                    let px = (size * 1.2).round() as u32;
+                    if let Some(e) = vide_fonts::emoji(ch, px) {
+                        let top = (baseline - lm.ascent + (lm.ascent - lm.descent - px as f32) / 2.0).round() as i32;
+                        self.rgba_image(&e.rgba, e.size as i32, pen.round() as i32, top);
+                    }
+                    pen += px as f32;
+                    continue;
+                }
+            };
+            let (m, cov) = glyph_font.rasterize(ch, size);
             let gx = pen.round() as i32 + m.xmin;
             let gy = (baseline - m.height as f32 - m.ymin as f32).round() as i32;
             for row in 0..m.height {
@@ -169,6 +186,17 @@ impl Canvas {
             pen += m.advance_width;
         }
         (pen - x as f32).round() as i32
+    }
+
+    /// A square straight-alpha RGBA image (a colour emoji).
+    fn rgba_image(&mut self, rgba: &[u8], size: i32, x: i32, y: i32) {
+        for iy in 0..size {
+            for ix in 0..size {
+                let o = ((iy * size + ix) * 4) as usize;
+                let p = Rgba(rgba[o], rgba[o + 1], rgba[o + 2], 255);
+                self.blend(x + ix, y + iy, p, rgba[o + 3] as f32 / 255.0);
+            }
+        }
     }
 
     pub fn into_buffer(self) -> MemoryRenderBuffer {
@@ -183,7 +211,7 @@ impl Canvas {
 }
 
 pub fn measure(font: &Font, size: f32, text: &str) -> i32 {
-    text.chars().map(|c| font.metrics(c, size).advance_width).sum::<f32>().round() as i32
+    vide_fonts::width(font, text, size).round() as i32
 }
 
 /// Shorten `text` with an ellipsis so it fits in `max` pixels.

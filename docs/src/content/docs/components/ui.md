@@ -140,6 +140,14 @@ c.text(f, 12.0, x, y, h, ON_ACCENT, "Tile");    // text on the accent colour sta
 - Titlebars stay white in both modes, as in Windoze 10. `vide-desktop` reads `light_mode` itself for
   its right-click menu.
 
+## Text in Any Script
+
+`canvas.rs` (and `vide-desktop`'s `gfx.rs`) draw each character with our UI font when it has it, and
+otherwise with the installed font fontconfig picks for that character (`vide-fonts`): Japanese,
+Chinese, Korean, Arabic, Hebrew, Devanagari, symbols. Emoji come out in colour from Noto Color
+Emoji's bitmaps. Our egui apps get the same fallbacks through `vide_fonts::install_egui!`. Nothing
+can draw a script with no font installed for it: Japanese needs a CJK font such as `noto-fonts-cjk`.
+
 ## Related Files
 
 - `icons.rs` — Icon loading from theme

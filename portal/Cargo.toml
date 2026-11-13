@@ -5,5 +5,6 @@ edition = "2024"
 description = "VIDE-DE XDG Desktop Portal backend (ScreenCast + Screenshot + Permissions)"
 
 [dependencies]
+vide-fonts = { path = "../fonts" }
 eframe = "0.37"
 zbus = "5"

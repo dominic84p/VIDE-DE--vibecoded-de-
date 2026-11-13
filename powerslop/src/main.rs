@@ -59,7 +59,10 @@ fn main() -> eframe::Result {
     eframe::run_native(
         "Windoze PowerSlop 2.0",
         options,
-        Box::new(move |cc| Ok(Box::new(App::new(&cc.egui_ctx, run, title)))),
+        Box::new(move |cc| {
+            vide_fonts::install_egui!(eframe::egui, cc.egui_ctx);
+            Ok(Box::new(App::new(&cc.egui_ctx, run, title)))
+        }),
     )
 }
 

@@ -5,6 +5,7 @@ edition = "2024"
 description = "VIDE-DE Settings"
 
 [dependencies]
+vide-fonts = { path = "../fonts" }
 eframe = "0.37"
 egui_extras = { version = "0.37", features = ["image", "file"] }
 image = { version = "0.25", default-features = false, features = ["png"] }

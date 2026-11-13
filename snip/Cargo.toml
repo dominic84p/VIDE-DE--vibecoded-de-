@@ -5,6 +5,7 @@ edition = "2024"
 description = "Snip & Sketchy: mark up screenshots. Like Snip & Sketch, but sketchier."
 
 [dependencies]
+vide-fonts = { path = "../fonts" }
 eframe = "0.37"
 egui_extras = { version = "0.37", features = ["image", "svg", "file"] }
 png = "0.18"

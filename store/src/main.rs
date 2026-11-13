@@ -1255,5 +1255,8 @@ fn main() -> eframe::Result<()> {
         viewport: egui::ViewportBuilder::default().with_title("Window Shopping").with_app_id("window-shopping").with_inner_size([1100.0, 720.0]).with_min_inner_size([480.0, 380.0]),
         ..Default::default()
     };
-    eframe::run_native("Window Shopping", options, Box::new(|cc| Ok(Box::new(StoreApp::new(cc)))))
+    eframe::run_native("Window Shopping", options, Box::new(|cc| {
+        vide_fonts::install_egui!(eframe::egui, cc.egui_ctx);
+        Ok(Box::new(StoreApp::new(cc)))
+    }))
 }

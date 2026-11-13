@@ -400,7 +400,8 @@ fn run_prompt(app_id: String) -> ! {
     let _ = eframe::run_native(
         "VIDE-DE Screen Share",
         opts,
-        Box::new(move |_| {
+        Box::new(move |cc| {
+            vide_fonts::install_egui!(eframe::egui, cc.egui_ctx);
             Ok(Box::new(PromptApp {
                 app_id,
                 remember: false,

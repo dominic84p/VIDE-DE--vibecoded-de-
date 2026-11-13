@@ -11,4 +11,5 @@ png = "0.18.1"
 resvg = { version = "0.50.0", default-features = false }
 smithay-client-toolkit = "0.21"
 vide-config = { path = "../config" }
+vide-fonts = { path = "../fonts" }
 wayland-client = "0.31.15"

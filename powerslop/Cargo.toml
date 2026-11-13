@@ -5,6 +5,7 @@ edition = "2024"
 description = "PowerSlop: the VIDE-DE shell window. A shell, but vibecoded."
 
 [dependencies]
+vide-fonts = { path = "../fonts" }
 egui_term = "0.1.0"
 # egui_term's terminal; we read its scrollback size for the scrollbar.
 alacritty_terminal = "0.25"

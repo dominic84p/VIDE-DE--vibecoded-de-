@@ -5,6 +5,7 @@ edition = "2024"
 description = "Task Mangler: VIDE-DE's task manager. Like Task Manager, but it mangles."
 
 [dependencies]
+vide-fonts = { path = "../fonts" }
 eframe = "0.37"
 egui_extras = { version = "0.37", features = ["image", "svg", "file"] }
 image = { version = "0.25", default-features = false, features = ["png"] }

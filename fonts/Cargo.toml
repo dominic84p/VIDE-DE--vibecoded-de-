@@ -1,0 +1,10 @@
+[package]
+name = "vide-fonts"
+version = "0.1.0"
+edition = "2024"
+description = "Font fallback (emoji, CJK, other scripts) shared by the compositor, vide-desktop and VIDE-DE's apps"
+
+[dependencies]
+fontdue = "0.9.5"
+png = "0.18.1"
+ttf-parser = "0.25"

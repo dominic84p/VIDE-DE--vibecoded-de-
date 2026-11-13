@@ -569,6 +569,7 @@ fn main() -> eframe::Result<()> {
         "Settings",
         opts,
         Box::new(move |cc| {
+            vide_fonts::install_egui!(eframe::egui, cc.egui_ctx);
             egui_extras::install_image_loaders(&cc.egui_ctx);
             Ok(Box::new(Settings {
                 page,

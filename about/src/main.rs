@@ -218,6 +218,7 @@ fn main() -> eframe::Result {
         "About VIDE-DE",
         options,
         Box::new(|cc| {
+            vide_fonts::install_egui!(eframe::egui, cc.egui_ctx);
             egui_extras::install_image_loaders(&cc.egui_ctx);
             Ok(Box::new(About::new()))
         }),

@@ -42,6 +42,7 @@ fn main() -> eframe::Result {
         "Snip & Sketchy",
         options,
         Box::new(move |cc| {
+            vide_fonts::install_egui!(eframe::egui, cc.egui_ctx);
             egui_extras::install_image_loaders(&cc.egui_ctx);
             Ok(Box::new(App::new(&cc.egui_ctx, file)))
         }),

@@ -47,6 +47,9 @@ the WM in `src/wm.rs` is deliberately our own.
 - `snip/`: `snip-and-sketchy`. The compositor only captures (`screenshot.rs`); markup,
   saving and copying live in the app. `ipc.rs` is a control socket (`$VIDE_IPC`) for
   things only the compositor can do: `snip`, `screenshot`, `copy-png <path>`.
+- `fonts/`: `vide-fonts`, font fallback shared by the compositor, vide-desktop and the egui apps
+  (`install_egui!`): a character our UI font lacks is drawn from the font fontconfig picks for it,
+  colour emoji from Noto Color Emoji's bitmaps. Japanese needs a CJK font installed (`noto-fonts-cjk`).
 - `config/`: `vide-config`, the settings file shared by the compositor and Settings
   (`~/.config/vide-de/settings.conf`, polled once a second).
 

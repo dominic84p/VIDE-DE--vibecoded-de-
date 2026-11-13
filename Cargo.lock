@@ -1515,6 +1515,7 @@ dependencies = [
  "image",
  "libc",
  "mime_guess",
+ "vide-fonts",
 ]
 
 [[package]]
@@ -3575,6 +3576,7 @@ dependencies = [
  "alacritty_terminal",
  "eframe 0.31.1",
  "egui_term",
+ "vide-fonts",
 ]
 
 [[package]]
@@ -4343,6 +4345,7 @@ dependencies = [
  "eframe 0.37.0",
  "egui_extras",
  "png 0.18.1",
+ "vide-fonts",
 ]
 
 [[package]]
@@ -4498,6 +4501,7 @@ dependencies = [
  "image",
  "libc",
  "sysinfo",
+ "vide-fonts",
 ]
 
 [[package]]
@@ -5033,6 +5037,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "vide-config",
+ "vide-fonts",
  "x11rb",
  "xcursor",
  "zbus",
@@ -5045,6 +5050,7 @@ dependencies = [
  "eframe 0.37.0",
  "egui_extras",
  "image",
+ "vide-fonts",
 ]
 
 [[package]]
@@ -5061,7 +5067,17 @@ dependencies = [
  "resvg 0.50.0",
  "smithay-client-toolkit 0.21.1",
  "vide-config",
+ "vide-fonts",
  "wayland-client",
+]
+
+[[package]]
+name = "vide-fonts"
+version = "0.1.0"
+dependencies = [
+ "fontdue",
+ "png 0.18.1",
+ "ttf-parser",
 ]
 
 [[package]]
@@ -5069,6 +5085,7 @@ name = "vide-portal"
 version = "0.1.0"
 dependencies = [
  "eframe 0.37.0",
+ "vide-fonts",
  "zbus",
 ]
 
@@ -5081,6 +5098,7 @@ dependencies = [
  "image",
  "serde_json",
  "vide-config",
+ "vide-fonts",
 ]
 
 [[package]]
@@ -5728,6 +5746,7 @@ dependencies = [
  "resvg 0.50.0",
  "serde_json",
  "ureq",
+ "vide-fonts",
 ]
 
 [[package]]

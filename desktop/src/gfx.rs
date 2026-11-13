@@ -105,7 +105,30 @@ impl Canvas<'_> {
         let baseline = y as f32 + lm.ascent;
         let mut pen = x as f32;
         for ch in s.chars() {
-            let (m, cov) = font.rasterize(ch, LABEL);
+            if vide_fonts::invisible(ch) {
+                continue;
+            }
+            // File names in Japanese, emoji and so on come from fallback fonts.
+            let glyph_font = match vide_fonts::pick(font, ch) {
+                vide_fonts::Pick::Font(f) => f,
+                vide_fonts::Pick::Missing => font,
+                vide_fonts::Pick::Emoji => {
+                    let px = (LABEL * 1.2).round() as u32;
+                    if let Some(e) = vide_fonts::emoji(ch, px) {
+                        let top = (baseline - lm.ascent + (lm.ascent - lm.descent - px as f32) / 2.0).round() as i32;
+                        for iy in 0..e.size as i32 {
+                            for ix in 0..e.size as i32 {
+                                let o = ((iy * e.size as i32 + ix) * 4) as usize;
+                                let bgra = [e.rgba[o + 2], e.rgba[o + 1], e.rgba[o], 255];
+                                self.blend(pen.round() as i32 + ix, top + iy, bgra, e.rgba[o + 3] as f32 / 255.0);
+                            }
+                        }
+                    }
+                    pen += px as f32;
+                    continue;
+                }
+            };
+            let (m, cov) = glyph_font.rasterize(ch, LABEL);
             let gx = pen.round() as i32 + m.xmin;
             let gy = (baseline - m.height as f32 - m.ymin as f32).round() as i32;
             for row in 0..m.height {
@@ -119,7 +142,7 @@ impl Canvas<'_> {
 }
 
 pub fn text_width(font: &fontdue::Font, s: &str) -> i32 {
-    s.chars().map(|c| font.metrics(c, LABEL).advance_width).sum::<f32>().round() as i32
+    vide_fonts::width(font, s, LABEL).round() as i32
 }
 
 /// Word-wrap into at most `lines` lines, ellipsizing the last.

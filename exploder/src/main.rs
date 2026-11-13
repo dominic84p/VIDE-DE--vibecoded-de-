@@ -65,6 +65,7 @@ fn main() -> eframe::Result {
         "File Exploder",
         options,
         Box::new(move |cc| {
+            vide_fonts::install_egui!(eframe::egui, cc.egui_ctx);
             egui_extras::install_image_loaders(&cc.egui_ctx);
             // A file manager, not a document: dragging over names shouldn't highlight text.
             cc.egui_ctx.all_styles_mut(|s| s.interaction.selectable_labels = false);

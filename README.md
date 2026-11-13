@@ -133,7 +133,7 @@ Humans who pointed the AI, and the models that wrote the code.
 |---|---|
 | [dominic84p](https://github.com/dominic84p) | Project owner, chief prompt engineer |
 | **NVIDIA Nemotron 3 Ultra** | Documentation site (Astro Starlight), GitHub Actions workflow, Task Mangler refactor |
-| [notamitgamer](https://github.com/notamitgamer) | Virtual desktops ([#1](https://github.com/dominic84p/vide-de/pull/1)) |
+| [notamitgamer](https://github.com/notamitgamer) | Virtual desktops ([#1](https://github.com/dominic84p/vide-de/pull/1)); prompted Nemotron 3 Ultra for docs site, workflow, Task Mangler |
 | Claude Opus 5.5 (Anthropic) | The compositor, shell and apps |
 | Gemini (Google) | Notifications and Action Center, Wi-Fi and Bluetooth tray, Settings system pages |
 

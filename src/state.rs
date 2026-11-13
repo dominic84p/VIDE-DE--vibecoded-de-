@@ -5,8 +5,9 @@ use std::{os::unix::io::OwnedFd, sync::Arc, time::Instant};
 use fontdue::Font;
 use smithay::{
     backend::renderer::{element::memory::MemoryRenderBuffer, utils::on_commit_buffer_handler},
-    delegate_compositor, delegate_data_device, delegate_output, delegate_primary_selection, delegate_seat,
-    delegate_shm, delegate_xdg_decoration, delegate_xdg_shell,
+    delegate_compositor, delegate_data_control, delegate_data_device, delegate_output,
+    delegate_primary_selection, delegate_seat, delegate_shm, delegate_xdg_activation,
+    delegate_xdg_decoration, delegate_xdg_shell,
     desktop::{
         find_popup_root_surface, get_popup_toplevel_coords, PopupKeyboardGrab, PopupKind, PopupManager,
         PopupPointerGrab, PopupUngrabStrategy,
@@ -36,6 +37,7 @@ use smithay::{
                 set_data_device_focus, ClientDndGrabHandler, DataDeviceHandler, DataDeviceState, ServerDndGrabHandler,
             },
             primary_selection::{set_primary_focus, PrimarySelectionHandler, PrimarySelectionState},
+            wlr_data_control::{DataControlHandler, DataControlState},
             SelectionHandler, SelectionSource, SelectionTarget,
         },
         shell::xdg::{
@@ -43,6 +45,7 @@ use smithay::{
             PopupSurface, PositionerState, ToplevelSurface, XdgShellHandler, XdgShellState,
         },
         shm::{ShmHandler, ShmState},
+        xdg_activation::{XdgActivationHandler, XdgActivationState, XdgActivationToken, XdgActivationTokenData},
     },
 };
 
@@ -131,6 +134,8 @@ pub struct State {
     pub seat_state: SeatState<Self>,
     pub data_device_state: DataDeviceState,
     pub primary_selection_state: PrimarySelectionState,
+    pub data_control_state: DataControlState,
+    pub xdg_activation_state: XdgActivationState,
     pub _output_manager_state: OutputManagerState,
     pub popups: PopupManager,
     pub layer_shell_state: smithay::wayland::shell::wlr_layer::WlrLayerShellState,
@@ -237,10 +242,22 @@ pub struct State {
 
 impl State {
     pub fn new(dh: DisplayHandle, loop_handle: LoopHandle<'static, State>, socket_name: String) -> Self {
+        let config = vide_config::Config::load();
         let mut seat_state = SeatState::new();
         let mut seat = seat_state.new_wl_seat(&dh, "seat0");
-        let keyboard = seat.add_keyboard(Default::default(), 300, 30).unwrap();
+        let xkb = smithay::input::keyboard::XkbConfig {
+            layout: &config.xkb_layout,
+            variant: &config.xkb_variant,
+            options: (!config.xkb_options.is_empty()).then(|| config.xkb_options.clone()),
+            ..Default::default()
+        };
+        let keyboard = seat
+            .add_keyboard(xkb, config.key_repeat_delay, config.key_repeat_rate)
+            .unwrap_or_else(|_| seat.add_keyboard(Default::default(), 300, 30).unwrap());
         let pointer = seat.add_pointer();
+
+        let primary_selection_state = PrimarySelectionState::new::<Self>(&dh);
+        let data_control_state = DataControlState::new::<Self, _>(&dh, Some(&primary_selection_state), |_| true);
 
         Self {
             compositor_state: CompositorState::new::<Self>(&dh),
@@ -248,7 +265,9 @@ impl State {
             xdg_decoration_state: XdgDecorationState::new::<Self>(&dh),
             shm_state: ShmState::new::<Self>(&dh, vec![]),
             data_device_state: DataDeviceState::new::<Self>(&dh),
-            primary_selection_state: PrimarySelectionState::new::<Self>(&dh),
+            primary_selection_state,
+            data_control_state,
+            xdg_activation_state: XdgActivationState::new::<Self>(&dh),
             _output_manager_state: OutputManagerState::new_with_xdg_output::<Self>(&dh),
             popups: PopupManager::default(),
             layer_shell_state: smithay::wayland::shell::wlr_layer::WlrLayerShellState::new::<Self>(&dh),
@@ -458,7 +477,7 @@ impl State {
         let kind = PopupKind::Xdg(popup.clone());
         let Ok(root) = find_popup_root_surface(&kind) else { return };
         let Some(w) = self.wm.find(&root) else { return };
-        let mut target = self.output_rect();
+        let mut target = self.work_area();
         target.loc -= w.surface_loc();
         target.loc -= get_popup_toplevel_coords(&kind);
         popup.with_pending_state(|s| s.geometry = s.positioner.get_unconstrained_geometry(target));
@@ -575,8 +594,31 @@ impl State {
         }
         self.config_mtime = mtime;
         let new = vide_config::Config::load();
-        if new.mouse_flat != self.config.mouse_flat || new.mouse_speed != self.config.mouse_speed {
+        if new.mouse_flat != self.config.mouse_flat
+            || new.mouse_speed != self.config.mouse_speed
+            || new.tap_to_click != self.config.tap_to_click
+            || new.natural_scroll != self.config.natural_scroll
+            || new.disable_while_typing != self.config.disable_while_typing
+        {
             self.mouse_config_dirty = true;
+        }
+        if new.xkb_layout != self.config.xkb_layout
+            || new.xkb_variant != self.config.xkb_variant
+            || new.xkb_options != self.config.xkb_options
+        {
+            let xkb = smithay::input::keyboard::XkbConfig {
+                layout: &new.xkb_layout,
+                variant: &new.xkb_variant,
+                options: (!new.xkb_options.is_empty()).then(|| new.xkb_options.clone()),
+                ..Default::default()
+            };
+            let kb = self.keyboard.clone();
+            let _ = kb.set_xkb_config(self, xkb);
+        }
+        if new.key_repeat_delay != self.config.key_repeat_delay
+            || new.key_repeat_rate != self.config.key_repeat_rate
+        {
+            self.keyboard.change_repeat_info(new.key_repeat_rate, new.key_repeat_delay);
         }
         tracing::info!("settings reloaded: {new:?}");
         self.config = new;
@@ -798,6 +840,19 @@ impl XdgShellHandler for State {
         let at = self.pointer_loc.to_i32_round();
         self.open_window_menu(surface.wl_surface(), at);
     }
+
+    fn popup_destroyed(&mut self, surface: PopupSurface) {
+        self.popups.cleanup();
+        if self.keyboard.current_focus().and_then(|f| f.surface()).as_ref() == Some(surface.wl_surface()) {
+            let kind = PopupKind::Xdg(surface);
+            if let Ok(root) = find_popup_root_surface(&kind) {
+                self.focus(Some(root), SERIAL_COUNTER.next_serial());
+            } else {
+                self.focus_top();
+            }
+        }
+        self.needs_redraw = true;
+    }
 }
 
 impl SeatHandler for State {
@@ -901,6 +956,35 @@ impl PrimarySelectionHandler for State {
     }
 }
 
+impl DataControlHandler for State {
+    fn data_control_state(&self) -> &DataControlState {
+        &self.data_control_state
+    }
+}
+
+impl XdgActivationHandler for State {
+    fn activation_state(&mut self) -> &mut XdgActivationState {
+        &mut self.xdg_activation_state
+    }
+
+    fn request_activation(
+        &mut self,
+        _token: XdgActivationToken,
+        _token_data: XdgActivationTokenData,
+        surface: WlSurface,
+    ) {
+        if let Some(w) = self.wm.find_mut(&surface) {
+            let ws = w.workspace;
+            w.minimized = false;
+            if ws != self.wm.current_workspace {
+                self.switch_desktop(ws);
+            }
+            self.focus(Some(surface), SERIAL_COUNTER.next_serial());
+            self.needs_redraw = true;
+        }
+    }
+}
+
 impl ClientDndGrabHandler for State {}
 impl ServerDndGrabHandler for State {
     fn send(&mut self, _mime_type: String, _fd: OwnedFd, _seat: Seat<Self>) {}
@@ -954,6 +1038,8 @@ delegate_shm!(State);
 delegate_seat!(State);
 delegate_data_device!(State);
 delegate_primary_selection!(State);
+delegate_data_control!(State);
+delegate_xdg_activation!(State);
 delegate_output!(State);
 delegate_dmabuf!(State);
 delegate_drm_syncobj!(State);

@@ -55,6 +55,15 @@ fn apply_mouse(d: &mut InputDevice, c: &vide_config::Config) {
         let _ = d.config_accel_set_speed(c.mouse_speed);
         tracing::info!("mouse: {} -> {:?} speed {:.2}", d.name(), profile, c.mouse_speed);
     }
+    if d.config_tap_finger_count() > 0 {
+        let _ = d.config_tap_set_enabled(c.tap_to_click);
+    }
+    if d.config_scroll_has_natural_scroll() {
+        let _ = d.config_scroll_set_natural_scroll_enabled(c.natural_scroll);
+    }
+    if d.config_dwt_is_available() {
+        let _ = d.config_dwt_set_enabled(c.disable_while_typing);
+    }
 }
 
 use crate::{

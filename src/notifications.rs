@@ -129,6 +129,70 @@ pub struct ActionCenter {
     pub focus_assist: bool,
 }
 
+fn strip_markup(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    let mut in_tag = false;
+    let mut tag_buf = String::new();
+    let mut chars = input.chars().peekable();
+    while let Some(c) = chars.next() {
+        if in_tag {
+            if c == '>' {
+                in_tag = false;
+                let t = tag_buf.trim().to_ascii_lowercase();
+                if t == "br" || t == "br/" || t == "br /" {
+                    out.push('\n');
+                }
+                tag_buf.clear();
+            } else {
+                tag_buf.push(c);
+            }
+            continue;
+        }
+        if c == '<' {
+            in_tag = true;
+            tag_buf.clear();
+        } else if c == '&' {
+            let mut ent = String::new();
+            let mut closed = false;
+            while let Some(&nc) = chars.peek() {
+                if nc == ';' {
+                    chars.next();
+                    closed = true;
+                    break;
+                }
+                if ent.len() >= 8 || nc.is_whitespace() || nc == '&' || nc == '<' {
+                    break;
+                }
+                ent.push(chars.next().unwrap());
+            }
+            if closed {
+                match ent.as_str() {
+                    "amp" => out.push('&'),
+                    "lt" => out.push('<'),
+                    "gt" => out.push('>'),
+                    "quot" => out.push('"'),
+                    "apos" | "#39" => out.push('\''),
+                    _ => {
+                        out.push('&');
+                        out.push_str(&ent);
+                        out.push(';');
+                    }
+                }
+            } else {
+                out.push('&');
+                out.push_str(&ent);
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    if in_tag {
+        out.push('<');
+        out.push_str(&tag_buf);
+    }
+    out
+}
+
 #[derive(Clone, Debug)]
 pub enum NotifEvent {
     Added(Notification),
@@ -187,8 +251,8 @@ impl Server {
             id,
             app_name: if app_name.is_empty() { "Notification".to_string() } else { app_name },
             app_icon,
-            summary,
-            body,
+            summary: strip_markup(&summary),
+            body: strip_markup(&body),
             actions: action_pairs,
             timestamp: chrono::Local::now().format("%H:%M").to_string(),
         };

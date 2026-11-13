@@ -237,7 +237,18 @@ impl XwmHandler for State {
         }
     }
 
-    fn configure_notify(&mut self, _xwm: XwmId, _window: X11Surface, _geometry: Rectangle<i32, Logical>, _above: Option<u32>) {
+    fn configure_notify(&mut self, _xwm: XwmId, window: X11Surface, _geometry: Rectangle<i32, Logical>, above: Option<u32>) {
+        if window.is_override_redirect() {
+            if !window.is_mapped() {
+                self.x11_overrides.retain(|w| w != &window);
+            } else if let Some(pos) = self.x11_overrides.iter().position(|w| w == &window) {
+                let w = self.x11_overrides.remove(pos);
+                let insert_at = above
+                    .and_then(|id| self.x11_overrides.iter().position(|o| o.window_id() == id))
+                    .map_or(0, |idx| idx + 1);
+                self.x11_overrides.insert(insert_at, w);
+            }
+        }
         self.needs_redraw = true;
     }
 

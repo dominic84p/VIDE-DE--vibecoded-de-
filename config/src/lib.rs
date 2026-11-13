@@ -28,6 +28,22 @@ pub struct Config {
     pub night_light_strength: f64,
     /// Lock the screen after this many idle minutes; 0 = never.
     pub idle_lock_minutes: u32,
+    /// Touchpad tap-to-click.
+    pub tap_to_click: bool,
+    /// Natural (reverse) scrolling.
+    pub natural_scroll: bool,
+    /// Disable touchpad while typing.
+    pub disable_while_typing: bool,
+    /// XKB keyboard layout (e.g. "us", "de"); empty = system default.
+    pub xkb_layout: String,
+    /// XKB keyboard variant; empty = default.
+    pub xkb_variant: String,
+    /// XKB options (e.g. "caps:escape,grp:alt_shift_toggle"); empty = none.
+    pub xkb_options: String,
+    /// Key repeat delay in ms.
+    pub key_repeat_delay: i32,
+    /// Key repeat rate in Hz.
+    pub key_repeat_rate: i32,
 }
 
 impl Default for Config {
@@ -45,6 +61,14 @@ impl Default for Config {
             night_light: false,
             night_light_strength: 0.5,
             idle_lock_minutes: 0,
+            tap_to_click: true,
+            natural_scroll: false,
+            disable_while_typing: true,
+            xkb_layout: String::new(),
+            xkb_variant: String::new(),
+            xkb_options: String::new(),
+            key_repeat_delay: 300,
+            key_repeat_rate: 30,
         }
     }
 }
@@ -74,6 +98,14 @@ impl Config {
                 "night_light" => c.night_light = v == "true",
                 "night_light_strength" => c.night_light_strength = v.parse::<f64>().unwrap_or(0.5).clamp(0.0, 1.0),
                 "idle_lock_minutes" => c.idle_lock_minutes = v.parse().unwrap_or(0),
+                "tap_to_click" => c.tap_to_click = v == "true",
+                "natural_scroll" => c.natural_scroll = v == "true",
+                "disable_while_typing" => c.disable_while_typing = v == "true",
+                "xkb_layout" => c.xkb_layout = v.to_string(),
+                "xkb_variant" => c.xkb_variant = v.to_string(),
+                "xkb_options" => c.xkb_options = v.to_string(),
+                "key_repeat_delay" => c.key_repeat_delay = v.parse().unwrap_or(300).clamp(100, 2000),
+                "key_repeat_rate" => c.key_repeat_rate = v.parse().unwrap_or(30).clamp(5, 100),
                 _ => {}
             }
         }
@@ -88,7 +120,9 @@ impl Config {
         let text = format!(
             "# VIDE-DE settings. Edited by the Settings app; changes apply live.\n\
              hide_kde_apps={}\nmouse_flat={}\nmouse_speed={:.2}\nwallpaper={}\ndirect_scanout={}\n\
-             display_mode={}\ndisplay_scale={:.2}\nnight_light={}\nnight_light_strength={:.2}\nidle_lock_minutes={}\n",
+             display_mode={}\ndisplay_scale={:.2}\nnight_light={}\nnight_light_strength={:.2}\nidle_lock_minutes={}\n\
+             tap_to_click={}\nnatural_scroll={}\ndisable_while_typing={}\n\
+             xkb_layout={}\nxkb_variant={}\nxkb_options={}\nkey_repeat_delay={}\nkey_repeat_rate={}\n",
             self.hide_kde_apps,
             self.mouse_flat,
             self.mouse_speed,
@@ -98,7 +132,15 @@ impl Config {
             self.display_scale,
             self.night_light,
             self.night_light_strength,
-            self.idle_lock_minutes
+            self.idle_lock_minutes,
+            self.tap_to_click,
+            self.natural_scroll,
+            self.disable_while_typing,
+            self.xkb_layout,
+            self.xkb_variant,
+            self.xkb_options,
+            self.key_repeat_delay,
+            self.key_repeat_rate
         );
         // Write-then-rename so the compositor never reads a half-written file.
         let tmp = path.with_extension("conf.tmp");

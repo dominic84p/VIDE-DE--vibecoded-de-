@@ -44,6 +44,12 @@ pub struct Config {
     pub key_repeat_delay: i32,
     /// Key repeat rate in Hz.
     pub key_repeat_rate: i32,
+    /// Show a popup for each new notification (they always land in the Action Center).
+    pub toasts: bool,
+    /// How long a notification popup stays, in seconds, unless the app asks otherwise.
+    pub toast_seconds: u32,
+    /// Taskbar clock in 24-hour time.
+    pub clock_24h: bool,
 }
 
 impl Default for Config {
@@ -69,6 +75,9 @@ impl Default for Config {
             xkb_options: String::new(),
             key_repeat_delay: 300,
             key_repeat_rate: 30,
+            toasts: true,
+            toast_seconds: 5,
+            clock_24h: false,
         }
     }
 }
@@ -106,6 +115,9 @@ impl Config {
                 "xkb_options" => c.xkb_options = v.to_string(),
                 "key_repeat_delay" => c.key_repeat_delay = v.parse().unwrap_or(300).clamp(100, 2000),
                 "key_repeat_rate" => c.key_repeat_rate = v.parse().unwrap_or(30).clamp(5, 100),
+                "toasts" => c.toasts = v == "true",
+                "toast_seconds" => c.toast_seconds = v.parse().unwrap_or(5).clamp(2, 60),
+                "clock_24h" => c.clock_24h = v == "true",
                 _ => {}
             }
         }
@@ -122,7 +134,8 @@ impl Config {
              hide_kde_apps={}\nmouse_flat={}\nmouse_speed={:.2}\nwallpaper={}\ndirect_scanout={}\n\
              display_mode={}\ndisplay_scale={:.2}\nnight_light={}\nnight_light_strength={:.2}\nidle_lock_minutes={}\n\
              tap_to_click={}\nnatural_scroll={}\ndisable_while_typing={}\n\
-             xkb_layout={}\nxkb_variant={}\nxkb_options={}\nkey_repeat_delay={}\nkey_repeat_rate={}\n",
+             xkb_layout={}\nxkb_variant={}\nxkb_options={}\nkey_repeat_delay={}\nkey_repeat_rate={}\n\
+             toasts={}\ntoast_seconds={}\nclock_24h={}\n",
             self.hide_kde_apps,
             self.mouse_flat,
             self.mouse_speed,
@@ -140,7 +153,10 @@ impl Config {
             self.xkb_variant,
             self.xkb_options,
             self.key_repeat_delay,
-            self.key_repeat_rate
+            self.key_repeat_rate,
+            self.toasts,
+            self.toast_seconds,
+            self.clock_24h
         );
         // Write-then-rename so the compositor never reads a half-written file.
         let tmp = path.with_extension("conf.tmp");

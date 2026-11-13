@@ -650,7 +650,6 @@ const TOAST_MARGIN: i32 = 12;
 const TOAST_GAP: i32 = 8;
 const MAX_TOASTS: usize = 3;
 const TOAST_BTN_H: i32 = 32;
-const TOAST_SECS: u64 = 5;
 
 pub struct Toast {
     pub notif: Notification,
@@ -710,13 +709,13 @@ impl State {
     /// A new notification: show it as a toast, unless Focus assist is on (it still lands
     /// in the Action Center, which is the point of Focus assist).
     fn push_toast(&mut self, notif: Notification) {
-        if self.action_center.focus_assist {
+        if self.action_center.focus_assist || !self.config.toasts {
             return;
         }
         let ttl = match (notif.urgency, notif.timeout_ms) {
             (2, _) | (_, 0) => None,
             (_, ms) if ms > 0 => Some(Duration::from_millis(ms as u64).max(Duration::from_secs(2))),
-            _ => Some(Duration::from_secs(TOAST_SECS)),
+            _ => Some(Duration::from_secs(self.config.toast_seconds as u64)),
         };
         let toast = Toast { notif, since: Instant::now(), ttl };
         // The same id replaces its toast in place (progress updates, chat messages).

@@ -77,7 +77,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Panel clock: check once a second, redraw only when the minute changes.
     event_loop.handle().insert_source(Timer::from_duration(Duration::from_secs(1)), |_, _, state| {
         supervisor::guard("clock tick", || {
-            let now = state::clock_now();
+            let now = state::clock_now(state.config.clock_24h);
             if now != state.clock {
                 state.clock = now;
                 state.needs_redraw = true;

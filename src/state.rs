@@ -85,9 +85,10 @@ use smithay::{
     xwayland::{X11Surface, X11Wm},
 };
 
-pub fn clock_now() -> (String, String) {
+pub fn clock_now(h24: bool) -> (String, String) {
     let now = chrono::Local::now();
-    (now.format("%-I:%M %p").to_string(), now.format("%-m/%-d/%Y").to_string())
+    let time = if h24 { now.format("%H:%M") } else { now.format("%-I:%M %p") };
+    (time.to_string(), now.format("%-m/%-d/%Y").to_string())
 }
 
 /// What the pointer is hovering, for highlight effects.
@@ -248,6 +249,7 @@ pub struct State {
 impl State {
     pub fn new(dh: DisplayHandle, loop_handle: LoopHandle<'static, State>, socket_name: String) -> Self {
         let config = vide_config::Config::load();
+        let clock = clock_now(config.clock_24h);
         let mut seat_state = SeatState::new();
         let mut seat = seat_state.new_wl_seat(&dh, "seat0");
         let xkb = smithay::input::keyboard::XkbConfig {
@@ -323,7 +325,7 @@ impl State {
             snip: None,
             wallpaper: None,
             hover: Hover::None,
-            clock: clock_now(),
+            clock,
             action_center: ActionCenter::default(),
             toasts: Default::default(),
             notif_tx: None,
@@ -661,7 +663,12 @@ impl State {
             self.keyboard.change_repeat_info(new.key_repeat_rate, new.key_repeat_delay);
         }
         tracing::info!("settings reloaded: {new:?}");
+        let clock_format_changed = new.clock_24h != self.config.clock_24h;
         self.config = new;
+        if clock_format_changed {
+            self.clock = clock_now(self.config.clock_24h);
+            self.taskbar = None;
+        }
         self.start.menu = None;
         self.refresh_start();
         self.needs_redraw = true;

@@ -229,6 +229,8 @@ pub struct State {
     /// Our control socket, handed to apps as $VIDE_IPC.
     pub ipc_path: Option<std::path::PathBuf>,
     pub supervisor: crate::supervisor::Supervisor,
+    /// Settings changed the monitor mode or scale; the backend applies it when idle.
+    pub display_dirty: bool,
     /// Command to launch once the session is fully up (`VIBE_STARTUP`).
     pub startup: Option<String>,
     pub running: bool,
@@ -337,6 +339,7 @@ impl State {
             socket_name,
             ipc_path: None,
             supervisor: Default::default(),
+            display_dirty: false,
             startup: None,
             running: true,
             tty: false,
@@ -648,6 +651,9 @@ impl State {
             };
             let kb = self.keyboard.clone();
             let _ = kb.set_xkb_config(self, xkb);
+        }
+        if new.display_mode != self.config.display_mode || new.display_scale != self.config.display_scale {
+            self.display_dirty = true;
         }
         if new.key_repeat_delay != self.config.key_repeat_delay
             || new.key_repeat_rate != self.config.key_repeat_rate

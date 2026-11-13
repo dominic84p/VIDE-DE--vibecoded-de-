@@ -23,10 +23,10 @@ use smithay::{
         session::{libseat::LibSeatSession, Event as SessionEvent, Session},
         udev::{all_gpus, primary_gpu},
     },
-    output::{Mode as WlMode, Output, PhysicalProperties, Subpixel},
+    output::{Mode as WlMode, Output, PhysicalProperties, Scale, Subpixel},
     reexports::{
         calloop::EventLoop,
-        drm::control::{connector, Device as _, ModeTypeFlags},
+        drm::control::{connector, Device as _, Mode as DrmMode, ModeTypeFlags},
         input::Libinput,
         rustix::fs::OFlags,
     },
@@ -44,6 +44,25 @@ fn parse_mode(s: &str) -> Option<(u16, u16, i32)> {
     let (res, hz) = s.split_once('@').unwrap_or((s, ""));
     let (w, h) = res.split_once('x')?;
     Some((w.trim().parse().ok()?, h.trim().parse().ok()?, hz.trim().parse().unwrap_or(0)))
+}
+
+/// The mode Settings asked for if the monitor has it, else its preferred one.
+fn pick_mode(modes: &[DrmMode], wanted: Option<(u16, u16, i32)>) -> DrmMode {
+    wanted
+        .and_then(|(w, h, hz)| {
+            modes
+                .iter()
+                .find(|m| m.size() == (w, h) && (hz == 0 || (m.vrefresh() as i32 - hz).abs() <= 2))
+                .or_else(|| modes.iter().find(|m| m.size() == (w, h)))
+        })
+        .copied()
+        .or_else(|| modes.iter().find(|m| m.mode_type().contains(ModeTypeFlags::PREFERRED)).copied())
+        .unwrap_or(modes[0])
+}
+
+/// Outputs scale in whole steps; fractional scaling needs wp-fractional-scale, which we don't have.
+fn output_scale(c: &vide_config::Config) -> i32 {
+    (c.display_scale.clamp(0.5, 3.0).round() as i32).max(1)
 }
 
 /// Acceleration profile and speed from our settings. KDE normally does this; without
@@ -79,10 +98,47 @@ struct Tty {
     libinput: Libinput,
     manager: Manager,
     output: Out,
+    /// The wl_output we advertise, and the monitor's modes, for switching at runtime.
+    wl_output: Output,
+    modes: Vec<DrmMode>,
+    mode: DrmMode,
     renderer: GlesRenderer,
     /// A page flip is in flight; don't queue another until its vblank.
     frame_pending: bool,
     active: bool,
+}
+
+/// Settings → Display changed the mode or scale: switch to it, tell clients, and re-fit
+/// the windows. A mode the monitor refuses leaves the old one in place.
+fn apply_display(t: &mut Tty, state: &mut State) {
+    let want = pick_mode(&t.modes, parse_mode(&state.config.display_mode));
+    if want != t.mode {
+        match t.output.use_mode::<_, Elem>(want, &mut t.renderer, &DrmOutputRenderElements::default()) {
+            Ok(()) => {
+                tracing::info!("display mode: {}x{}@{}", want.size().0, want.size().1, want.vrefresh());
+                t.mode = want;
+            }
+            Err(e) => {
+                tracing::warn!("couldn't switch to {}x{}@{}: {e:?}", want.size().0, want.size().1, want.vrefresh());
+                return;
+            }
+        }
+    }
+    let wl_mode = WlMode::from(t.mode);
+    let scale = output_scale(&state.config);
+    t.wl_output.change_current_state(Some(wl_mode), None, Some(Scale::Integer(scale)), None);
+    t.wl_output.set_preferred(wl_mode);
+    state.output_size = wl_mode.size.to_logical(scale);
+    state.pointer_loc.x = state.pointer_loc.x.clamp(0.0, state.output_size.w as f64 - 1.0);
+    state.pointer_loc.y = state.pointer_loc.y.clamp(0.0, state.output_size.h as f64 - 1.0);
+    state.arrange_layers();
+    let (work, full) = (state.work_area(), state.output_rect());
+    state.wm.refit(work, full);
+    // Cached chrome was painted for the old size.
+    state.taskbar = None;
+    state.start.menu = None;
+    state.wallpaper = None;
+    state.needs_redraw = true;
 }
 
 pub fn run(event_loop: &mut EventLoop<'static, State>, state: &mut State) -> Result<(), Box<dyn std::error::Error>> {
@@ -136,17 +192,8 @@ pub fn run(event_loop: &mut EventLoop<'static, State>, state: &mut State) -> Res
         .find(|c| c.state() == connector::State::Connected && !c.modes().is_empty())
         .ok_or("no connected monitor")?;
     // Settings → Display can pin a WIDTHxHEIGHT@HZ mode; otherwise use the monitor's preferred one.
-    let wanted = parse_mode(&state.config.display_mode);
-    let mode = wanted
-        .and_then(|(w, h, hz)| {
-            conn.modes()
-                .iter()
-                .find(|m| m.size() == (w, h) && (hz == 0 || (m.vrefresh() as i32 - hz).abs() <= 2))
-                .or_else(|| conn.modes().iter().find(|m| m.size() == (w, h)))
-        })
-        .copied()
-        .or_else(|| conn.modes().iter().find(|m| m.mode_type().contains(ModeTypeFlags::PREFERRED)).copied())
-        .unwrap_or(conn.modes()[0]);
+    let modes: Vec<DrmMode> = conn.modes().to_vec();
+    let mode = pick_mode(&modes, parse_mode(&state.config.display_mode));
     let crtc = conn
         .encoders()
         .iter()
@@ -168,8 +215,8 @@ pub fn run(event_loop: &mut EventLoop<'static, State>, state: &mut State) -> Res
         },
     );
     let wl_mode = WlMode::from(mode);
-    let scale = (state.config.display_scale.clamp(0.5, 3.0).round() as i32).max(1);
-    output.change_current_state(Some(wl_mode), None, Some(smithay::output::Scale::Integer(scale)), Some((0, 0).into()));
+    let scale = output_scale(&state.config);
+    output.change_current_state(Some(wl_mode), None, Some(Scale::Integer(scale)), Some((0, 0).into()));
     output.set_preferred(wl_mode);
     let _global = output.create_global::<State>(&state.dh);
     crate::layers::set_output(state, &output);
@@ -215,6 +262,9 @@ pub fn run(event_loop: &mut EventLoop<'static, State>, state: &mut State) -> Res
         libinput,
         manager,
         output: drm_output,
+        wl_output: output.clone(),
+        modes,
+        mode,
         renderer,
         frame_pending: false,
         active: true,
@@ -270,6 +320,11 @@ pub fn run(event_loop: &mut EventLoop<'static, State>, state: &mut State) -> Res
         }
 
         let mut t = tty.borrow_mut();
+        // Wait for any page flip in flight: a modeset mid-flip would stall the output.
+        if state.display_dirty && t.active && !t.frame_pending {
+            state.display_dirty = false;
+            crate::supervisor::guard("display change", || apply_display(&mut t, state));
+        }
         if let Some(region) = state.screenshot_requested.take() {
             if t.active {
                 crate::screenshot::take(&mut t.renderer, state, region);

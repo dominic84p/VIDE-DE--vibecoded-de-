@@ -621,6 +621,29 @@ impl Wm {
         w.configure(Some(size), &[(Flag::Maximized, true)]);
     }
 
+    /// The output changed size (Settings → Display): bring maximized and fullscreen windows
+    /// to the new size and pull any window left off-screen back into view.
+    pub fn refit(&mut self, work: Rectangle<i32, Logical>, output: Rectangle<i32, Logical>) {
+        for w in &mut self.windows {
+            if w.fullscreen.is_some() {
+                w.pos = output.loc;
+                w.configure(Some(output.size), &[]);
+            } else if w.maximized.is_some() {
+                let (pos, size) = if w.ssd {
+                    (work.loc + Point::from((0, TITLE_H)), Size::from((work.size.w, work.size.h - TITLE_H)))
+                } else {
+                    (work.loc, work.size)
+                };
+                w.pos = pos;
+                w.configure(Some(size), &[]);
+            } else {
+                let g = w.geometry();
+                w.pos.x = w.pos.x.clamp(80 - g.size.w, (output.size.w - 80).max(80 - g.size.w));
+                w.pos.y = w.pos.y.clamp(TITLE_H, (work.size.h - TITLE_H).max(TITLE_H));
+            }
+        }
+    }
+
     pub fn unmaximize(&mut self, surface: &WlSurface) {
         let Some(w) = self.find_mut(surface) else { return };
         let Some(r) = w.maximized.take() else { return };

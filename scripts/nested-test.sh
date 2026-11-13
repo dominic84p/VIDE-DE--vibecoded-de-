@@ -24,6 +24,7 @@
 #                                to audio and systemd (still drawn on the nested screen)
 #   expect-window TEXT [SECS]    (quote multi-word TEXT) wait until a window's app id or title contains TEXT, else fail
 #   move X Y | click X Y [left|right|middle] | down | up
+#   scroll N                     N mouse-wheel notches at the pointer, positive down
 #   key NAME[+NAME...]           e.g. key enter, key ctrl+l   (a-z 0-9 esc tab enter space arrows ...)
 #   type TEXT                    lowercase letters, digits, space and . / - , (capitals use shift)
 #   shot NAME                    save OUT/NAME.png
@@ -47,7 +48,7 @@ while [ $# -gt 0 ]; do
     --startup) STARTUP="$2"; shift 2 ;;
     --real-bus) REALBUS=1; shift ;;
     --timeout) TIMEOUT="$2"; shift 2 ;;
-    -h | --help) sed -n '2,36p' "$0"; exit 0 ;;
+    -h | --help) sed -n '2,37p' "$0"; exit 0 ;;
     *) TEST="$1"; shift ;;
   esac
 done
@@ -161,6 +162,8 @@ for n, raw in enumerate(open(os.environ["NT_TEST"]), 1):
         ipc(f"pointer-move {x} {y}"); time.sleep(0.15); ipc(f"pointer-click {b[0] if b else 'left'}")
     elif cmd in ("down", "up"):
         ipc(f"pointer-{cmd}")
+    elif cmd == "scroll":
+        ipc(f"pointer-scroll {rest}")
     elif cmd == "key":
         ipc(f"key {rest}")
     elif cmd == "type":

@@ -36,6 +36,7 @@ The following commands are **refused** unless `vibe-comp` was started with `VIBE
 | `pointer-click` | `[left\|right\|middle]` | Click a mouse button at the current pointer position |
 | `pointer-down` | `[left\|right\|middle]` | Press a mouse button |
 | `pointer-up` | `[left\|right\|middle]` | Release a mouse button |
+| `pointer-scroll` | `<N>` | Send `N` mouse-wheel notches at the pointer (positive scrolls down) |
 | `pointer-pos` | — | Reply with current pointer coordinates |
 | `pointer-state` | — | Dump active grab and which surface holds pointer focus |
 | `key` | `<combo>` | Press and release a key combo (e.g. `ctrl+shift+t`, `alt+tab`, `super`) |

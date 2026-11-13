@@ -19,6 +19,8 @@ use std::{
 };
 
 use smithay::{
+    backend::input::{Axis, AxisSource},
+    input::pointer::AxisFrame,
     reexports::calloop::{generic::Generic, Interest, LoopHandle, Mode, PostAction},
     utils::SERIAL_COUNTER,
     wayland::selection::data_device::set_data_device_selection,
@@ -85,7 +87,7 @@ fn handle_client(state: &mut State, stream: UnixStream) {
             }
             let _ = (&stream).write_all(state.describe_popups().as_bytes());
         }
-        "pointer-move" | "pointer-click" | "pointer-down" | "pointer-up" | "key" | "type" | "pointer-pos" | "pointer-state" => {
+        "pointer-move" | "pointer-click" | "pointer-down" | "pointer-up" | "pointer-scroll" | "key" | "type" | "pointer-pos" | "pointer-state" => {
             if !state.test_control {
                 return tracing::warn!("control socket: {cmd} needs VIBE_TEST_INPUT");
             }
@@ -216,6 +218,19 @@ impl State {
                 }
                 if cmd != "pointer-down" {
                     self.on_button(button, ButtonState::Released, t + 1);
+                }
+            }
+            "pointer-scroll" => {
+                // `pointer-scroll N`: N wheel notches, positive down, like a mouse wheel would send.
+                let notches: i32 = arg.trim().parse().unwrap_or(0);
+                for _ in 0..notches.abs() {
+                    let frame = AxisFrame::new(t)
+                        .source(AxisSource::Wheel)
+                        .value(Axis::Vertical, 15.0 * notches.signum() as f64)
+                        .v120(Axis::Vertical, 120 * notches.signum());
+                    let ptr = self.pointer.clone();
+                    ptr.axis(self, frame);
+                    ptr.frame(self);
                 }
             }
             "key" => {

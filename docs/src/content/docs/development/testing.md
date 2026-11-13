@@ -27,7 +27,7 @@ It automatically handles all safety isolation:
 **Test file commands** (used in `scripts/nested-tests/*.test`):
 - `run <cmd>` / `run-host <cmd>` — launch an app inside the nested session (or on the host)
 - `expect-window <title>` — wait for a window with matching title (supports quoted strings)
-- `move <X> <Y>`, `click [left|right|middle]`, `key <combo>`, `type <text>` — inject pointer/keyboard input
+- `move <X> <Y>`, `click [left|right|middle]`, `scroll <N>`, `key <combo>`, `type <text>` — inject pointer/keyboard input
 - `shot <name>` — save a screenshot to the run's output directory
 - `windows`, `ipc <cmd>` — query windows or send any `$VIDE_IPC` command (e.g. `popups`, `pointer-state`, `stall`)
 - `stop` / `cont` — `SIGSTOP` / `SIGCONT` a launched client to test freeze detection

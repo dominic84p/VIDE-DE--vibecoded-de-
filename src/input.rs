@@ -72,6 +72,8 @@ enum Action {
     CloseActionCenter,
     Volume(f32),
     Mute,
+    /// A media key, sent to whatever is playing (MPRIS method name), focused or not.
+    Media(&'static str),
     Brightness(f32),
     Screenshot { region: bool },
     Quit,
@@ -110,6 +112,10 @@ fn bind(super_mod: bool, mods: &ModifiersState, sym: Keysym) -> Option<Action> {
         Keysym::XF86_AudioRaiseVolume => return Some(Action::Volume(0.05)),
         Keysym::XF86_AudioLowerVolume => return Some(Action::Volume(-0.05)),
         Keysym::XF86_AudioMute => return Some(Action::Mute),
+        Keysym::XF86_AudioPlay | Keysym::XF86_AudioPause => return Some(Action::Media("PlayPause")),
+        Keysym::XF86_AudioNext => return Some(Action::Media("Next")),
+        Keysym::XF86_AudioPrev => return Some(Action::Media("Previous")),
+        Keysym::XF86_AudioStop => return Some(Action::Media("Stop")),
         Keysym::XF86_MonBrightnessUp => return Some(Action::Brightness(0.1)),
         Keysym::XF86_MonBrightnessDown => return Some(Action::Brightness(-0.1)),
         _ => {}
@@ -485,6 +491,14 @@ impl State {
             Action::CloseActionCenter => self.close_action_center(),
             Action::Volume(d) => self.set_volume(self.tray.volume + d),
             Action::Mute => self.toggle_mute(),
+            // Like Windoze, play/pause reaches the player even when it isn't focused: the first
+            // MPRIS player on the bus (a shell command, so we never wait on D-Bus).
+            Action::Media(method) => self.spawn(&format!(
+                "p=$(dbus-send --session --print-reply --dest=org.freedesktop.DBus /org/freedesktop/DBus \
+                 org.freedesktop.DBus.ListNames | grep -o 'org.mpris.MediaPlayer2[^\"]*' | head -1); \
+                 [ -n \"$p\" ] && dbus-send --session --type=method_call --dest=\"$p\" /org/mpris/MediaPlayer2 \
+                 org.mpris.MediaPlayer2.Player.{method}"
+            )),
             Action::Brightness(d) => self.set_brightness(self.tray.brightness + d),
             Action::Screenshot { region } => self.start_screenshot(region),
             Action::Quit => self.running = false,

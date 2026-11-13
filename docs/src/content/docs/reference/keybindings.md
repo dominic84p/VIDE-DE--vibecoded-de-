@@ -70,6 +70,9 @@ description: 'Complete keyboard shortcut list'
 | `XF86AudioRaiseVolume` | Volume +5% |
 | `XF86AudioLowerVolume` | Volume -5% |
 | `XF86AudioMute` | Toggle mute |
+| `XF86AudioPlay` / `XF86AudioPause` | Play/pause whatever is playing (first MPRIS player), even unfocused |
+| `XF86AudioNext` / `XF86AudioPrev` | Next / previous track |
+| `XF86AudioStop` | Stop playback |
 | `XF86MonBrightnessUp` | Brightness +10% |
 | `XF86MonBrightnessDown` | Brightness -10% |
 | `XF86AudioPlay` | Play/Pause |

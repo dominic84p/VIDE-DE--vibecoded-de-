@@ -783,19 +783,17 @@ impl State {
         }
     }
 
-    /// Hidden while the Action Center shows the same notifications, and under a fullscreen
-    /// app (the taskbar is hidden there too).
+    /// Hidden while the Action Center shows the same notifications. Over a fullscreen app
+    /// (a game, a video) they show too, as on Windoze: a small cached picture in one corner,
+    /// so only that corner is redrawn and the app's frames aren't touched.
     fn toasts_visible(&self) -> bool {
-        if self.toasts.list.is_empty() || self.action_center.open {
-            return false;
-        }
-        let focused = self.focused();
-        let fullscreen = self.wm.top().is_some_and(|w| w.fullscreen.is_some() && Some(w.surface()) == focused.as_ref());
-        self.start.open || !fullscreen
+        !self.toasts.list.is_empty() && !self.action_center.open
     }
 
+    /// Bottom-right, above the taskbar, or in the corner when a fullscreen app hides it.
     fn toast_origin(&self, size: (i32, i32)) -> Point<i32, Logical> {
-        (self.output_size.w - size.0 - TOAST_MARGIN, self.output_size.h - TASKBAR_H - TOAST_MARGIN - size.1).into()
+        let bottom = if self.taskbar_shown() { self.output_size.h - TASKBAR_H } else { self.output_size.h };
+        (self.output_size.w - size.0 - TOAST_MARGIN, bottom - TOAST_MARGIN - size.1).into()
     }
 
     pub fn toasts_picture(&mut self) -> Option<(MemoryRenderBuffer, Point<i32, Logical>)> {

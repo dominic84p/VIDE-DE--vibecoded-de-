@@ -1,7 +1,7 @@
 # Regression: the mouse wheel in PowerSlop. Apps that ask for mouse reports (vim, htop) must get
 # real wheel events, not arrow keys, and the plain shell must scroll its own history.
 run target/release/powerslop -e python3 scripts/nested-tests/pages/wheel-probe.py
-expect-window "probe ready" 30
+expect-window "PowerSlop 2.0 - probe" 30
 wait 1
 move 400 300
 scroll -1

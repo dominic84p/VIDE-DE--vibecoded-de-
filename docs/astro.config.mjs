@@ -20,6 +20,7 @@ export default defineConfig({
 				{ icon: 'github', label: 'GitHub', href: 'https://github.com/dominic84p/vide-de' },
 			],
 			sidebar: [
+				{ label: 'Home', slug: 'index' },
 				{
 					label: 'Getting Started',
 					items: [

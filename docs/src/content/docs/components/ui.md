@@ -17,7 +17,7 @@ ui.rs: High-level chrome components
     ├── WindowTitlebar
     ├── RightClickMenu
     ├── TrayFlyout (volume/brightness)
-    ├── TaskView (desktops panel)
+    ├── TaskView (full-screen, desktops.rs)
     ├── AltTabSwitcher
     └── SnipOverlay
     │
@@ -122,17 +122,23 @@ impl MemoryRenderBuffer {
 - Cache hit rate > 95% in typical usage
 - Only taskbar clock updates every second (small key change)
 
-## Theme Integration
+## Theme Integration (light and dark)
 
-Colors come from `Config` (polling `settings.conf`):
+Every shell colour comes from `theme.rs`: two palettes, Windows 10's dark (the default) and light
+"Windows mode", picked by `light_mode` in `settings.conf` (Settings > Personalization > Colors).
 
 ```rust
-fn taskbar_colors(config: &Config) -> (Color, Color) {
-    let bg = config.taskbar_bg.unwrap_or(0xFF_0078D7); // VIDE-DE blue
-    let fg = config.taskbar_fg.unwrap_or(0xFF_FFFFFF);
-    (bg.into(), fg.into())
-}
+use crate::theme::{th, ACCENT, ON_ACCENT};
+c.fill(th().taskbar);                          // dark or light, whichever is on
+c.text(f, 12.0, x, y, h, ON_ACCENT, "Tile");    // text on the accent colour stays white
 ```
+
+- Glyphs (the SVG icons drawn with `tray::glyph`) are written in white (`"#fff"`) and recoloured to
+  the theme's text colour; `tray::with_ink` draws them in another colour, e.g. white on a lit tile.
+- None of the picture cache keys include the mode, so a switch calls `State::repaint_shell`, which
+  drops every cached picture. It applies live; no logout.
+- Titlebars stay white in both modes, as in Windows 10. `vide-desktop` reads `light_mode` itself for
+  its right-click menu.
 
 ## Related Files
 

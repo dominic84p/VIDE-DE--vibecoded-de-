@@ -8,19 +8,15 @@ use smithay::{
 };
 
 use crate::{
-    canvas::{hex, measure, Canvas, Rgba},
+    canvas::{measure, Canvas},
     state::State,
+    theme::th,
     ui::TASKBAR_H,
 };
 
 const ROW: i32 = 32;
 const PAD: i32 = 4;
 const MIN_W: i32 = 200;
-const BG: Rgba = hex(0x2b2b2b);
-const BORDER: Rgba = hex(0x4a4a4a);
-const HOVER: Rgba = Rgba(0xff, 0xff, 0xff, 0x1f);
-const TEXT: Rgba = hex(0xffffff);
-const TEXT_DIM: Rgba = hex(0x7a7a7a);
 
 #[derive(Clone, PartialEq, Debug)]
 pub enum Action {
@@ -53,7 +49,7 @@ pub struct Menu {
     pub items: Vec<(String, Action)>,
     pub hover: Option<usize>,
     pub size: Size<i32, Logical>,
-    picture: Option<(Option<usize>, MemoryRenderBuffer)>,
+    pub(crate) picture: Option<(Option<usize>, MemoryRenderBuffer)>,
 }
 
 impl Menu {
@@ -74,25 +70,25 @@ impl Menu {
     pub fn picture(&mut self, font: Option<&fontdue::Font>) -> &MemoryRenderBuffer {
         if self.picture.as_ref().is_none_or(|(h, _)| *h != self.hover) {
             let mut c = Canvas::new(self.size.w, self.size.h);
-            c.fill(BG);
-            c.outline(0, 0, self.size.w, self.size.h, BORDER);
+            c.fill(th().menu);
+            c.outline(0, 0, self.size.w, self.size.h, th().border);
             for (i, (label, action)) in self.items.iter().enumerate() {
                 let y = PAD + i as i32 * ROW;
                 if *action == Action::Separator {
-                    c.rect(12, y + ROW / 2, self.size.w - 24, 1, BORDER);
+                    c.rect(12, y + ROW / 2, self.size.w - 24, 1, th().border);
                     continue;
                 }
                 if self.hover == Some(i) {
-                    c.rect(1, y, self.size.w - 2, ROW, HOVER);
+                    c.rect(1, y, self.size.w - 2, ROW, th().menu_hover);
                 }
                 if let Some(f) = font {
                     // "Label\tShortcut": shortcut right-aligned and dimmed, like Windows menus.
                     let (text, shortcut) = label.split_once('\t').unwrap_or((label, ""));
-                    let color = if *action == Action::Inert { TEXT_DIM } else { TEXT };
+                    let color = if *action == Action::Inert { th().disabled } else { th().text };
                     c.text(f, 13.0, 16, y, ROW, color, text);
                     if !shortcut.is_empty() {
                         let sw = measure(f, 13.0, shortcut);
-                        c.text(f, 13.0, self.size.w - 16 - sw, y, ROW, TEXT_DIM, shortcut);
+                        c.text(f, 13.0, self.size.w - 16 - sw, y, ROW, th().disabled, shortcut);
                     }
                 }
             }
@@ -131,20 +127,19 @@ impl State {
     pub fn open_window_menu(&mut self, surface: &WlSurface, at: Point<i32, Logical>) {
         let Some(w) = self.wm.find(surface) else { return };
         let s = surface.clone();
-        let mut items = Vec::new();
-        if w.maximized.is_some() || w.fullscreen.is_some() {
-            items.push(("Restore".into(), Action::Restore(s.clone())));
+        // Windows 10's window menu: entries that don't apply are greyed, not hidden.
+        let resized = w.maximized.is_some() || w.fullscreen.is_some();
+        let mut items = vec![
+            ("Restore".into(), if resized { Action::Restore(s.clone()) } else { Action::Inert }),
+            ("Minimize".into(), Action::Minimize(s.clone())),
+            ("Maximize".into(), if w.maximized.is_none() { Action::Maximize(s.clone()) } else { Action::Inert }),
+            (String::new(), Action::Separator),
+            ("Close\tAlt+F4".into(), Action::Close(s.clone())),
+        ];
+        // A hung app won't answer Close; Windows offers to end it then, so do we.
+        if w.unresponsive {
+            items.push(("End process".into(), Action::Kill(s)));
         }
-        items.push(("Minimize".into(), Action::Minimize(s.clone())));
-        if w.maximized.is_none() {
-            items.push(("Maximize".into(), Action::Maximize(s.clone())));
-        }
-        if w.fullscreen.is_none() {
-            items.push(("Fullscreen".into(), Action::Fullscreen(s.clone())));
-        }
-        items.push((String::new(), Action::Separator));
-        items.push(("Close\tAlt+F4".into(), Action::Close(s.clone())));
-        items.push(("End process".into(), Action::Kill(s)));
         self.open_menu(at, items);
     }
 

@@ -86,7 +86,7 @@ impl Category {
             ],
             Self::Devices => &[SubPage::Bluetooth, SubPage::Mouse, SubPage::Touchpad, SubPage::Keyboard],
             Self::Network => &[SubPage::NetStatus, SubPage::Wifi, SubPage::Ethernet],
-            Self::Personalization => &[SubPage::Background, SubPage::Start, SubPage::Taskbar],
+            Self::Personalization => &[SubPage::Background, SubPage::Colors, SubPage::Start, SubPage::Taskbar],
             Self::Apps => &[SubPage::AppsFeatures, SubPage::DefaultApps],
             Self::Accounts => &[SubPage::YourInfo],
             Self::TimeLanguage => &[SubPage::DateTime, SubPage::Language],
@@ -114,6 +114,7 @@ pub enum SubPage {
     Wifi,
     Ethernet,
     Background,
+    Colors,
     Start,
     Taskbar,
     AppsFeatures,
@@ -130,7 +131,7 @@ pub enum SubPage {
 }
 
 impl SubPage {
-    const ALL: [Self; 27] = [
+    const ALL: [Self; 28] = [
         Self::Display,
         Self::Sound,
         Self::Notifications,
@@ -145,6 +146,7 @@ impl SubPage {
         Self::Wifi,
         Self::Ethernet,
         Self::Background,
+        Self::Colors,
         Self::Start,
         Self::Taskbar,
         Self::AppsFeatures,
@@ -177,6 +179,7 @@ impl SubPage {
             Self::Wifi => "wifi",
             Self::Ethernet => "ethernet",
             Self::Background => "background",
+            Self::Colors => "colors",
             Self::Start => "start",
             Self::Taskbar => "taskbar",
             Self::AppsFeatures => "apps",
@@ -209,6 +212,7 @@ impl SubPage {
             Self::Wifi => "Wi-Fi",
             Self::Ethernet => "Ethernet",
             Self::Background => "Background",
+            Self::Colors => "Colors",
             Self::Start => "Start",
             Self::Taskbar => "Taskbar",
             Self::AppsFeatures => "Apps & features",
@@ -266,6 +270,7 @@ const SEARCH_INDEX: &[SearchItem] = &[
     SearchItem { label: "Ethernet adapters", keywords: "ethernet wired lan", cat: Category::Network, page: SubPage::Ethernet },
     SearchItem { label: "Background wallpaper", keywords: "background wallpaper picture desktop", cat: Category::Personalization, page: SubPage::Background },
     SearchItem { label: "Start menu settings", keywords: "start menu hide kde apps", cat: Category::Personalization, page: SubPage::Start },
+    SearchItem { label: "Choose your default Windows mode", keywords: "colors dark light mode theme taskbar", cat: Category::Personalization, page: SubPage::Colors },
     SearchItem { label: "Taskbar info", keywords: "taskbar pins tray", cat: Category::Personalization, page: SubPage::Taskbar },
     SearchItem { label: "Apps & features", keywords: "apps programs installed launch", cat: Category::Apps, page: SubPage::AppsFeatures },
     SearchItem { label: "Default apps", keywords: "default apps browser file manager", cat: Category::Apps, page: SubPage::DefaultApps },

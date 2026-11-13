@@ -27,26 +27,14 @@ use zbus::{
 };
 
 use crate::{
-    canvas::{hex, measure, Canvas, Rgba},
+    canvas::{measure, Canvas},
     state::State,
+    theme::{th, ACCENT, ACCENT_HOVER, ON_ACCENT},
     ui::TASKBAR_H,
 };
 
 const ACTION_CENTER_W: i32 = 396;
 const HEADER_H: i32 = 44;
-const ACCENT: Rgba = hex(0x0078d7);
-const ACCENT_HOVER: Rgba = hex(0x1a86dd);
-const BG: Rgba = hex(0x1f1f1f);
-const BORDER: Rgba = hex(0x3c3c3c);
-const CARD: Rgba = hex(0x2b2b2b);
-const CARD_HOVER: Rgba = hex(0x353535);
-const BUTTON: Rgba = hex(0x4c4c4c);
-const TILE: Rgba = hex(0x3b3b3b);
-const TILE_HOVER: Rgba = hex(0x4a4a4a);
-const LINK: Rgba = hex(0x8ec5f5);
-const WHITE: Rgba = hex(0xffffff);
-const DIM: Rgba = hex(0xa0a0a0);
-const BODY: Rgba = hex(0xc8c8c8);
 const TILE_W: i32 = (ACTION_CENTER_W - 24 - 12) / 4;
 const TILE_H: i32 = 58;
 
@@ -132,6 +120,9 @@ pub struct ActionCenter {
     /// All the quick actions showing, not just the first row.
     pub expanded: bool,
     pub focus_assist: bool,
+    /// Notifications that arrived since the Action Center was last opened: the taskbar
+    /// button shows them as a badge, like Windows 10's.
+    pub unseen: usize,
 }
 
 fn strip_markup(input: &str) -> String {
@@ -345,6 +336,7 @@ impl State {
         self.action_center.open = !self.action_center.open;
         if self.action_center.open {
             self.action_center.hover = ActionCenterHit::Nothing;
+            self.action_center.unseen = 0;
             self.toasts.list.clear();
             self.toasts.panel = None;
             self.close_flyout();
@@ -411,6 +403,8 @@ impl State {
                     self.action_center.notifications[pos] = notif;
                 } else {
                     self.action_center.notifications.insert(0, notif);
+                    self.action_center.unseen += 1;
+                    self.taskbar = None;
                     if self.action_center.notifications.len() > 50 {
                         self.action_center.notifications.pop();
                     }
@@ -520,8 +514,8 @@ fn draw_action_center(
 ) -> ActionCenterPanel {
     let (w, h) = (ACTION_CENTER_W, key.height);
     let mut c = Canvas::new(w, h);
-    c.fill(BG);
-    c.rect(0, 0, 1, h, BORDER);
+    c.fill(th().panel);
+    c.rect(0, 0, 1, h, th().border);
     let mut hits = vec![(rect(0, 0, w, h), ActionCenterHit::Nothing)];
     let hover = |x: &ActionCenterHit| key.hover == *x;
     let Some(f) = font else { return ActionCenterPanel { key, buffer: c.into_buffer(), hits } };
@@ -537,44 +531,45 @@ fn draw_action_center(
         let fill = match (key.on[i], hover(&hit)) {
             (true, true) => ACCENT_HOVER,
             (true, false) => ACCENT,
-            (false, true) => TILE_HOVER,
-            (false, false) => TILE,
+            (false, true) => th().tile_hover,
+            (false, false) => th().tile,
         };
         c.rect(x, y, TILE_W, TILE_H, fill);
         let (gx, gy) = (x as f32 + 18.0, y as f32 + 17.0);
-        match q {
+        let ink = if key.on[i] { ON_ACCENT } else { th().text };
+        crate::tray::with_ink(ink, || match q {
             QuickAction::Network => crate::tray::wifi(&mut c, gx, gy, true),
             QuickAction::AllSettings => crate::tray::glyph(&mut c, GEAR.into(), gx, gy, 18),
             QuickAction::Bluetooth => crate::tray::bluetooth(&mut c, gx, gy),
-            QuickAction::NightLight => crate::tray::sun(&mut c, gx, gy, WHITE),
+            QuickAction::NightLight => crate::tray::sun(&mut c, gx, gy, ink),
             QuickAction::FocusAssist => crate::tray::glyph(&mut c, MOON.into(), gx, gy, 18),
             QuickAction::Airplane => crate::tray::airplane(&mut c, gx, gy),
             QuickAction::ScreenSnip => crate::tray::glyph(&mut c, SNIP.into(), gx, gy, 18),
             QuickAction::Hotspot => crate::tray::hotspot(&mut c, gx, gy),
-        }
-        c.text(f, 12.0, x + 8, y + 34, 18, WHITE, &crate::canvas::ellipsize(f, 12.0, label, TILE_W - 12));
+        });
+        c.text(f, 12.0, x + 8, y + 34, 18, ink, &crate::canvas::ellipsize(f, 12.0, label, TILE_W - 12));
         hits.push((rect(x, y, TILE_W, TILE_H), hit));
     }
     let expand = if key.expanded { "Collapse" } else { "Expand" };
     let ew = measure(f, 12.0, expand);
-    c.text(f, 12.0, 14, links_y, 24, if hover(&ActionCenterHit::Expand) { WHITE } else { LINK }, expand);
+    c.text(f, 12.0, 14, links_y, 24, if hover(&ActionCenterHit::Expand) { th().text } else { th().link }, expand);
     hits.push((rect(10, links_y, ew + 8, 24), ActionCenterHit::Expand));
     if !key.notifications.is_empty() {
         let clear = "Clear all notifications";
         let cw = measure(f, 12.0, clear);
-        c.text(f, 12.0, w - 14 - cw, links_y, 24, if hover(&ActionCenterHit::ClearAll) { WHITE } else { LINK }, clear);
+        c.text(f, 12.0, w - 14 - cw, links_y, 24, if hover(&ActionCenterHit::ClearAll) { th().text } else { th().link }, clear);
         hits.push((rect(w - 18 - cw, links_y, cw + 8, 24), ActionCenterHit::ClearAll));
     }
 
     // Top: "Manage notifications".
     let manage = "Manage notifications";
     let mw = measure(f, 12.0, manage);
-    c.text(f, 12.0, w - 14 - mw, 10, 24, if hover(&ActionCenterHit::Manage) { WHITE } else { LINK }, manage);
+    c.text(f, 12.0, w - 14 - mw, 10, 24, if hover(&ActionCenterHit::Manage) { th().text } else { th().link }, manage);
     hits.push((rect(w - 18 - mw, 10, mw + 8, 24), ActionCenterHit::Manage));
 
     if key.notifications.is_empty() {
         let t = "No new notifications";
-        c.text(f, 14.0, (w - measure(f, 14.0, t)) / 2, HEADER_H + 10, 24, BODY, t);
+        c.text(f, 14.0, (w - measure(f, 14.0, t)) / 2, HEADER_H + 10, 24, th().body, t);
         hits.reverse();
         return ActionCenterPanel { key, buffer: c.into_buffer(), hits };
     }
@@ -593,33 +588,33 @@ fn draw_action_center(
             break;
         }
         if header {
-            c.text(f, 13.0, card_x + 2, y + 4, 22, WHITE, &crate::canvas::ellipsize(f, 13.0, &n.app_name, card_w - 8));
+            c.text(f, 13.0, card_x + 2, y + 4, 22, th().text, &crate::canvas::ellipsize(f, 13.0, &n.app_name, card_w - 8));
             y += 30;
             last_app = Some(&n.app_name);
         }
         let card_hit = ActionCenterHit::Card(n.id);
         let card_hover = hover(&card_hit) || matches!(&key.hover, ActionCenterHit::Close(id) | ActionCenterHit::Action(id, _) if *id == n.id);
-        c.rect(card_x, y, card_w, card_h, if card_hover { CARD_HOVER } else { CARD });
+        c.rect(card_x, y, card_w, card_h, if card_hover { th().card_hover } else { th().card });
         hits.push((rect(card_x, y, card_w, card_h), card_hit));
 
-        c.text(f, 14.0, card_x + 12, y + 8, 22, WHITE, &crate::canvas::ellipsize(f, 14.0, &n.summary, card_w - 90));
+        c.text(f, 14.0, card_x + 12, y + 8, 22, th().text, &crate::canvas::ellipsize(f, 14.0, &n.summary, card_w - 90));
         for (i, line) in body_lines.iter().enumerate() {
-            c.text(f, 13.0, card_x + 12, y + 32 + i as i32 * 18, 18, BODY, &crate::canvas::ellipsize(f, 13.0, line, card_w - 24));
+            c.text(f, 13.0, card_x + 12, y + 32 + i as i32 * 18, 18, th().body, &crate::canvas::ellipsize(f, 13.0, line, card_w - 24));
         }
         // Time, or the close X while hovered, top right.
         let cx = card_x + card_w - 28;
         if card_hover {
             let close_hover = hover(&ActionCenterHit::Close(n.id));
             if close_hover {
-                c.rect(cx, y + 6, 22, 22, BUTTON);
+                c.rect(cx, y + 6, 22, 22, th().button);
             }
             let (x0, y0) = (cx as f32 + 7.0, y as f32 + 13.0);
-            c.line(x0, y0, x0 + 8.0, y0 + 8.0, 1.2, WHITE);
-            c.line(x0 + 8.0, y0, x0, y0 + 8.0, 1.2, WHITE);
+            c.line(x0, y0, x0 + 8.0, y0 + 8.0, 1.2, th().text);
+            c.line(x0 + 8.0, y0, x0, y0 + 8.0, 1.2, th().text);
             hits.push((rect(cx, y + 6, 22, 22), ActionCenterHit::Close(n.id)));
         } else {
             let tw = measure(f, 11.0, &n.timestamp);
-            c.text(f, 11.0, card_x + card_w - 12 - tw, y + 8, 22, DIM, &n.timestamp);
+            c.text(f, 11.0, card_x + card_w - 12 - tw, y + 8, 22, th().text_dim, &n.timestamp);
         }
         if has_actions {
             let actions: Vec<_> = n.actions.iter().filter(|(k, _)| k != "default").take(3).collect();
@@ -629,9 +624,9 @@ fn draw_action_center(
                 let bx = card_x + 12 + i as i32 * (bw + 4);
                 let by = y + card_h - 40;
                 let hit = ActionCenterHit::Action(n.id, action_key.clone());
-                c.rect(bx, by, bw, 32, if hover(&hit) { hex(0x5c5c5c) } else { BUTTON });
+                c.rect(bx, by, bw, 32, if hover(&hit) { th().button_hover } else { th().button });
                 let lw = measure(f, 12.0, label);
-                c.text(f, 12.0, bx + (bw - lw).max(8) / 2, by, 32, WHITE, &crate::canvas::ellipsize(f, 12.0, label, bw - 12));
+                c.text(f, 12.0, bx + (bw - lw).max(8) / 2, by, 32, th().text, &crate::canvas::ellipsize(f, 12.0, label, bw - 12));
                 hits.push((rect(bx, by, bw, 32), hit));
             }
         }
@@ -696,6 +691,13 @@ pub struct Toasts {
     pub list: Vec<Toast>,
     pub hover: ToastHit,
     panel: Option<ToastPanel>,
+}
+
+impl Toasts {
+    /// Repaint on the next frame (after a light/dark switch).
+    pub fn repaint(&mut self) {
+        self.panel = None;
+    }
 }
 
 fn toast_card_h(n: &Notification) -> i32 {
@@ -839,8 +841,8 @@ fn draw_toasts(font: Option<&fontdue::Font>, icons: &mut crate::icons::Icons, ke
     for n in &key.items {
         let ch = toast_card_h(n);
         let over = key.hover.id() == Some(n.id);
-        c.rect(0, y, TOAST_W, ch, BG);
-        c.outline(0, y, TOAST_W, ch, BORDER);
+        c.rect(0, y, TOAST_W, ch, th().panel);
+        c.outline(0, y, TOAST_W, ch, th().border);
         hits.push((rect(0, y, TOAST_W, ch), ToastHit::Body(n.id)));
 
         let icon = [n.app_icon.as_str(), n.app_name.as_str()]
@@ -852,22 +854,22 @@ fn draw_toasts(font: Option<&fontdue::Font>, icons: &mut crate::icons::Icons, ke
             c.icon(icon, 12, y + 10);
             tx = 12 + 16 + 8;
         }
-        c.text(f, 12.0, tx, y + 8, 18, BODY, &crate::canvas::ellipsize(f, 12.0, &n.app_name, TOAST_W - tx - 44));
-        c.text(f, 14.0, 12, y + 30, 22, WHITE, &crate::canvas::ellipsize(f, 14.0, &n.summary, TOAST_W - 24));
+        c.text(f, 12.0, tx, y + 8, 18, th().body, &crate::canvas::ellipsize(f, 12.0, &n.app_name, TOAST_W - tx - 44));
+        c.text(f, 14.0, 12, y + 30, 22, th().text, &crate::canvas::ellipsize(f, 14.0, &n.summary, TOAST_W - 24));
         let lines: Vec<&str> = n.body.lines().filter(|l| !l.trim().is_empty()).take(2).collect();
         for (i, line) in lines.iter().enumerate() {
-            c.text(f, 13.0, 12, y + 52 + i as i32 * 18, 18, BODY, &crate::canvas::ellipsize(f, 13.0, line, TOAST_W - 24));
+            c.text(f, 13.0, 12, y + 52 + i as i32 * 18, 18, th().body, &crate::canvas::ellipsize(f, 13.0, line, TOAST_W - 24));
         }
 
         if over {
             let close = ToastHit::Close(n.id);
             let (cx, cy, cs) = (TOAST_W - 32, y + 1, 30);
             if hover(&close) {
-                c.rect(cx, cy, cs, cs, BUTTON);
+                c.rect(cx, cy, cs, cs, th().button);
             }
             let (x0, y0) = (cx as f32 + 10.0, cy as f32 + 10.0);
-            c.line(x0, y0, x0 + 10.0, y0 + 10.0, 1.2, WHITE);
-            c.line(x0 + 10.0, y0, x0, y0 + 10.0, 1.2, WHITE);
+            c.line(x0, y0, x0 + 10.0, y0 + 10.0, 1.2, th().text);
+            c.line(x0 + 10.0, y0, x0, y0 + 10.0, 1.2, th().text);
             hits.push((rect(cx, cy, cs, cs), close));
         }
 
@@ -881,9 +883,9 @@ fn draw_toasts(font: Option<&fontdue::Font>, icons: &mut crate::icons::Icons, ke
             for (i, (action_key, label)) in actions.into_iter().enumerate() {
                 let bx = 1 + i as i32 * (bw + gap);
                 let hit = ToastHit::Action(n.id, action_key.clone());
-                c.rect(bx, by, bw, TOAST_BTN_H, if hover(&hit) { hex(0x5c5c5c) } else { TILE });
+                c.rect(bx, by, bw, TOAST_BTN_H, if hover(&hit) { th().button_hover } else { th().tile });
                 let lw = measure(f, 12.0, label);
-                c.text(f, 12.0, bx + (bw - lw).max(8) / 2, by, TOAST_BTN_H, WHITE, &crate::canvas::ellipsize(f, 12.0, label, bw - 12));
+                c.text(f, 12.0, bx + (bw - lw).max(8) / 2, by, TOAST_BTN_H, th().text, &crate::canvas::ellipsize(f, 12.0, label, bw - 12));
                 hits.push((rect(bx, by, bw, TOAST_BTN_H), hit));
             }
         }

@@ -27,6 +27,7 @@ vide-settings --page gaming
 - **Notifications**: Toggle toast popups (`toasts`) on/off and set popup duration (`toast_seconds`). Notifications always land in the Action Center.
 - **Touchpad**: Dedicated page for tap-to-click, natural scrolling, and disable-while-typing.
 - **Keyboard**: Pick up to 4 XKB layouts & variants from `xkb`'s list (automatically adding `Alt+Shift` switching when >1), remap Caps Lock to Escape or Ctrl, and tune repeat delay and rate.
+- **Colors** (Personalization): "Choose your default Windows mode", Light or Dark (`light_mode`), for the taskbar, Start, Action Center, flyouts and menus. Switches live.
 - **Date & Time**: Toggle 24-hour taskbar clock (`clock_24h`) and pick region/city timezone via `timedatectl`.
 
 ## File Format

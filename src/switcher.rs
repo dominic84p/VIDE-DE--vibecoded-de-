@@ -23,7 +23,7 @@ pub struct Switcher {
     /// Windows in most-recently-used order (the stacking order, top first).
     pub order: Vec<WlSurface>,
     pub index: usize,
-    picture: Option<(usize, MemoryRenderBuffer)>,
+    pub(crate) picture: Option<(usize, MemoryRenderBuffer)>,
 }
 
 impl Switcher {

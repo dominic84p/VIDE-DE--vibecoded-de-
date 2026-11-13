@@ -22,6 +22,7 @@ use smithay::{
 use crate::{
     canvas::{ellipsize, hex, measure, Canvas, Rgba},
     state::State,
+    theme::{th, ACCENT, ACCENT_HOVER, ON_ACCENT},
     ui::TASKBAR_H,
 };
 
@@ -31,22 +32,6 @@ pub const FLYOUT_H: i32 = 96;
 const NET_H: i32 = 560;
 const SLIDER_X: i32 = 60;
 const SLIDER_W: i32 = FLYOUT_W - SLIDER_X - 64;
-const BG: Rgba = hex(0x1f1f1f);
-const BORDER: Rgba = hex(0x484848);
-const TRACK: Rgba = hex(0x5a5a5a);
-const FILL: Rgba = hex(0x76b9ed);
-const WHITE: Rgba = hex(0xffffff);
-const DIM: Rgba = hex(0xa0a0a0);
-const ROW_HOVER: Rgba = hex(0x333333);
-const ROW_OPEN: Rgba = hex(0x3a3a3a);
-const ACCENT: Rgba = hex(0x0078d7);
-const ACCENT_HOVER: Rgba = hex(0x1a86dd);
-const TILE: Rgba = hex(0x3b3b3b);
-const TILE_HOVER: Rgba = hex(0x4a4a4a);
-const BUTTON: Rgba = hex(0x4c4c4c);
-const BUTTON_HOVER: Rgba = hex(0x5c5c5c);
-const LINK: Rgba = hex(0x8ec5f5);
-const ERROR: Rgba = hex(0xff99a4);
 /// Lowest brightness we allow, so the screen can't be dimmed to black by accident.
 pub const MIN_BRIGHTNESS: f32 = 0.2;
 /// Windows' wording for a wrong Wi-Fi password, in its two lines.
@@ -135,7 +120,7 @@ pub struct Tray {
     pub hover: Option<FlyoutAction>,
     /// Network rows scrolled past.
     pub scroll: usize,
-    picture: Option<(String, MemoryRenderBuffer, Vec<(Rectangle<i32, Logical>, FlyoutAction)>)>,
+    pub(crate) picture: Option<(String, MemoryRenderBuffer, Vec<(Rectangle<i32, Logical>, FlyoutAction)>)>,
     updates: Option<Sender<TrayUpdate>>,
 }
 
@@ -594,8 +579,8 @@ impl State {
         };
         if self.tray.picture.as_ref().is_none_or(|(k, _, _)| *k != key) {
             let mut c = Canvas::new(FLYOUT_W, h);
-            c.fill(BG);
-            c.outline(0, 0, c.w, c.h, BORDER);
+            c.fill(th().panel);
+            c.outline(0, 0, c.w, c.h, th().border);
             let mut hits = Vec::new();
             match f {
                 Flyout::Volume | Flyout::Brightness => draw_slider(&mut c, self, f),
@@ -615,19 +600,19 @@ fn draw_slider(c: &mut Canvas, state: &State, f: Flyout) {
     let muted = f == Flyout::Volume && state.tray.muted;
     let cy = FLYOUT_H / 2 + 6;
     match f {
-        Flyout::Volume => speaker(c, 22.0, cy as f32, muted, value, WHITE),
-        _ => sun(c, 30.0, cy as f32, WHITE),
+        Flyout::Volume => speaker(c, 22.0, cy as f32, muted, value, th().text),
+        _ => sun(c, 30.0, cy as f32, th().text),
     }
     if let Some(font) = state.font.as_ref() {
         let title = if f == Flyout::Volume { "Volume" } else { "Brightness" };
-        c.text(font, 12.0, 12, 16, 8, DIM, title);
+        c.text(font, 12.0, 12, 16, 8, th().text_dim, title);
         let pct = format!("{}", (value * 100.0).round() as i32);
-        c.text(font, 16.0, FLYOUT_W - 48, cy - 14, 28, WHITE, &pct);
+        c.text(font, 16.0, FLYOUT_W - 48, cy - 14, 28, th().text, &pct);
     }
     let fill_w = (SLIDER_W as f32 * value) as i32;
-    c.round_rect(SLIDER_X, cy - 1, SLIDER_W, 3, 1, TRACK);
-    c.round_rect(SLIDER_X, cy - 1, fill_w, 3, 1, if muted { TRACK } else { FILL });
-    c.round_rect(SLIDER_X + fill_w - 5, cy - 11, 10, 22, 4, if muted { TRACK } else { FILL });
+    c.round_rect(SLIDER_X, cy - 1, SLIDER_W, 3, 1, th().track);
+    c.round_rect(SLIDER_X, cy - 1, fill_w, 3, 1, if muted { th().track } else { th().accent_light });
+    c.round_rect(SLIDER_X + fill_w - 5, cy - 11, 10, 22, 4, if muted { th().track } else { th().accent_light });
 }
 
 fn rect(x: i32, y: i32, w: i32, h: i32) -> Rectangle<i32, Logical> {
@@ -636,12 +621,12 @@ fn rect(x: i32, y: i32, w: i32, h: i32) -> Rectangle<i32, Logical> {
 
 /// A flat Windows flyout button; returns its rect.
 fn button(c: &mut Canvas, font: &fontdue::Font, x: i32, y: i32, w: i32, label: &str, hover: bool) -> Rectangle<i32, Logical> {
-    c.rect(x, y, w, 32, if hover { BUTTON_HOVER } else { BUTTON });
+    c.rect(x, y, w, 32, if hover { th().button_hover } else { th().button });
     if hover {
         c.outline(x, y, w, 32, hex(0x858585));
     }
     let tw = measure(font, 13.0, label);
-    c.text(font, 13.0, x + (w - tw) / 2, y, 32, WHITE, label);
+    c.text(font, 13.0, x + (w - tw) / 2, y, 32, th().text, label);
     rect(x, y, w, 32)
 }
 
@@ -661,17 +646,17 @@ fn draw_network(c: &mut Canvas, state: &State) -> Vec<(Rectangle<i32, Logical>, 
     // Wired connection first, like Windows.
     if let Some(name) = &n.wired {
         ethernet_glyph(c, 28.0, (y + 32) as f32);
-        c.text(font, 14.0, 56, y + 12, 20, WHITE, &ellipsize(font, 14.0, name, FLYOUT_W - 72));
-        c.text(font, 12.0, 56, y + 32, 18, DIM, "Connected");
+        c.text(font, 14.0, 56, y + 12, 20, th().text, &ellipsize(font, 14.0, name, FLYOUT_W - 72));
+        c.text(font, 12.0, 56, y + 32, 18, th().text_dim, "Connected");
         y += 64;
     }
 
     if n.airplane {
-        c.text(font, 13.0, 16, y + 16, 20, DIM, "Airplane mode is on.");
+        c.text(font, 13.0, 16, y + 16, 20, th().text_dim, "Airplane mode is on.");
     } else if !n.wifi_on {
-        c.text(font, 13.0, 16, y + 16, 20, DIM, "Wi-Fi is turned off.");
+        c.text(font, 13.0, 16, y + 16, 20, th().text_dim, "Wi-Fi is turned off.");
     } else if n.networks.is_empty() {
-        c.text(font, 13.0, 16, y + 16, 20, DIM, "No Wi-Fi networks found.");
+        c.text(font, 13.0, 16, y + 16, 20, th().text_dim, "No Wi-Fi networks found.");
     }
     let rows: &[NetRow] = if n.wifi_on && !n.airplane { &n.networks } else { &[] };
     for net in rows.iter().skip(t.scroll) {
@@ -688,13 +673,13 @@ fn draw_network(c: &mut Canvas, state: &State) -> Vec<(Rectangle<i32, Logical>, 
         }
         let select = FlyoutAction::Select(net.ssid.clone());
         if open {
-            c.rect(0, y, FLYOUT_W, rh.min(list_bottom - y), ROW_OPEN);
+            c.rect(0, y, FLYOUT_W, rh.min(list_bottom - y), th().row_open);
         } else if hover(&select) {
-            c.rect(0, y, FLYOUT_W, rh, ROW_HOVER);
+            c.rect(0, y, FLYOUT_W, rh, th().row_hover);
         }
         hits.push((rect(0, y, FLYOUT_W, 64), select));
         wifi_signal(c, 28.0, (y + 30) as f32, net.signal, net.secure);
-        c.text(font, 14.0, 56, y + 12, 20, WHITE, &ellipsize(font, 14.0, &net.ssid, FLYOUT_W - 72));
+        c.text(font, 14.0, 56, y + 12, 20, th().text, &ellipsize(font, 14.0, &net.ssid, FLYOUT_W - 72));
         let status = if t.connecting.as_ref() == Some(&net.ssid) {
             "Connecting…".to_string()
         } else if net.active {
@@ -704,12 +689,12 @@ fn draw_network(c: &mut Canvas, state: &State) -> Vec<(Rectangle<i32, Logical>, 
         } else {
             "Open".into()
         };
-        c.text(font, 12.0, 56, y + 32, 18, DIM, &status);
+        c.text(font, 12.0, 56, y + 32, 18, th().text_dim, &status);
 
         if open && net.active {
             let props = "Properties";
             let pw = measure(font, 13.0, props);
-            c.text(font, 13.0, 56, y + 62, 20, if hover(&FlyoutAction::Properties) { WHITE } else { LINK }, props);
+            c.text(font, 13.0, 56, y + 62, 20, if hover(&FlyoutAction::Properties) { th().text } else { th().link }, props);
             hits.push((rect(52, y + 60, pw + 8, 24), FlyoutAction::Properties));
             let r = button(c, font, FLYOUT_W - 16 - 120, y + 88, 120, "Disconnect", hover(&FlyoutAction::Disconnect));
             hits.push((r, FlyoutAction::Disconnect));
@@ -718,13 +703,13 @@ fn draw_network(c: &mut Canvas, state: &State) -> Vec<(Rectangle<i32, Logical>, 
             let (bx, by) = (56, y + 64);
             if t.auto_connect {
                 c.rect(bx, by, 18, 18, ACCENT);
-                c.line(bx as f32 + 4.0, by as f32 + 9.5, bx as f32 + 7.5, by as f32 + 13.0, 1.6, WHITE);
-                c.line(bx as f32 + 7.5, by as f32 + 13.0, bx as f32 + 14.0, by as f32 + 5.5, 1.6, WHITE);
+                c.line(bx as f32 + 4.0, by as f32 + 9.5, bx as f32 + 7.5, by as f32 + 13.0, 1.6, ON_ACCENT);
+                c.line(bx as f32 + 7.5, by as f32 + 13.0, bx as f32 + 14.0, by as f32 + 5.5, 1.6, ON_ACCENT);
             } else {
-                c.outline(bx, by, 18, 18, WHITE);
-                c.outline(bx + 1, by + 1, 16, 16, WHITE);
+                c.outline(bx, by, 18, 18, th().text);
+                c.outline(bx + 1, by + 1, 16, 16, th().text);
             }
-            c.text(font, 13.0, bx + 28, by - 1, 20, WHITE, "Connect automatically");
+            c.text(font, 13.0, bx + 28, by - 1, 20, th().text, "Connect automatically");
             hits.push((rect(bx - 4, by - 4, 220, 26), FlyoutAction::ToggleAutoConnect));
             let busy = t.connecting.is_some();
             let r = button(c, font, FLYOUT_W - 16 - 120, y + 96, 120, "Connect", hover(&FlyoutAction::Connect(net.ssid.clone())) && !busy);
@@ -732,22 +717,22 @@ fn draw_network(c: &mut Canvas, state: &State) -> Vec<(Rectangle<i32, Logical>, 
                 hits.push((r, FlyoutAction::Connect(net.ssid.clone())));
             }
         } else if typing {
-            c.text(font, 13.0, 56, y + 62, 20, WHITE, "Enter the network security key");
+            c.text(font, 13.0, 56, y + 62, 20, th().text, "Enter the network security key");
             let (fx, fy, fw) = (56, y + 88, FLYOUT_W - 56 - 16);
-            c.rect(fx, fy, fw, 32, hex(0x101010));
+            c.rect(fx, fy, fw, 32, th().field);
             c.outline(fx, fy, fw, 32, ACCENT);
             c.outline(fx + 1, fy + 1, fw - 2, 30, ACCENT);
             // One dot per character, drawn: the UI font has no bullet glyph.
             let len = t.password.as_ref().map(|p| p.chars().count()).unwrap_or(0).min(((fw - 24) / 9) as usize);
             for i in 0..len {
-                c.circle((fx + 14 + i as i32 * 9) as f32, (fy + 16) as f32, 3.0, WHITE);
+                c.circle((fx + 14 + i as i32 * 9) as f32, (fy + 16) as f32, 3.0, th().text);
             }
-            c.rect(fx + 12 + len as i32 * 9, fy + 8, 1, 16, WHITE);
+            c.rect(fx + 12 + len as i32 * 9, fy + 8, 1, 16, th().text);
             hits.push((rect(fx, fy, fw, 32), FlyoutAction::PasswordField));
             let mut by = fy + 44;
             if t.password_error {
                 for (i, line) in WRONG_KEY.iter().enumerate() {
-                    c.text(font, 12.0, 56, fy + 36 + i as i32 * 16, 18, ERROR, line);
+                    c.text(font, 12.0, 56, fy + 36 + i as i32 * 16, 18, th().error, line);
                 }
                 by += 34;
             }
@@ -759,15 +744,15 @@ fn draw_network(c: &mut Canvas, state: &State) -> Vec<(Rectangle<i32, Logical>, 
         y += rh;
     }
     // Rows below the list area are covered by the settings link and tiles.
-    c.rect(1, settings_y - 4, FLYOUT_W - 2, h - settings_y + 3, BG);
+    c.rect(1, settings_y - 4, FLYOUT_W - 2, h - settings_y + 3, th().panel);
 
     // "Network & Internet settings".
     let s = FlyoutAction::NetworkSettings;
     if hover(&s) {
-        c.rect(1, settings_y, FLYOUT_W - 2, 62, ROW_HOVER);
+        c.rect(1, settings_y, FLYOUT_W - 2, 62, th().row_hover);
     }
-    c.text(font, 14.0, 16, settings_y + 8, 22, WHITE, "Network & Internet settings");
-    c.text(font, 12.0, 16, settings_y + 32, 18, DIM, "Change settings, such as making a connection metered.");
+    c.text(font, 14.0, 16, settings_y + 8, 22, th().text, "Network & Internet settings");
+    c.text(font, 12.0, 16, settings_y + 32, 18, th().text_dim, "Change settings, such as making a connection metered.");
     hits.push((rect(0, settings_y, FLYOUT_W, 62), s));
 
     // Quick action tiles.
@@ -785,16 +770,17 @@ fn draw_network(c: &mut Canvas, state: &State) -> Vec<(Rectangle<i32, Logical>, 
         c.rect(x, tiles_y, tw, 70, match (on, hov) {
             (true, true) => ACCENT_HOVER,
             (true, false) => ACCENT,
-            (false, true) => TILE_HOVER,
-            (false, false) => TILE,
+            (false, true) => th().tile_hover,
+            (false, false) => th().tile,
         });
         let (gx, gy) = (x as f32 + 18.0, tiles_y as f32 + 20.0);
-        match i {
+        let ink = if on { ON_ACCENT } else { th().text };
+        with_ink(ink, || match i {
             0 => wifi(c, gx, gy, true),
             1 => airplane(c, gx, gy),
             _ => hotspot(c, gx, gy),
-        }
-        c.text(font, 12.0, x + 10, tiles_y + 44, 18, WHITE, &ellipsize(font, 12.0, label, tw - 14));
+        });
+        c.text(font, 12.0, x + 10, tiles_y + 44, 18, ink, &ellipsize(font, 12.0, label, tw - 14));
         hits.push((rect(x, tiles_y, tw, 70), a));
     }
     hits
@@ -851,8 +837,29 @@ thread_local! {
     static GLYPHS: std::cell::RefCell<std::collections::HashMap<String, std::rc::Rc<crate::icons::Icon>>> = Default::default();
 }
 
-/// Rasterize (and cache) one glyph, centred at (x, y).
+/// Rasterize (and cache) one glyph, centred at (x, y), in the theme's text colour.
 pub fn glyph(c: &mut Canvas, body: String, x: f32, y: f32, size: u32) {
+    glyph_ink(c, body, x, y, size, INK.get().unwrap_or(th().text));
+}
+
+thread_local! {
+    static INK: std::cell::Cell<Option<Rgba>> = const { std::cell::Cell::new(None) };
+}
+
+/// Draw glyphs in `ink` instead of the theme's text colour, e.g. white on a lit accent tile.
+pub fn with_ink<R>(ink: Rgba, f: impl FnOnce() -> R) -> R {
+    let old = INK.replace(Some(ink));
+    let r = f();
+    INK.set(old);
+    r
+}
+
+/// A glyph in a given colour: our SVG bodies are drawn in white (`#fff`) with unlit parts
+/// in `#6a6a6a`; both are recoloured, so the same artwork works on dark, light and accent.
+pub fn glyph_ink(c: &mut Canvas, body: String, x: f32, y: f32, size: u32, ink: Rgba) {
+    let dim = if ink.0 as u32 + ink.1 as u32 + ink.2 as u32 > 384 { "#6a6a6a" } else { "#a8a8a8" };
+    let ink = format!("\"#{:02x}{:02x}{:02x}\"", ink.0, ink.1, ink.2);
+    let body = body.replace("\"#6a6a6a\"", &format!("\"{dim}\"")).replace("\"#fff\"", &ink);
     let key = format!("{size}:{body}");
     let icon = GLYPHS.with(|g| {
         g.borrow_mut()
@@ -871,7 +878,7 @@ pub fn glyph(c: &mut Canvas, body: String, x: f32, y: f32, size: u32) {
 }
 
 /// Speaker with 0-3 sound waves for the level, or an X when muted.
-pub fn speaker(c: &mut Canvas, x: f32, y: f32, muted: bool, level: f32, _color: Rgba) {
+pub fn speaker(c: &mut Canvas, x: f32, y: f32, muted: bool, level: f32, color: Rgba) {
     let mut body = SPEAKER.to_string();
     if muted {
         body += MUTE;
@@ -879,12 +886,12 @@ pub fn speaker(c: &mut Canvas, x: f32, y: f32, muted: bool, level: f32, _color: 
         let waves = if level <= 0.01 { 0 } else if level < 0.34 { 1 } else if level < 0.67 { 2 } else { 3 };
         body.extend(WAVES.iter().take(waves).copied());
     }
-    glyph(c, body, x + 5.0, y, 20);
+    glyph_ink(c, body, x + 5.0, y, 20, color);
 }
 
 /// Sun: brightness.
-pub fn sun(c: &mut Canvas, x: f32, y: f32, _color: Rgba) {
-    glyph(c, sun_svg(), x, y, 20);
+pub fn sun(c: &mut Canvas, x: f32, y: f32, color: Rgba) {
+    glyph_ink(c, sun_svg(), x, y, 20, color);
 }
 
 /// Wi-Fi: radio waves, all lit when `on`, struck through when off.
@@ -900,7 +907,7 @@ pub fn wifi(c: &mut Canvas, x: f32, y: f32, on: bool) {
 fn wifi_signal(c: &mut Canvas, x: f32, y: f32, signal: u32, secure: bool) {
     glyph(c, wifi_svg(((signal + 24) / 25).min(4) as u8), x, y, 24);
     if secure {
-        lock(c, x as i32 + 6, y as i32 + 2, WHITE);
+        lock(c, x as i32 + 6, y as i32 + 2, th().text);
     }
 }
 

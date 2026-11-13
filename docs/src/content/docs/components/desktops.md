@@ -34,65 +34,33 @@ impl WorkspaceManager {
 | `Super+Tab` | Open Task View |
 | `Super+Ctrl+Left/Right` | Prev/Next workspace |
 
-## Task View Panel (Win+Tab)
+## Task View (Win+Tab)
+
+Full screen above the taskbar, like Windows 10's:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  Desktop 1    Desktop 2    Desktop 3    + New Desktop      │
-│  ┌─────────┐  ┌─────────┐  ┌─────────┐                      │
-│  │ Window1 │  │ Window2 │  │ Window3 │                      │
-│  │ Window4 │  │         │  │         │                      │
-│  └─────────┘  └─────────┘  └─────────┘                      │
-├─────────────────────────────────────────────────────────────┤
-│  Timeline (recent apps)                                     │
+│        [Desktop 1]  [Desktop 2]  [ + New desktop ]          │
+│                                                             │
+│   ▣ PowerSlop            ▣ Settings          ▣ About        │
+│   ┌──────────────┐       ┌──────────────┐    ┌──────────┐   │
+│   │ live window  │       │ live window  │    │  live    │   │
+│   └──────────────┘       └──────────────┘    └──────────┘   │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-**Implemented as layer-shell overlay** (`Layer::Overlay`).
-
-```rust
-struct TaskView {
-    visible: bool,
-    selected_desktop: usize,
-    hovered_window: Option<WindowId>,
-    thumbnails: HashMap<WindowId, MemoryRenderBuffer>,
-}
-```
-
-## Thumbnail Generation
-
-```rust
-fn generate_thumbnail(&self, window: &Window) -> MemoryRenderBuffer {
-    // 1. Create offscreen canvas (256x144)
-    // 2. Render window surface scaled down
-    // 3. Add titlebar if SSD
-    // 4. Cache by (window_id, geometry_hash)
-}
-```
-
-## Workspace Switching Animation
-
-```rust
-fn animate_workspace_switch(&mut self, from: usize, to: usize) {
-    // Slide animation: 150ms ease-out
-    // Windows slide opposite direction
-    // Taskbar indicator slides
-}
-```
-
-## Configuration
-
-```ini
-[desktops]
-count = 10
-names = ["Main", "Code", "Web", "Chat", "Media", "", "", "", "", ""]
-animation-duration = 150
-```
+- **Windows**: every window on the current desktop as a live thumbnail (drawn by `render.rs` with the
+  same helper as Alt+Tab), its icon and title above it. Click one to switch to it; hover shows a
+  close button.
+- **Desktops strip**: desktops that have windows, the current one, and ones added with **New desktop**
+  (which adds a desktop to the strip; click it to go there). There are 10 desktops at most.
+- Clicking empty space, pressing Esc, or the Task View button again closes it.
+- The background is a tint over the desktop, dark or light with the Windows mode.
 
 ## Related Files
 
 - `wm.rs` — Window workspace assignment
 - `input.rs` — Workspace keybindings
-- `render.rs` — Workspace-aware element ordering
+- `render.rs` — Workspace-aware element ordering, Task View's live thumbnails
 - `layers.rs` — Task View as layer-shell overlay
 - `ui.rs` — Task View panel rendering

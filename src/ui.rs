@@ -20,22 +20,14 @@ const fn rgba(c: u32, a: u8) -> Rgba {
     Rgba(h.0, h.1, h.2, a)
 }
 
-// Palette
-pub const ACCENT: Rgba = hex(0x0078d7);
-const TASKBAR_BG: Rgba = hex(0x101010);
-const TASK_HOVER: Rgba = rgba(0xffffff, 0x1a);
-const TASK_ACTIVE: Rgba = rgba(0xffffff, 0x26);
-const TASK_LINE: Rgba = hex(0x76b9ed);
-const SEARCH_BG: Rgba = hex(0x3a3a3a);
-const WHITE: Rgba = hex(0xffffff);
-const TEXT_DIM: Rgba = hex(0xa0a0a0);
+// Palette (the shell's dark/light colours live in `theme`; titlebars are white in both, like Windows 10)
+pub use crate::theme::ACCENT;
+use crate::theme::{th, ON_ACCENT};
 const TITLE_BG: Rgba = hex(0xffffff);
 const TITLE_TEXT: Rgba = hex(0x000000);
 const TITLE_TEXT_IDLE: Rgba = hex(0x999999);
 const BTN_HOVER: Rgba = hex(0xe5e5e5);
 const CLOSE_HOVER: Rgba = hex(0xe81123);
-const MENU_BG: Rgba = rgba(0x2b2b2b, 0xf5);
-const MENU_RAIL: Rgba = rgba(0x1f1f1f, 0xf5);
 
 pub const TASKBAR_H: i32 = 40;
 pub const TITLE_H: i32 = 30;
@@ -48,6 +40,7 @@ pub const TASK_W: i32 = 48;
 /// Where the first taskbar button starts (after Start, search and Task View).
 pub const TASK_BUTTONS_X: i32 = SEARCH_END + TASK_W + 4;
 const CLOCK_W: i32 = 88;
+const NOTIFY_W: i32 = 40;
 const TRAY_W: i32 = 34;
 const SHOW_DESKTOP_W: i32 = 6;
 pub const MENU_W: i32 = 680;
@@ -67,8 +60,10 @@ pub enum TaskbarHit {
     Volume,
     Brightness,
     Network,
-    /// The clock: opens the Action Center (notifications).
+    /// The clock: opens the Action Center too, for want of a calendar.
     Clock,
+    /// The Action Center button right of the clock.
+    ActionCenter,
     /// An app's tray icon, by its tray id.
     TrayApp(String),
     /// A taskbar button, by index into `TaskbarKey::items`.
@@ -109,6 +104,9 @@ pub struct TaskbarKey {
     pub tray_apps: Vec<(String, String)>,
     /// The query while the search pane is open.
     pub search_text: Option<String>,
+    /// Action Center button: notifications waiting, and how many arrived unseen.
+    pub notifications: (bool, usize),
+    pub action_center_open: bool,
 }
 
 pub struct Taskbar {
@@ -129,15 +127,15 @@ pub fn draw_taskbar(
     let mut c = Canvas::new(w, TASKBAR_H);
     let mut hits = Vec::new();
     let hovered = |h: &TaskbarHit| key.hover.as_ref() == Some(h);
-    c.fill(TASKBAR_BG);
+    c.fill(th().taskbar);
 
     // Start button: our logo (a chevron if it somehow failed to load).
-    let start_bg = if key.start_open { TASK_ACTIVE } else if hovered(&TaskbarHit::Start) { TASK_HOVER } else { TASKBAR_BG };
+    let start_bg = if key.start_open { th().active } else if hovered(&TaskbarHit::Start) { th().hover } else { th().taskbar };
     c.rect(0, 0, START_W, TASKBAR_H, start_bg);
     match logo {
         Some(l) => c.icon(l, (START_W - l.w as i32) / 2, (TASKBAR_H - l.h as i32) / 2),
         None => {
-            let mark = if key.start_open || hovered(&TaskbarHit::Start) { TASK_LINE } else { WHITE };
+            let mark = if key.start_open || hovered(&TaskbarHit::Start) { th().accent_light } else { th().text };
             c.line(16.0, 14.0, 24.0, 26.0, 2.5, mark);
             c.line(24.0, 26.0, 32.0, 14.0, 2.5, mark);
         }
@@ -148,8 +146,8 @@ pub fn draw_taskbar(
     let sx = START_W;
     match &key.search_text {
         Some(q) => {
-            c.rect(sx, 0, SEARCH_W, TASKBAR_H, WHITE);
-            magnifier(&mut c, sx as f32 + 22.0, TASKBAR_H as f32 / 2.0, hex(0x000000), WHITE);
+            c.rect(sx, 0, SEARCH_W, TASKBAR_H, hex(0xffffff));
+            magnifier(&mut c, sx as f32 + 22.0, TASKBAR_H as f32 / 2.0, hex(0x000000), hex(0xffffff));
             if let Some(f) = font {
                 let t = if q.is_empty() { String::new() } else { ellipsize(f, 13.0, q, SEARCH_W - 60) };
                 let tw = if t.is_empty() { 0 } else { c.text(f, 13.0, sx + 42, 0, TASKBAR_H, hex(0x000000), &t) };
@@ -160,10 +158,14 @@ pub fn draw_taskbar(
             }
         }
         None => {
-            c.rect(sx, 0, SEARCH_W, TASKBAR_H, if hovered(&TaskbarHit::Search) { hex(0x474747) } else { SEARCH_BG });
-            magnifier(&mut c, sx as f32 + 22.0, TASKBAR_H as f32 / 2.0, WHITE, SEARCH_BG);
+            c.rect(sx, 0, SEARCH_W, TASKBAR_H, if hovered(&TaskbarHit::Search) { th().search_hover } else { th().search_bg });
+            // White on a light taskbar needs an edge to read as a box.
+            if crate::theme::light() {
+                c.outline(sx, 0, SEARCH_W, TASKBAR_H, th().divider);
+            }
+            magnifier(&mut c, sx as f32 + 22.0, TASKBAR_H as f32 / 2.0, th().text, th().search_bg);
             if let Some(f) = font {
-                c.text(f, 13.0, sx + 42, 0, TASKBAR_H, TEXT_DIM, "Type here to search");
+                c.text(f, 13.0, sx + 42, 0, TASKBAR_H, th().text_dim, "Type here to search");
             }
         }
     }
@@ -171,7 +173,7 @@ pub fn draw_taskbar(
 
     // Task View: Windows 10 overlapping desktop frames with the current workspace badge.
     let tv_x = SEARCH_END;
-    let tv_bg = if key.taskview_open { TASK_ACTIVE } else if hovered(&TaskbarHit::TaskView) { TASK_HOVER } else { TASKBAR_BG };
+    let tv_bg = if key.taskview_open { th().active } else if hovered(&TaskbarHit::TaskView) { th().hover } else { th().taskbar };
     c.rect(tv_x, 0, TASK_W, TASKBAR_H, tv_bg);
     let (cx, cy) = (tv_x + TASK_W / 2, TASKBAR_H / 2);
     crate::tray::glyph(
@@ -185,15 +187,15 @@ pub fn draw_taskbar(
         let n = (key.current_workspace + 1).to_string();
         let tw = measure(f, 10.0, &n);
         c.round_rect(cx + 5, cy + 3, tw + 6, 12, 3, ACCENT);
-        c.text(f, 10.0, cx + 8, cy + 3, 12, WHITE, &n);
+        c.text(f, 10.0, cx + 8, cy + 3, 12, ON_ACCENT, &n);
     }
     if key.taskview_open {
-        c.rect(tv_x, TASKBAR_H - 2, TASK_W, 2, TASK_LINE);
+        c.rect(tv_x, TASKBAR_H - 2, TASK_W, 2, th().accent_light);
     }
     hits.push((rect(tv_x, 0, TASK_W, TASKBAR_H), TaskbarHit::TaskView));
 
     // Window buttons.
-    let right_edge = w - CLOCK_W - SHOW_DESKTOP_W;
+    let right_edge = w - CLOCK_W - NOTIFY_W - SHOW_DESKTOP_W;
     const TRAY_ITEMS: i32 = 3;
     let apps_x = right_edge - TRAY_W * TRAY_ITEMS - TRAY_W * key.tray_apps.len() as i32;
     let mut x = TASK_BUTTONS_X;
@@ -202,7 +204,7 @@ pub fn draw_taskbar(
             break;
         }
         let hit = TaskbarHit::Button(i);
-        let bg = if item.focused { TASK_ACTIVE } else if hovered(&hit) { TASK_HOVER } else { TASKBAR_BG };
+        let bg = if item.focused { th().active } else if hovered(&hit) { th().hover } else { th().taskbar };
         c.rect(x, 0, TASK_W, TASKBAR_H, bg);
         match app_icon(icons, &item.icon, 24) {
             Some(icon) => c.icon(&icon, x + (TASK_W - 24) / 2, (TASKBAR_H - 24) / 2),
@@ -212,19 +214,19 @@ pub fn draw_taskbar(
                 if let (Some(f), Some(ch)) = (font, item.title.chars().next()) {
                     let s = ch.to_uppercase().to_string();
                     let tw = measure(f, 14.0, &s);
-                    c.text(f, 14.0, x + 24 - tw / 2, 8, 24, WHITE, &s);
+                    c.text(f, 14.0, x + 24 - tw / 2, 8, 24, ON_ACCENT, &s);
                 }
             }
         }
         // Open-window underline; full width when focused, none for a pinned app that isn't running.
         if item.focused {
-            c.rect(x, TASKBAR_H - 2, TASK_W, 2, TASK_LINE);
+            c.rect(x, TASKBAR_H - 2, TASK_W, 2, th().accent_light);
         } else if !item.windows.is_empty() {
-            c.rect(x + 6, TASKBAR_H - 2, TASK_W - 12, 2, TASK_LINE);
+            c.rect(x + 6, TASKBAR_H - 2, TASK_W - 12, 2, th().accent_light);
         }
         // Several windows: a second, offset line, like Windows' stacked-button edge.
         if item.windows.len() > 1 {
-            c.rect(x + TASK_W - 3, 4, 1, TASKBAR_H - 8, hex(0x3a3a3a));
+            c.rect(x + TASK_W - 3, 4, 1, TASKBAR_H - 8, th().divider);
         }
         hits.push((rect(x, 0, TASK_W, TASKBAR_H), hit));
         x += TASK_W;
@@ -235,7 +237,7 @@ pub fn draw_taskbar(
         let bx = apps_x + i as i32 * TRAY_W;
         let hit = TaskbarHit::TrayApp(id.clone());
         if hovered(&hit) {
-            c.rect(bx, 0, TRAY_W, TASKBAR_H, TASK_HOVER);
+            c.rect(bx, 0, TRAY_W, TASKBAR_H, th().hover);
         }
         match tray_icons.get(i).and_then(|o| o.as_ref()) {
             Some(icon) => c.icon(icon, bx + (TRAY_W - icon.w as i32) / 2, (TASKBAR_H - icon.h as i32) / 2),
@@ -258,14 +260,14 @@ pub fn draw_taskbar(
     {
         let bx = tray_x + i as i32 * TRAY_W;
         if open {
-            c.rect(bx, 0, TRAY_W, TASKBAR_H, TASK_ACTIVE);
+            c.rect(bx, 0, TRAY_W, TASKBAR_H, th().active);
         } else if hovered(&hit) {
-            c.rect(bx, 0, TRAY_W, TASKBAR_H, TASK_HOVER);
+            c.rect(bx, 0, TRAY_W, TASKBAR_H, th().hover);
         }
         let (cx, cy) = (bx as f32 + TRAY_W as f32 / 2.0, TASKBAR_H as f32 / 2.0);
         match hit {
-            TaskbarHit::Volume => speaker(&mut c, cx - 5.0, cy, key.volume.1, key.volume.0 as f32 / 100.0, WHITE),
-            TaskbarHit::Brightness => sun(&mut c, cx, cy, WHITE),
+            TaskbarHit::Volume => speaker(&mut c, cx - 5.0, cy, key.volume.1, key.volume.0 as f32 / 100.0, th().text),
+            TaskbarHit::Brightness => sun(&mut c, cx, cy, th().text),
             _ => net_icon(&mut c, cx, cy, key.net),
         }
         hits.push((rect(bx, 0, TRAY_W, TASKBAR_H), hit));
@@ -273,22 +275,50 @@ pub fn draw_taskbar(
 
     // Clock: clicking it opens the Action Center.
     if hovered(&TaskbarHit::Clock) {
-        c.rect(right_edge, 0, CLOCK_W, TASKBAR_H, TASK_HOVER);
+        c.rect(right_edge, 0, CLOCK_W, TASKBAR_H, th().hover);
     }
     if let Some(f) = font {
         let cx = right_edge + CLOCK_W / 2;
         let tw = measure(f, 12.0, &key.time);
-        c.text(f, 12.0, cx - tw / 2, 3, TASKBAR_H / 2, WHITE, &key.time);
+        c.text(f, 12.0, cx - tw / 2, 3, TASKBAR_H / 2, th().text, &key.time);
         let dw = measure(f, 12.0, &key.date);
-        c.text(f, 12.0, cx - dw / 2, TASKBAR_H / 2 - 3, TASKBAR_H / 2, WHITE, &key.date);
+        c.text(f, 12.0, cx - dw / 2, TASKBAR_H / 2 - 3, TASKBAR_H / 2, th().text, &key.date);
     }
     hits.push((rect(right_edge, 0, CLOCK_W, TASKBAR_H), TaskbarHit::Clock));
 
+    // Action Center button: a speech bubble, lined when there are notifications, with a
+    // count badge for ones that came in unseen.
+    let nx = right_edge + CLOCK_W;
+    if key.action_center_open {
+        c.rect(nx, 0, NOTIFY_W, TASKBAR_H, th().active);
+    } else if hovered(&TaskbarHit::ActionCenter) {
+        c.rect(nx, 0, NOTIFY_W, TASKBAR_H, th().hover);
+    }
+    let (any, unseen) = key.notifications;
+    let lines = if any { r##"<path d="M6 7.5h8M6 10.5h8" stroke="#fff" stroke-width="1.1"/>"## } else { "" };
+    crate::tray::glyph(
+        &mut c,
+        format!(r##"<path d="M2.5 3.5h15v10h-7l-4 3.5v-3.5h-4z" fill="none" stroke="#fff" stroke-width="1.15" stroke-linejoin="round"/>{lines}"##),
+        (nx + NOTIFY_W / 2) as f32,
+        (TASKBAR_H / 2) as f32,
+        20,
+    );
+    if unseen > 0 {
+        if let Some(f) = font {
+            let n = if unseen > 9 { "9+".to_string() } else { unseen.to_string() };
+            let tw = measure(f, 10.0, &n).max(8);
+            let (bx, by) = (nx + NOTIFY_W / 2 + 2, 7);
+            c.round_rect(bx, by, tw + 8, 15, 7, th().text);
+            c.text(f, 10.0, bx + 4 + (tw - measure(f, 10.0, &n)) / 2, by, 15, th().taskbar, &n);
+        }
+    }
+    hits.push((rect(nx, 0, NOTIFY_W, TASKBAR_H), TaskbarHit::ActionCenter));
+
     // Show-desktop sliver at the far right.
     let dx = w - SHOW_DESKTOP_W;
-    c.rect(dx, 0, 1, TASKBAR_H, hex(0x5a5a5a));
+    c.rect(dx, 0, 1, TASKBAR_H, th().divider);
     if hovered(&TaskbarHit::ShowDesktop) {
-        c.rect(dx + 1, 0, SHOW_DESKTOP_W - 1, TASKBAR_H, TASK_HOVER);
+        c.rect(dx + 1, 0, SHOW_DESKTOP_W - 1, TASKBAR_H, th().hover);
     }
     hits.push((rect(dx, 0, SHOW_DESKTOP_W, TASKBAR_H), TaskbarHit::ShowDesktop));
 
@@ -370,7 +400,7 @@ pub fn draw_titlebar(font: Option<&Font>, icons: &mut Icons, key: &TitleKey) -> 
             let bg = if btn == TitleButton::Close { CLOSE_HOVER } else { BTN_HOVER };
             c.rect(bx, 0, TITLE_BTN_W, TITLE_H, bg);
             if btn == TitleButton::Close {
-                fg = WHITE;
+                fg = hex(0xffffff);
             }
         }
         let (cx, cy) = (bx + TITLE_BTN_W / 2, TITLE_H / 2);
@@ -501,7 +531,7 @@ pub fn draw_start_menu(font: Option<&Font>, icons: &mut Icons, key: StartKey) ->
     let h = key.height;
     let mut c = Canvas::new(MENU_W, h);
     let mut hits = vec![(rect(0, 0, MENU_W, h), StartHit::Nothing)];
-    c.rect(0, 0, MENU_W, h, MENU_BG);
+    c.rect(0, 0, MENU_W, h, th().start);
     let Some(f) = font else { return StartMenu { key, buffer: c.into_buffer(), hits } };
 
     // App list: Most used, then A-Z under letter headers.
@@ -513,20 +543,20 @@ pub fn draw_start_menu(font: Option<&Font>, icons: &mut Icons, key: StartKey) ->
             StartRow::Header(t) => {
                 // Single letters sit on the left like Windows' jump headers; others are titles.
                 let size = if t.chars().count() == 1 { 15.0 } else { 13.0 };
-                c.text(f, size, lx + 14, y + 4, MENU_ROW - 4, WHITE, t);
+                c.text(f, size, lx + 14, y + 4, MENU_ROW - 4, th().text, t);
                 continue;
             }
             StartRow::Item(n, i, _) => (n, i),
         };
         let hit = StartHit::Item(i);
         if key.hover.as_ref() == Some(&hit) {
-            c.rect(lx, y, LIST_W, MENU_ROW, TASK_HOVER);
+            c.rect(lx, y, LIST_W, MENU_ROW, th().hover);
         }
         match icons.get(icon, 24).or_else(|| app_icon(icons, icon, 24)) {
             Some(ic) => c.icon(&ic, lx + 12, y + (MENU_ROW - 24) / 2),
             None => c.rect(lx + 12, y + 6, 24, 24, ACCENT),
         }
-        c.text(f, 13.0, lx + 48, y, MENU_ROW, WHITE, &ellipsize(f, 13.0, name, LIST_W - 60));
+        c.text(f, 13.0, lx + 48, y, MENU_ROW, th().text, &ellipsize(f, 13.0, name, LIST_W - 60));
         hits.push((rect(lx, y, LIST_W, MENU_ROW), hit));
     }
 
@@ -542,7 +572,7 @@ pub fn draw_start_menu(font: Option<&Font>, icons: &mut Icons, key: StartKey) ->
             }
             group = Some(*g);
             col = 0;
-            c.text(f, 13.0, tx0, y, 32, WHITE, if *g == 0 { "Productivity" } else { "Explore" });
+            c.text(f, 13.0, tx0, y, 32, th().text, if *g == 0 { "Productivity" } else { "Explore" });
             y += 36;
         } else if col == 3 {
             col = 0;
@@ -563,16 +593,16 @@ pub fn draw_start_menu(font: Option<&Font>, icons: &mut Icons, key: StartKey) ->
             Some(ic) => c.icon(&ic, x + (TILE - ic.w as i32) / 2, y + 22),
             None => c.rect(x + 30, y + 22, 40, 40, hex(0x005a9e)),
         }
-        c.text(f, 12.0, x + 8, y + TILE - 26, 20, WHITE, &ellipsize(f, 12.0, name, TILE - 14));
+        c.text(f, 12.0, x + 8, y + TILE - 26, 20, ON_ACCENT, &ellipsize(f, 12.0, name, TILE - 14));
         hits.push((rect(x, y, TILE, TILE), hit));
         col += 1;
     }
 
     // Left rail, drawn last so its expanded form covers the list.
     let rail_w = if key.rail_open { 256 } else { RAIL_W };
-    c.rect(0, 0, rail_w, h, MENU_RAIL);
+    c.rect(0, 0, rail_w, h, th().start_rail);
     if key.rail_open {
-        c.rect(rail_w, 0, 1, h, hex(0x3a3a3a));
+        c.rect(rail_w, 0, 1, h, th().divider);
     }
     let items: [(Option<RailItem>, i32, String); 6] = [
         (Some(RailItem::Expand), 6, "START".into()),
@@ -586,9 +616,9 @@ pub fn draw_start_menu(font: Option<&Font>, icons: &mut Icons, key: StartKey) ->
         let hit = item.map(StartHit::Rail).unwrap_or(StartHit::Power);
         let active = item.is_none() && key.power_open;
         if active {
-            c.rect(0, y, rail_w, 40, TASK_ACTIVE);
+            c.rect(0, y, rail_w, 40, th().active);
         } else if key.hover.as_ref() == Some(&hit) {
-            c.rect(0, y, rail_w, 40, TASK_HOVER);
+            c.rect(0, y, rail_w, 40, th().hover);
         }
         let (gx, gy) = (RAIL_W as f32 / 2.0, y as f32 + 20.0);
         let body = match item {
@@ -602,7 +632,7 @@ pub fn draw_start_menu(font: Option<&Font>, icons: &mut Icons, key: StartKey) ->
         crate::tray::glyph(&mut c, body.into(), gx, gy, 18);
         if key.rail_open {
             let size = if item == Some(RailItem::Expand) { 12.0 } else { 13.0 };
-            c.text(f, size, RAIL_W + 4, y, 40, WHITE, &ellipsize(f, size, &label, rail_w - RAIL_W - 16));
+            c.text(f, size, RAIL_W + 4, y, 40, th().text, &ellipsize(f, size, &label, rail_w - RAIL_W - 16));
         }
         hits.push((rect(0, y, rail_w, 40), hit));
     }
@@ -614,15 +644,15 @@ pub fn draw_start_menu(font: Option<&Font>, icons: &mut Icons, key: StartKey) ->
     if key.power_open {
         let (lw, row) = (170, 36);
         let ly = h - 46 - row * PowerAction::ALL.len() as i32 - 4;
-        c.rect(RAIL_W - 4, ly - 4, lw + 8, row * PowerAction::ALL.len() as i32 + 8, hex(0x2b2b2b));
-        c.outline(RAIL_W - 4, ly - 4, lw + 8, row * PowerAction::ALL.len() as i32 + 8, hex(0x3c3c3c));
+        c.rect(RAIL_W - 4, ly - 4, lw + 8, row * PowerAction::ALL.len() as i32 + 8, th().menu);
+        c.outline(RAIL_W - 4, ly - 4, lw + 8, row * PowerAction::ALL.len() as i32 + 8, th().border);
         for (i, a) in PowerAction::ALL.into_iter().enumerate() {
             let y = ly + i as i32 * row;
             let hit = StartHit::PowerAction(a);
             if key.hover.as_ref() == Some(&hit) {
-                c.rect(RAIL_W, y, lw, row, TASK_HOVER);
+                c.rect(RAIL_W, y, lw, row, th().hover);
             }
-            c.text(f, 13.0, RAIL_W + 14, y, row, WHITE, a.label());
+            c.text(f, 13.0, RAIL_W + 14, y, row, th().text, a.label());
             hits.push((rect(RAIL_W, y, lw, row), hit));
         }
     }
@@ -640,7 +670,7 @@ fn draw_search(font: Option<&Font>, icons: &mut Icons, key: StartKey) -> StartMe
     let (w, h) = (SEARCH_PANEL_W, key.height);
     let mut c = Canvas::new(w, h);
     let mut hits = vec![(rect(0, 0, w, h), StartHit::Nothing)];
-    c.rect(0, 0, w, h, MENU_RAIL);
+    c.rect(0, 0, w, h, th().start_rail);
     let Some(f) = font else { return StartMenu { key, buffer: c.into_buffer(), hits } };
 
     // Tabs.
@@ -649,7 +679,7 @@ fn draw_search(font: Option<&Font>, icons: &mut Icons, key: StartKey) -> StartMe
         let tw = measure(f, 13.0, label);
         let hit = StartHit::Filter(i);
         let active = key.filter == i;
-        let col = if active || key.hover.as_ref() == Some(&hit) { WHITE } else { TEXT_DIM };
+        let col = if active || key.hover.as_ref() == Some(&hit) { th().text } else { th().text_dim };
         c.text(f, 13.0, x, 8, 34, col, label);
         if active {
             c.rect(x, 42, tw, 3, ACCENT);
@@ -657,37 +687,37 @@ fn draw_search(font: Option<&Font>, icons: &mut Icons, key: StartKey) -> StartMe
         hits.push((rect(x - 8, 4, tw + 16, 42), hit));
         x += tw + 28;
     }
-    c.rect(0, 47, w, 1, hex(0x3a3a3a));
+    c.rect(0, 47, w, 1, th().divider);
 
     // Empty query: "Top apps", as tiles.
     if key.query.trim().is_empty() {
-        c.text(f, 15.0, 24, 64, 26, WHITE, "Top apps");
-        let (tw, th) = (166, 104);
+        c.text(f, 15.0, 24, 64, 26, th().text, "Top apps");
+        let (tw, tile_h) = (166, 104);
         for (i, item) in key.items.iter().enumerate() {
             let StartRow::Item(name, icon, _) = item else { continue };
-            let (tx, ty) = (24 + (i as i32 % 4) * (tw + 8), 100 + (i as i32 / 4) * (th + 8));
-            if ty + th > h {
+            let (tx, ty) = (24 + (i as i32 % 4) * (tw + 8), 100 + (i as i32 / 4) * (tile_h + 8));
+            if ty + tile_h > h {
                 break;
             }
             let hit = StartHit::Item(i);
-            c.rect(tx, ty, tw, th, if key.hover.as_ref() == Some(&hit) { hex(0x3d3d3d) } else { hex(0x2b2b2b) });
+            c.rect(tx, ty, tw, tile_h, if key.hover.as_ref() == Some(&hit) { th().card_hover } else { th().card });
             match icons.get(icon, 32).or_else(|| app_icon(icons, icon, 32)) {
                 Some(ic) => c.icon(&ic, tx + (tw - 32) / 2, ty + 20),
                 None => c.round_rect(tx + (tw - 32) / 2, ty + 20, 32, 32, 4, ACCENT),
             }
             let n = ellipsize(f, 12.0, name, tw - 16);
-            c.text(f, 12.0, tx + (tw - measure(f, 12.0, &n)) / 2, ty + 64, 24, WHITE, &n);
-            hits.push((rect(tx, ty, tw, th), hit));
+            c.text(f, 12.0, tx + (tw - measure(f, 12.0, &n)) / 2, ty + 64, 24, th().text, &n);
+            hits.push((rect(tx, ty, tw, tile_h), hit));
         }
         if key.items.is_empty() {
-            c.text(f, 13.0, 24, 100, 24, TEXT_DIM, "Apps you open will show up here.");
+            c.text(f, 13.0, 24, 100, 24, th().text_dim, "Apps you open will show up here.");
         }
         hits.reverse();
         return StartMenu { key, buffer: c.into_buffer(), hits };
     }
 
     // Results.
-    c.rect(0, 48, RESULTS_W, h - 48, MENU_BG);
+    c.rect(0, 48, RESULTS_W, h - 48, th().start);
     let mut y = 56;
     let mut best = false;
     for (i, item) in key.items.iter().enumerate().skip(key.scroll) {
@@ -697,16 +727,16 @@ fn draw_search(font: Option<&Font>, icons: &mut Icons, key: StartKey) -> StartMe
         match item {
             StartRow::Header(t) => {
                 best = t == "Best match";
-                c.text(f, 14.0, 20, y + 4, 26, WHITE, t);
+                c.text(f, 14.0, 20, y + 4, 26, th().text, t);
                 y += 32;
             }
             StartRow::Item(name, icon, detail) => {
                 let rh = if best { 72 } else { 40 };
                 let hit = StartHit::Item(i);
                 if i == key.selected {
-                    c.rect(0, y, RESULTS_W, rh, TASK_ACTIVE);
+                    c.rect(0, y, RESULTS_W, rh, th().active);
                 } else if key.hover.as_ref() == Some(&hit) {
-                    c.rect(0, y, RESULTS_W, rh, TASK_HOVER);
+                    c.rect(0, y, RESULTS_W, rh, th().hover);
                 }
                 let size = if best { 40 } else { 24 };
                 let ix = 20;
@@ -718,11 +748,11 @@ fn draw_search(font: Option<&Font>, icons: &mut Icons, key: StartKey) -> StartMe
                 let tw = RESULTS_W - tx - 12;
                 let sub = if best { key.kinds.get(i).cloned().unwrap_or_default() } else { detail.clone() };
                 if sub.is_empty() {
-                    c.text(f, if best { 15.0 } else { 13.0 }, tx, y, rh, WHITE, &ellipsize(f, 13.0, name, tw));
+                    c.text(f, if best { 15.0 } else { 13.0 }, tx, y, rh, th().text, &ellipsize(f, 13.0, name, tw));
                 } else {
                     let top = if best { y + 14 } else { y + 2 };
-                    c.text(f, if best { 15.0 } else { 13.0 }, tx, top, 20, WHITE, &ellipsize(f, 14.0, name, tw));
-                    c.text(f, 12.0, tx, top + 20, 18, TEXT_DIM, &ellipsize(f, 12.0, &sub, tw));
+                    c.text(f, if best { 15.0 } else { 13.0 }, tx, top, 20, th().text, &ellipsize(f, 14.0, name, tw));
+                    c.text(f, 12.0, tx, top + 20, 18, th().text_dim, &ellipsize(f, 12.0, &sub, tw));
                 }
                 hits.push((rect(0, y, RESULTS_W, rh), hit));
                 best = false;
@@ -731,14 +761,14 @@ fn draw_search(font: Option<&Font>, icons: &mut Icons, key: StartKey) -> StartMe
         }
     }
     if key.items.is_empty() {
-        c.text(f, 13.0, 20, 60, 24, TEXT_DIM, "No results found");
+        c.text(f, 13.0, 20, 60, 24, th().text_dim, "No results found");
     }
 
     // Preview.
     let px = RESULTS_W;
     let pw = w - px;
-    c.rect(px, 48, pw, h - 48, MENU_BG);
-    c.rect(px, 48, 1, h - 48, hex(0x3a3a3a));
+    c.rect(px, 48, pw, h - 48, th().start);
+    c.rect(px, 48, 1, h - 48, th().divider);
     if let Some(p) = &key.preview {
         let cx = px + pw / 2;
         match icons.get(&p.icon, 64).or_else(|| app_icon(icons, &p.icon, 64)) {
@@ -746,23 +776,23 @@ fn draw_search(font: Option<&Font>, icons: &mut Icons, key: StartKey) -> StartMe
             None => c.round_rect(cx - 32, 76, 64, 64, 8, ACCENT),
         }
         let name = ellipsize(f, 20.0, &p.name, pw - 48);
-        c.text(f, 20.0, cx - measure(f, 20.0, &name) / 2, 152, 30, WHITE, &name);
-        c.text(f, 13.0, cx - measure(f, 13.0, &p.kind) / 2, 184, 22, TEXT_DIM, &p.kind);
+        c.text(f, 20.0, cx - measure(f, 20.0, &name) / 2, 152, 30, th().text, &name);
+        c.text(f, 13.0, cx - measure(f, 13.0, &p.kind) / 2, 184, 22, th().text_dim, &p.kind);
         let mut ay = 214;
         if !p.location.is_empty() {
             let l = ellipsize(f, 12.0, &p.location, pw - 48);
-            c.text(f, 12.0, cx - measure(f, 12.0, &l) / 2, 206, 20, TEXT_DIM, &l);
+            c.text(f, 12.0, cx - measure(f, 12.0, &l) / 2, 206, 20, th().text_dim, &l);
             ay += 18;
         }
-        c.rect(px + 24, ay, pw - 48, 1, hex(0x3a3a3a));
+        c.rect(px + 24, ay, pw - 48, 1, th().divider);
         ay += 10;
         for (id, label, icon) in &p.actions {
             let hit = StartHit::Action(*id);
             if key.hover.as_ref() == Some(&hit) {
-                c.rect(px + 16, ay, pw - 32, 36, TASK_HOVER);
+                c.rect(px + 16, ay, pw - 32, 36, th().hover);
             }
             action_glyph(&mut c, icon, (px + 40) as f32, (ay + 18) as f32);
-            c.text(f, 13.0, px + 60, ay, 36, WHITE, label);
+            c.text(f, 13.0, px + 60, ay, 36, th().text, label);
             hits.push((rect(px + 16, ay, pw - 32, 36), hit));
             ay += 36;
         }

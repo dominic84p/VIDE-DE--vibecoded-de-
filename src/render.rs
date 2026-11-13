@@ -59,6 +59,26 @@ fn surface_tree(renderer: &mut GlesRenderer, s: &WlSurface, at: Point<i32, Logic
         .collect()
 }
 
+/// A window drawn live, shrunk to fit `area` (never enlarged) and centred in it.
+fn live_thumbnail(renderer: &mut GlesRenderer, state: &State, s: &WlSurface, area: Rectangle<i32, Logical>) -> Vec<Elem> {
+    let Some(w) = state.wm.find(s) else { return Vec::new() };
+    let g = w.geometry();
+    if g.size.w <= 0 || g.size.h <= 0 {
+        return Vec::new();
+    }
+    let scale = (area.size.w as f64 / g.size.w as f64).min(area.size.h as f64 / g.size.h as f64).min(1.0);
+    let (tw, th) = ((g.size.w as f64 * scale) as i32, (g.size.h as f64 * scale) as i32);
+    // Shift by the geometry offset so client shadows sit outside the thumbnail.
+    let off = w.surface_loc() - w.pos;
+    let at = area.loc + Point::from(((area.size.w - tw) / 2, (area.size.h - th) / 2));
+    // Draw at full size anchored at `at`, then shrink everything around that point.
+    let origin_px = at.to_physical(1);
+    render_elements_from_surface_tree(renderer, s, (at + off).to_physical(1), 1.0, 1.0, Kind::Unspecified)
+        .into_iter()
+        .map(|e| Elem::Thumb(RescaleRenderElement::from_element(e, origin_px, scale)))
+        .collect()
+}
+
 /// Everything on screen, front to back.
 pub fn elements(renderer: &mut GlesRenderer, state: &mut State) -> Vec<Elem> {
     elements_with(renderer, state, true)
@@ -92,25 +112,12 @@ pub fn elements_with(renderer: &mut GlesRenderer, state: &mut State, cursor: boo
         if let (Some(origin), Some(panel)) = (state.switcher_origin(), state.switcher_picture()) {
             let sw = state.switcher.as_ref().unwrap();
             for (i, s) in sw.order.iter().enumerate() {
-                let Some(w) = state.wm.find(s) else { continue };
-                let g = w.geometry();
-                if g.size.w <= 0 || g.size.h <= 0 {
-                    continue;
-                }
                 let tile = sw.tile(i);
-                let area = (crate::switcher::TILE_W - 20, crate::switcher::THUMB_H);
-                let scale = (area.0 as f64 / g.size.w as f64).min(area.1 as f64 / g.size.h as f64).min(1.0);
-                let (tw, th) = ((g.size.w as f64 * scale) as i32, (g.size.h as f64 * scale) as i32);
-                // Centre the thumbnail; shift by the geometry offset so client shadows sit outside.
-                let off = w.surface_loc() - w.pos;
-                let at = origin + tile.loc + Point::from(((tile.size.w - tw) / 2, 30 + (area.1 - th) / 2));
-                // Draw at full size anchored at `at`, then shrink everything around that point.
-                let origin_px = at.to_physical(1);
-                out.extend(
-                    render_elements_from_surface_tree(renderer, s, (at + off).to_physical(1), 1.0, 1.0, Kind::Unspecified)
-                        .into_iter()
-                        .map(|e| Elem::Thumb(RescaleRenderElement::from_element(e, origin_px, scale))),
+                let area = Rectangle::new(
+                    origin + tile.loc + Point::from(((tile.size.w - (crate::switcher::TILE_W - 20)) / 2, 30)),
+                    (crate::switcher::TILE_W - 20, crate::switcher::THUMB_H).into(),
                 );
+                out.extend(live_thumbnail(renderer, state, s, area));
             }
             out.extend(image(renderer, &panel, origin, Kind::Unspecified));
         }
@@ -135,10 +142,13 @@ pub fn elements_with(renderer: &mut GlesRenderer, state: &mut State, cursor: boo
         }
     });
 
-    // Task View desktop switcher.
+    // Task View: live window thumbnails over its picture.
     crate::supervisor::guard("task view", || {
         let desktops_at = state.desktops_rect().loc;
         if let Some(buf) = state.desktops_picture() {
+            for (s, area) in state.task_view_thumbs() {
+                out.extend(live_thumbnail(renderer, state, &s, area));
+            }
             out.extend(image(renderer, &buf, desktops_at, Kind::Unspecified));
         }
     });
@@ -245,6 +255,8 @@ pub fn elements_with(renderer: &mut GlesRenderer, state: &mut State, cursor: boo
                 taskview_open: state.desktops.open,
                 tray_apps: state.sni_items.iter().map(|i| (i.id.clone(), tray_fingerprint(i))).collect(),
                 search_text: (state.start.open && state.start.searching()).then(|| state.start.query.clone()),
+                notifications: (!state.action_center.notifications.is_empty(), state.action_center.unseen),
+                action_center_open: state.action_center.open,
             };
             if state.taskbar.as_ref().is_none_or(|t| t.key != key) {
                 let tray_icons = tray_icons(state);

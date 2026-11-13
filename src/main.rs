@@ -18,6 +18,7 @@ mod sni;
 mod switcher;
 mod state;
 mod supervisor;
+mod theme;
 mod tray;
 #[cfg(feature = "tty")]
 mod tty;

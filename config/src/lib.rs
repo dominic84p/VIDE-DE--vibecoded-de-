@@ -50,6 +50,9 @@ pub struct Config {
     pub toast_seconds: u32,
     /// Taskbar clock in 24-hour time.
     pub clock_24h: bool,
+    /// Windows 10's "default Windows mode": light taskbar, Start, Action Center and menus
+    /// instead of dark. Apps stay light either way.
+    pub light_mode: bool,
 }
 
 impl Default for Config {
@@ -78,6 +81,7 @@ impl Default for Config {
             toasts: true,
             toast_seconds: 5,
             clock_24h: false,
+            light_mode: false,
         }
     }
 }
@@ -118,6 +122,7 @@ impl Config {
                 "toasts" => c.toasts = v == "true",
                 "toast_seconds" => c.toast_seconds = v.parse().unwrap_or(5).clamp(2, 60),
                 "clock_24h" => c.clock_24h = v == "true",
+                "light_mode" => c.light_mode = v == "true",
                 _ => {}
             }
         }
@@ -135,7 +140,7 @@ impl Config {
              display_mode={}\ndisplay_scale={:.2}\nnight_light={}\nnight_light_strength={:.2}\nidle_lock_minutes={}\n\
              tap_to_click={}\nnatural_scroll={}\ndisable_while_typing={}\n\
              xkb_layout={}\nxkb_variant={}\nxkb_options={}\nkey_repeat_delay={}\nkey_repeat_rate={}\n\
-             toasts={}\ntoast_seconds={}\nclock_24h={}\n",
+             toasts={}\ntoast_seconds={}\nclock_24h={}\nlight_mode={}\n",
             self.hide_kde_apps,
             self.mouse_flat,
             self.mouse_speed,
@@ -156,7 +161,8 @@ impl Config {
             self.key_repeat_rate,
             self.toasts,
             self.toast_seconds,
-            self.clock_24h
+            self.clock_24h,
+            self.light_mode
         );
         // Write-then-rename so the compositor never reads a half-written file.
         let tmp = path.with_extension("conf.tmp");

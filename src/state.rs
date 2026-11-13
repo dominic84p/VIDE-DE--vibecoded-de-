@@ -257,6 +257,7 @@ pub struct State {
 impl State {
     pub fn new(dh: DisplayHandle, loop_handle: LoopHandle<'static, State>, socket_name: String) -> Self {
         let config = vide_config::Config::load();
+        crate::theme::set_light(config.light_mode);
         let clock = clock_now(config.clock_24h);
         let mut seat_state = SeatState::new();
         let mut seat = seat_state.new_wl_seat(&dh, "seat0");
@@ -682,6 +683,9 @@ impl State {
             self.keyboard.change_repeat_info(new.key_repeat_rate, new.key_repeat_delay);
         }
         tracing::info!("settings reloaded: {new:?}");
+        if crate::theme::set_light(new.light_mode) {
+            self.repaint_shell();
+        }
         let clock_format_changed = new.clock_24h != self.config.clock_24h;
         self.config = new;
         if clock_format_changed {
@@ -690,6 +694,24 @@ impl State {
         }
         self.start.menu = None;
         self.refresh_start();
+        self.needs_redraw = true;
+    }
+
+    /// Throw away every cached picture of our chrome, so all of it repaints (after a
+    /// light/dark switch, which none of the cache keys know about).
+    pub fn repaint_shell(&mut self) {
+        self.taskbar = None;
+        self.start.menu = None;
+        self.action_center.panel = None;
+        self.toasts.repaint();
+        self.tray.picture = None;
+        self.desktops.repaint();
+        if let Some(m) = self.menu.as_mut() {
+            m.picture = None;
+        }
+        if let Some(s) = self.switcher.as_mut() {
+            s.picture = None;
+        }
         self.needs_redraw = true;
     }
 

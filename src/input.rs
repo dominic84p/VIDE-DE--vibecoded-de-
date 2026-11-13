@@ -198,8 +198,8 @@ fn menu_key(sym: Keysym, ch: Option<char>) -> MenuKey {
 enum Target {
     /// Over our right-click menu, maybe on an item.
     Menu(Option<usize>),
-    /// Over the Task View panel, maybe on a desktop tile.
-    Desktops(Option<usize>),
+    /// Over Task View: a desktop, a window, or nothing.
+    Desktops(crate::desktops::TaskViewHit),
     /// Over the Action Center (notifications).
     ActionCenter(crate::notifications::ActionCenterHit),
     /// Over a notification toast.
@@ -747,7 +747,7 @@ impl State {
             return Target::Toast(hit);
         }
         if self.desktops.open && self.desktops_rect().to_f64().contains(pos) {
-            return Target::Desktops(self.desktop_at(pos));
+            return Target::Desktops(self.task_view_at(pos));
         }
         if self.action_center.open {
             let r = self.action_center_rect();
@@ -837,9 +837,9 @@ impl State {
             if let Some(m) = self.menu.as_mut() {
                 m.hover = menu_hover;
             }
-            self.desktops.hover = match target {
-                Target::Desktops(d) => d,
-                _ => None,
+            self.desktops.hover = match &target {
+                Target::Desktops(h) => h.clone(),
+                _ => Default::default(),
             };
             let ac_hover = match &target {
                 Target::ActionCenter(h) => h.clone(),
@@ -990,12 +990,12 @@ impl State {
             }
         }
 
-        // Task View panel: a click on a tile switches desktop; anywhere else closes it
-        // (the Task View button itself toggles it below).
+        // Task View: clicks pick a desktop or window, or close it; a click on the taskbar
+        // closes it too (the Task View button itself toggles it below).
         if self.desktops.open {
-            if let Target::Desktops(tile) = target {
-                if let (true, Some(ws)) = (left, tile) {
-                    self.switch_desktop(ws);
+            if let Target::Desktops(hit) = target {
+                if left {
+                    self.task_view_click(hit);
                 }
                 return;
             }
@@ -1012,7 +1012,7 @@ impl State {
                 }
                 return;
             }
-            if !matches!(target, Target::Taskbar(TaskbarHit::Clock)) {
+            if !matches!(target, Target::Taskbar(TaskbarHit::Clock | TaskbarHit::ActionCenter)) {
                 self.close_action_center();
             }
         }
@@ -1085,7 +1085,7 @@ impl State {
                         TaskbarHit::Volume => self.toggle_flyout(crate::tray::Flyout::Volume),
                         TaskbarHit::Brightness => self.toggle_flyout(crate::tray::Flyout::Brightness),
                         TaskbarHit::Network => self.toggle_flyout(crate::tray::Flyout::Network),
-                        TaskbarHit::Clock => self.toggle_action_center(),
+                        TaskbarHit::Clock | TaskbarHit::ActionCenter => self.toggle_action_center(),
                         TaskbarHit::TrayApp(id) => {
                             self.tray_menu_x = pos.x as i32;
                             if let Some(surface) = self.window_for_tray(&id) {

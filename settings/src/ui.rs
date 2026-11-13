@@ -305,6 +305,7 @@ impl Settings {
                 false
             }
             SubPage::Background => self.page_background(ui),
+            SubPage::Colors => self.page_colors(ui),
             SubPage::Start => self.page_start(ui),
             SubPage::Taskbar => {
                 self.page_taskbar(ui);
@@ -1107,6 +1108,20 @@ impl Settings {
             false
         });
         changed
+    }
+
+    fn page_colors(&mut self, ui: &mut egui::Ui) -> bool {
+        section_title(ui, "Colors");
+        setting_block(ui, "Choose your default Windows mode", "The taskbar, Start, Action Center and menus.", |ui| {
+            let mut changed = false;
+            for (light, label) in [(true, "Light"), (false, "Dark")] {
+                if ui.radio(self.config.light_mode == light, label).clicked() && self.config.light_mode != light {
+                    self.config.light_mode = light;
+                    changed = true;
+                }
+            }
+            changed
+        })
     }
 
     fn page_start(&mut self, ui: &mut egui::Ui) -> bool {

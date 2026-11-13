@@ -112,6 +112,11 @@ File manager styled like Windoze File Explorer.
 - **List/Details/Grid views**
 - **Preview pane**
 - **Copy/Move/Delete/Rename**
+- **This PC lists every drive:** each disk partition with a filesystem, mounted or not
+  (read from `/proc/mounts` and udev, like `lsblk`). Opening an unmounted drive mounts it
+  through udisks2 (`udisksctl`); the polkit agent asks for a password if the disk needs one.
+  Right-click a mounted drive for **Eject** (removable, also powers it off) or **Unmount**.
+  Partitions udisks hides (EFI, recovery) are hidden here too.
 - **Drag & drop**
 - **Context menus**
 

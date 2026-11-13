@@ -29,6 +29,7 @@ VIDE-DE is a **Wayland compositor + desktop shell** built on **Smithay 0.7**. Sm
 │  search.rs                  Start menu search logic             │
 │  screenshot.rs              Screenshots and region snipping     │
 │  menu.rs, pins.rs           Right-click menus, pinned apps      │
+│  health.rs                  Ping & main-loop freeze watchdogs   │
 │  config/                    Shared settings (vide-config)       │
 └─────────────────────────────────────────────────────────────────┘
                               │
@@ -161,9 +162,9 @@ All registered as `.desktop` entries on startup via `apps::install_builtin()`.
 
 ## Further Reading
 
-- [Main Event Loop](/architecture/main-event-loop/) — `main.rs` deep dive
-- [Compositor State](/architecture/state/) — `state.rs` protocol handlers
-- [Window Manager](/components/window-manager/) — `wm.rs` stacking and layout
-- [Input Handling](/components/input-handling/) — `input.rs` keybinds and routing
-- [Rendering](/components/rendering/) — `render.rs` frame building
-- [UI System](/components/ui/) — `ui.rs` + `canvas.rs` chrome painting
+- [Main Event Loop](/vide-de/architecture/main-event-loop/) — `main.rs` deep dive
+- [Compositor State](/vide-de/architecture/state/) — `state.rs` protocol handlers
+- [Window Manager](/vide-de/components/window-manager/) — `wm.rs` stacking and layout
+- [Input Handling](/vide-de/components/input-handling/) — `input.rs` keybinds and routing
+- [Rendering](/vide-de/components/rendering/) — `render.rs` frame building
+- [UI System](/vide-de/components/ui/) — `ui.rs` + `canvas.rs` chrome painting

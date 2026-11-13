@@ -146,7 +146,7 @@ grep -i config /tmp/vibe.log
 
 ## NVIDIA-Specific
 
-See [NVIDIA Guide](/wiki/nvidia-guide/) for detailed NVIDIA troubleshooting.
+See [NVIDIA Guide](/vide-de/wiki/nvidia-guide/) for detailed NVIDIA troubleshooting.
 
 ## Performance
 
@@ -171,7 +171,7 @@ heaptrack ./target/release/vibe-comp --nested
 
 ## Getting Help
 
-1. Check [FAQ](/wiki/faq/)
+1. Check [FAQ](/vide-de/wiki/faq/)
 2. Search [GitHub Issues](https://github.com/dominic84p/vide-de/issues)
 3. Open new issue with:
    - `cargo build --release --workspace` output
@@ -181,7 +181,7 @@ heaptrack ./target/release/vibe-comp --nested
 
 ## Related
 
-- [FAQ](/wiki/faq/)
-- [NVIDIA Guide](/wiki/nvidia-guide/)
-- [Testing](/development/testing/)
-- [Installation](/getting-started/installation/)
+- [FAQ](/vide-de/wiki/faq/)
+- [NVIDIA Guide](/vide-de/wiki/nvidia-guide/)
+- [Testing](/vide-de/development/testing/)
+- [Installation](/vide-de/getting-started/installation/)

@@ -308,8 +308,8 @@ Created by `apps::install_builtin()` on compositor startup:
 
 ## Related
 
-- [App Discovery](/components/apps/)
-- [Start Menu Search](/components/search/)
-- [Pinned Apps](/components/pins/)
-- [IPC Socket](/components/ipc/)
-- [Screenshots](/components/screenshot/)
+- [App Discovery](/vide-de/components/apps/)
+- [Start Menu Search](/vide-de/components/search/)
+- [Pinned Apps](/vide-de/components/pins/)
+- [IPC Socket](/vide-de/components/ipc/)
+- [Screenshots](/vide-de/components/screenshot/)

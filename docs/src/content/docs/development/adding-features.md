@@ -262,6 +262,6 @@ vide-config set my-feature-enabled false
 
 ## Related Files
 
-- [Architecture](/architecture/overview/) — Component overview
-- [Configuration](/configuration/settings.md) — Settings reference
-- [Contributing](/development/contributing/) — PR requirements
+- [Architecture](/vide-de/architecture/overview/) — Component overview
+- [Configuration](/vide-de/configuration/settings) — Settings reference
+- [Contributing](/vide-de/development/contributing/) — PR requirements

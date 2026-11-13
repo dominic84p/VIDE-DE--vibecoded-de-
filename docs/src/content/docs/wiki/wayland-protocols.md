@@ -164,8 +164,8 @@ None currently. All IPC goes through `$VIDE_IPC` Unix socket (JSON Lines).
 
 ## Related
 
-- [Architecture](/architecture/overview/)
-- [Components](/components/window-manager/)
-- [Layer Shell](/components/layers/)
-- [XWayland](/components/xwayland/)
-- [Screenshots](/components/screenshot/)
+- [Architecture](/vide-de/architecture/overview/)
+- [Components](/vide-de/components/window-manager/)
+- [Layer Shell](/vide-de/components/layers/)
+- [XWayland](/vide-de/components/xwayland/)
+- [Screenshots](/vide-de/components/screenshot/)

@@ -43,10 +43,7 @@ async function generateSitemap() {
     
     walk(distDir);
     
-    // Add special pages
-    urls.add(SITE_URL + BASE_PATH + 'git-browser/');
-    urls.add(SITE_URL + BASE_PATH + 'changelog/');
-    urls.add(SITE_URL + BASE_PATH + 'contributors/');
+    // Add 404 page
     urls.add(SITE_URL + BASE_PATH + '404.html');
     
     // Generate sitemap XML

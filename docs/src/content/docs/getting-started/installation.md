@@ -123,6 +123,6 @@ Written by the Settings app, polled by compositor once/second. Live reload works
 
 ## Next Steps
 
-- [Architecture Overview](/architecture/overview/) — Understand how it works
-- [Keybindings](/reference/keybindings/) — Learn the shortcuts
-- [Configuration](/configuration/settings/) — Customize your setup
+- [Architecture Overview](/vide-de/architecture/overview/) — Understand how it works
+- [Keybindings](/vide-de/reference/keybindings/) — Learn the shortcuts
+- [Configuration](/vide-de/configuration/settings/) — Customize your setup

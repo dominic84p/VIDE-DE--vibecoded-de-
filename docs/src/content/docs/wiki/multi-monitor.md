@@ -139,7 +139,7 @@ RUST_LOG=vibe_comp::output=debug ./target/release/vibe-comp --nested
 
 ## Related
 
-- [Configuration](/configuration/settings.md)
-- [Architecture](/architecture/overview/)
-- [Layer Shell](/components/layers/)
-- [XWayland](/components/xwayland/)
+- [Configuration](/vide-de/configuration/settings)
+- [Architecture](/vide-de/architecture/overview/)
+- [Layer Shell](/vide-de/components/layers/)
+- [XWayland](/vide-de/components/xwayland/)

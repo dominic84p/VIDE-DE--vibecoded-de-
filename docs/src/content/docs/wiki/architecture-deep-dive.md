@@ -350,8 +350,8 @@ Registered as `.desktop` entries via `apps::install_builtin()`.
 
 ## Related
 
-- [Architecture Overview](/architecture/overview/)
-- [Main Event Loop](/architecture/main-event-loop/)
-- [Compositor State](/architecture/state/)
-- [Window Manager](/components/window-manager/)
-- [Rendering](/components/rendering/)
+- [Architecture Overview](/vide-de/architecture/overview/)
+- [Main Event Loop](/vide-de/architecture/main-event-loop/)
+- [Compositor State](/vide-de/architecture/state/)
+- [Window Manager](/vide-de/components/window-manager/)
+- [Rendering](/vide-de/components/rendering/)

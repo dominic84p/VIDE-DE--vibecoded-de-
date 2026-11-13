@@ -1,200 +1,54 @@
 ---
 title: 'Settings Reference'
-description: 'Complete settings.conf reference with all options'
+description: 'Complete ~/.config/vide-de/settings.conf reference'
 ---
 
 # Settings Reference
 
-Complete reference for `~/.config/vide-de/settings.conf`.
+Complete reference for `~/.config/vide-de/settings.conf` as defined in `config/src/lib.rs`. The compositor polls this file once per second and applies updates live.
 
-## Format
+## Display & Appearance
 
-```ini
-# Comments with #
-key = value
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `wallpaper` | path | `~/.local/share/vide-de/wallpapers/bloom.png` | Desktop wallpaper image (drawn by `vide-desktop`) |
+| `display_mode` | string | `""` | Monitor mode as `WIDTHxHEIGHT@HZ` (e.g. `2560x1440@144`); empty = monitor's preferred mode. Applied live in TTY mode |
+| `display_scale` | float | `1.0` | UI scale (`1.0` = 100%, `2.0` = 200%). Applied live in TTY mode |
+| `night_light` | bool | `false` | Warm the screen to cut blue light |
+| `night_light_strength` | float | `0.5` | Night light warmth (`0.0` to `1.0`) |
+| `direct_scanout` | bool | `false` | Ultra Performance Mode: bypass compositing for fullscreen apps (off by default for NVIDIA stability) |
 
-# Sections ignored (flat namespace)
-[section]
-key = value
-```
+## Taskbar, Start Menu & Notifications
 
-## All Options
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `hide_kde_apps` | bool | `false` | Hide KDE's own apps from the Start menu list and search |
+| `toasts` | bool | `true` | Show a popup for new notifications (notifications always land in Action Center) |
+| `toast_seconds` | int | `5` | How long a notification popup stays (seconds), unless the app requests its own timeout |
+| `clock_24h` | bool | `false` | Display the taskbar clock in 24-hour time (`14:30` instead of `2:30 PM`) |
 
-### Taskbar
+## Mouse & Touchpad
 
-```ini
-taskbar-height = 40              # int, 24-100
-taskbar-position = bottom        # top|bottom|left|right
-taskbar-bg = 0078D7FF            # ARGB hex (AABBGGRR)
-taskbar-fg = FFFFFFFF            # ARGB hex
-taskbar-opacity = 1.0            # float 0.0-1.0
-taskbar-auto-hide = false        # bool
-taskbar-show-clock = true        # bool
-taskbar-clock-format = %H:%M     # strftime
-taskbar-show-date = false        # bool
-```
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `mouse_flat` | bool | `true` (or KDE setting) | Flat mouse profile (no acceleration); `false` = libinput adaptive curve |
+| `mouse_speed` | float | `0.0` (or KDE setting) | Pointer speed from `-1.0` (slowest) to `1.0` (fastest) |
+| `tap_to_click` | bool | `true` | Touchpad tap-to-click |
+| `natural_scroll` | bool | `false` | Reverse (natural) scrolling direction |
+| `disable_while_typing` | bool | `true` | Disable touchpad while typing |
 
-### Start Menu
+## Keyboard
 
-```ini
-start-menu-width = 500           # int
-start-menu-height = 600          # int
-start-menu-max-results = 10      # int
-start-menu-show-recent = true    # bool
-start-menu-recent-count = 5      # int
-start-menu-pinned-apps = konsole.desktop,firefox.desktop,code.desktop,vide-settings.desktop
-```
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `xkb_layout` | string | `""` | XKB keyboard layout(s), comma-separated (e.g. `us`, `us,de`); empty = system default |
+| `xkb_variant` | string | `""` | XKB keyboard variant(s); empty = default |
+| `xkb_options` | string | `""` | XKB options (e.g. `caps:escape,grp:alt_shift_toggle`); empty = none |
+| `key_repeat_delay` | int | `300` | Key repeat delay in milliseconds |
+| `key_repeat_rate` | int | `30` | Key repeat rate in Hz |
 
-### Window Management
+## Power / Idle
 
-```ini
-window-border-width = 1          # int
-window-border-color = 0078D7FF   # ARGB hex (active)
-window-border-color-inactive = 808080FF  # ARGB hex (inactive)
-window-titlebar-height = 32      # int
-window-titlebar-bg = 0078D7FF    # ARGB hex
-window-titlebar-fg = FFFFFFFF    # ARGB hex
-window-snap-distance = 20        # int (px)
-window-animation-duration = 150  # int (ms)
-```
-
-### Desktops
-
-```ini
-desktops-count = 10              # int, 1-20
-desktops-names = Main,Code,Web,Chat,Media,,,,,,  # comma-separated, 10 items
-desktops-animation = 150         # int (ms)
-```
-
-### System Tray
-
-```ini
-systray-icon-size = 22           # int
-systray-spacing = 4              # int
-systray-show-hidden = false      # bool
-```
-
-### Screenshot
-
-```ini
-screenshot-directory = ~/Pictures/Screenshots
-screenshot-filename-format = Screenshot_%Y-%m-%d_%H-%M-%S.png
-screenshot-copy-to-clipboard = true
-screenshot-notify = true
-snip-magnifier = true
-snip-magnifier-scale = 2.0
-```
-
-### Input
-
-```ini
-input-repeat-rate = 25           # int (Hz)
-input-repeat-delay = 500         # int (ms)
-input-natural-scroll = false     # bool
-input-touchpad-tap = true        # bool
-input-touchpad-drag = true       # bool
-```
-
-### Cursor
-
-```ini
-cursor-theme = Adwaita           # string (theme name)
-cursor-size = 24                 # int
-cursor-animation = true          # bool
-```
-
-### XWayland
-
-```ini
-xwayland-enabled = true          # bool
-xwayland-lazy-start = true       # bool
-```
-
-### Layer Shell
-
-```ini
-layer-shell-bottom-panel = 0     # int (px reserved)
-layer-shell-top-panel = 0        # int (px reserved)
-```
-
-### Icons
-
-```ini
-icons-theme = Adwaita            # string
-icons-fallback-theme = hicolor   # string
-icons-default-size = 24          # int
-```
-
-## Color Format
-
-All colors are **ARGB hex** (8 digits): `AABBGGRR`
-
-- `AA` = Alpha (00-FF)
-- `BB` = Blue
-- `GG` = Green
-- `RR` = Red
-
-Examples:
-- `FF000000` = Opaque black
-- `FFFFFFFF` = Opaque white
-- `0078D7FF` = VIDE-DE blue (opaque)
-- `80000000` = 50% transparent black
-
-## Boolean Values
-
-- `true` / `false`
-- `1` / `0`
-- `yes` / `no`
-- `on` / `off`
-
-## Lists
-
-Comma-separated, no spaces:
-```ini
-start-menu-pinned-apps = app1.desktop,app2.desktop,app3.desktop
-desktops-names = One,Two,Three,Four,Five,Six,Seven,Eight,Nine,Ten
-```
-
-## Live Reload
-
-Changes apply within **1 second** — no restart needed.
-
-Settings app (`vide-settings`) writes directly to file.
-
-## CLI Access
-
-```bash
-# Get
-vide-config get taskbar-height
-
-# Set
-vide-config set taskbar-height 48
-
-# List all
-vide-config list
-
-# Validate
-vide-config validate
-```
-
-## File Location
-
-```
-~/.config/vide-de/settings.conf
-```
-
-Override via `VIDE_CONFIG_DIR`:
-```bash
-export VIDE_CONFIG_DIR=/custom/path
-# Config: /custom/path/settings.conf
-```
-
-## Default Values
-
-Run `vide-config list` to see all defaults with descriptions.
-
-## Related Files
-
-- [Configuration](/configuration/settings.md) — Explanations
-- [Config Library](/configuration/config-library.md) — Implementation
-- [Keybindings](/reference/keybindings.md) — Shortcuts
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `idle_lock_minutes` | int | `0` | Idle minutes before lock (`0` = never) |

@@ -109,6 +109,6 @@ Set via environment variables when launching.
 
 ## Related Files
 
-- [Input Handling](/components/input-handling/) — Implementation details
-- [Configuration](/configuration/settings.md) — Other settings
-- [Installation](/getting-started/installation/) — Running with debug flags
+- [Input Handling](/vide-de/components/input-handling/) — Implementation details
+- [Configuration](/vide-de/configuration/settings) — Other settings
+- [Installation](/vide-de/getting-started/installation/) — Running with debug flags

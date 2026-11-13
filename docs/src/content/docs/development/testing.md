@@ -7,6 +7,34 @@ description: 'Test procedures, nested testing, TTY testing, debugging'
 
 ## Nested Testing (Primary)
 
+### Automated Nested Test Harness (`scripts/nested-test.sh`)
+
+For anything that opens the compositor, use `scripts/nested-test.sh`:
+
+```bash
+./scripts/nested-test.sh scripts/nested-tests/smoke.test
+./scripts/nested-test.sh scripts/nested-tests/popup-select-chromium.test
+./scripts/nested-test.sh scripts/nested-tests/health.test
+```
+
+It automatically handles all safety isolation:
+- Creates a private `XDG_RUNTIME_DIR`, `XDG_CONFIG_HOME`, and private D-Bus session (so it never collides with the host tray or remounts `/run/user/$UID/doc`).
+- Stubs the keyring daemon so apps don't pop password prompts.
+- Runs in its own process group (`setsid`) and cleans up only that group on exit.
+- Verifies that the host `xdg-document-portal` mount survived unchanged.
+- Sets `VIBE_TEST_INPUT=1` so the test script can inject clicks, keys, and diagnostic commands over `$VIDE_IPC`.
+
+**Test file commands** (used in `scripts/nested-tests/*.test`):
+- `run <cmd>` / `run-host <cmd>` — launch an app inside the nested session (or on the host)
+- `expect-window <title>` — wait for a window with matching title (supports quoted strings)
+- `move <X> <Y>`, `click [left|right|middle]`, `key <combo>`, `type <text>` — inject pointer/keyboard input
+- `shot <name>` — save a screenshot to the run's output directory
+- `windows`, `ipc <cmd>` — query windows or send any `$VIDE_IPC` command (e.g. `popups`, `pointer-state`, `stall`)
+- `stop` / `cont` — `SIGSTOP` / `SIGCONT` a launched client to test freeze detection
+- `expect-log <pattern>` — assert a pattern appears in the compositor log
+
+### Manual Nested Test
+
 Run inside current Wayland/X11 desktop as a window.
 
 ### Basic Test
@@ -197,6 +225,6 @@ heaptrack ./target/release/vibe-comp --nested
 
 ## Related Files
 
-- [Building](/development/building/) — Build instructions
-- [Architecture](/architecture/overview/) — Component overview
-- [NVIDIA Guide](/wiki/nvidia-guide/) — NVIDIA-specific testing
+- [Building](/vide-de/development/building/) — Build instructions
+- [Architecture](/vide-de/architecture/overview/) — Component overview
+- [NVIDIA Guide](/vide-de/wiki/nvidia-guide/) — NVIDIA-specific testing

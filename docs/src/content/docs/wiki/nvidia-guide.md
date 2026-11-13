@@ -160,7 +160,7 @@ lazy-start = true
 
 ## Related
 
-- [Troubleshooting](/wiki/troubleshooting/)
-- [Architecture](/architecture/overview/)
-- [XWayland](/components/xwayland/)
-- [Testing](/development/testing/)
+- [Troubleshooting](/vide-de/wiki/troubleshooting/)
+- [Architecture](/vide-de/architecture/overview/)
+- [XWayland](/vide-de/components/xwayland/)
+- [Testing](/vide-de/development/testing/)

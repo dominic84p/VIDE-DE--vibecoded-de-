@@ -15,7 +15,7 @@ export default defineConfig({
 				src: './public/logo.png',
 				alt: 'VIDE-DE Logo',
 			},
-			favicon: '/favicon.svg',
+			favicon: '/logo.png',
 			social: [
 				{ icon: 'github', label: 'GitHub', href: 'https://github.com/dominic84p/vide-de' },
 			],
@@ -23,7 +23,7 @@ export default defineConfig({
 				{
 					label: 'Getting Started',
 					items: [
-						{ label: 'Overview', slug: 'index' },
+						{ label: 'Overview', slug: 'overview' },
 						{ label: 'Installation', slug: 'getting-started/installation' },
 					],
 				},
@@ -56,6 +56,7 @@ export default defineConfig({
 						{ label: 'Focus Management (focus.rs)', slug: 'components/focus' },
 						{ label: 'Right-Click Menus (menu.rs)', slug: 'components/menu' },
 						{ label: 'Pinned Apps (pins.rs)', slug: 'components/pins' },
+						{ label: 'Health & Diagnostics (health.rs)', slug: 'components/health' },
 					],
 				},
 				{

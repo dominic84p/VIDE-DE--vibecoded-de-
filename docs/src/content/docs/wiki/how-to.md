@@ -202,7 +202,7 @@ systemctl --user restart xdg-document-portal
 
 ## Related
 
-- [FAQ](/wiki/faq/)
-- [Troubleshooting](/wiki/troubleshooting/)
-- [Keybindings](/reference/keybindings/)
-- [Settings Reference](/reference/settings-reference/)
+- [FAQ](/vide-de/wiki/faq/)
+- [Troubleshooting](/vide-de/wiki/troubleshooting/)
+- [Keybindings](/vide-de/reference/keybindings/)
+- [Settings Reference](/vide-de/reference/settings-reference/)

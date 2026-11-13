@@ -163,6 +163,16 @@ fn manage_x11(&mut self, x11_surface: X11Surface) {
 
 Override-redirect windows (menus, tooltips) live in `state.x11_overrides` and draw above everything.
 
+## Popups & Focus
+
+Wayland `xdg_popup` offsets are relative to their parent's **window geometry** (`w.pos`), not its surface origin (`surface_loc()`). Apps with client-side shadows (Chromium, Electron, GTK) have a shadow inset between the two, so drawing, hit-testing, and unconstraining all use:
+
+```text
+w.pos + popup_offset - popup.geometry().loc
+```
+
+When a pointer click lands inside a popup surface, `input.rs` **does not** re-focus the parent toplevel. Dropdowns and site-permission prompts in Chromium take keyboard focus themselves; handing focus back to the parent closes the popup before the click is delivered.
+
 ## Related Files
 
 - `state.rs` — Window list, workspace management

@@ -16,6 +16,7 @@ description: 'All environment variables used by VIDE-DE'
 | `VIBE_DEBUG_DESKTOPS` | — | `1` = open Task View at launch |
 | `VIBE_DEBUG_SWITCHER` | — | `1` = step Alt+Tab after 5s |
 | `VIBE_DEBUG_SHOT` | — | `1` = screenshot after 6s |
+| `VIBE_TEST_INPUT` | — | `1` = enable test-only input injection & diagnostic commands on `$VIDE_IPC` (used by `scripts/nested-test.sh`) |
 | `RUST_LOG` | `info` | Logging level (trace/debug/info/warn/error) |
 | `XDG_RUNTIME_DIR` | `/run/user/$UID` | Runtime directory (Wayland socket, D-Bus) |
 | `WAYLAND_DISPLAY` | `wayland-0` | Wayland socket name |
@@ -138,6 +139,6 @@ dbus-run-session -- \
 
 ## Related Files
 
-- [CLI Flags](/reference/cli-flags/) — Command-line arguments
-- [Installation](/getting-started/installation/) — Running instructions
-- [Testing](/development/testing/) — Test procedures
+- [CLI Flags](/vide-de/reference/cli-flags/) — Command-line arguments
+- [Installation](/vide-de/getting-started/installation/) — Running instructions
+- [Testing](/vide-de/development/testing/) — Test procedures

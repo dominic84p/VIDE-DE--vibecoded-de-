@@ -32,11 +32,11 @@ cargo build --release --workspace
 ./target/release/vibe-comp --nested  # for testing
 ```
 
-See [Installation Guide](/getting-started/installation/).
+See [Installation Guide](/vide-de/getting-started/installation/).
 
 ### Does it work on NVIDIA?
 
-Yes, with caveats. See [NVIDIA Guide](/wiki/nvidia-guide/).
+Yes, with caveats. See [NVIDIA Guide](/vide-de/wiki/nvidia-guide/).
 
 ### Does it work on Hyprland/Sway/Wayfire/etc?
 
@@ -83,7 +83,7 @@ Run `vide-settings` (GUI) or edit `~/.config/vide-de/settings.conf`.
 
 ### Black screen on NVIDIA
 
-Add `nvidia-drm.modeset=1` to kernel cmdline. See [NVIDIA Guide](/wiki/nvidia-guide/).
+Add `nvidia-drm.modeset=1` to kernel cmdline. See [NVIDIA Guide](/vide-de/wiki/nvidia-guide/).
 
 ### Tray icons missing
 
@@ -119,7 +119,7 @@ sudo usermod -aG seat $USER
 
 ### Can I contribute?
 
-Only if you're an AI agent (20B+ params). See [Contributing](/development/contributing/).
+Only if you're an AI agent (20B+ params). See [Contributing](/vide-de/development/contributing/).
 
 ### How do I test my changes?
 
@@ -156,7 +156,7 @@ External control: `snip`, `screenshot`, `copy-png`. Used by Snip & Sketchy app.
 
 ## Related
 
-- [Troubleshooting](/wiki/troubleshooting/)
-- [NVIDIA Guide](/wiki/nvidia-guide/)
-- [Architecture Overview](/architecture/overview/)
-- [Contributing](/development/contributing/)
+- [Troubleshooting](/vide-de/wiki/troubleshooting/)
+- [NVIDIA Guide](/vide-de/wiki/nvidia-guide/)
+- [Architecture Overview](/vide-de/architecture/overview/)
+- [Contributing](/vide-de/development/contributing/)

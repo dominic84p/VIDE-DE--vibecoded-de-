@@ -11,7 +11,7 @@ VIDE-DE supports gaming through XWayland with full GPU acceleration.
 
 ### Compositor
 
-- `linux-dmabuf` feedback working (see [NVIDIA Guide](/wiki/nvidia-guide/))
+- `linux-dmabuf` feedback working (see [NVIDIA Guide](/vide-de/wiki/nvidia-guide/))
 - `relative-pointer` + `pointer-constraints` protocols
 - `zwp_idle_inhibit_v1` for fullscreen games
 
@@ -87,7 +87,7 @@ fn release_pointer(&mut self) {
 
 ### NVIDIA
 
-See [NVIDIA Guide](/wiki/nvidia-guide/) — critical for gaming.
+See [NVIDIA Guide](/vide-de/wiki/nvidia-guide/) — critical for gaming.
 
 ### AMD/Intel
 
@@ -158,7 +158,7 @@ flatpak install flathub com.heroicgameslauncher.hgl
 
 | Issue | Fix |
 |-------|-----|
-| Game runs at 1 FPS | dmabuf not working — check [NVIDIA Guide](/wiki/nvidia-guide/) |
+| Game runs at 1 FPS | dmabuf not working — check [NVIDIA Guide](/vide-de/wiki/nvidia-guide/) |
 | Mouse escapes window | `relative-pointer` not working — check logs |
 | Cursor visible in game | `pointer-constraints` not working |
 | Screen blanks during game | `idle-inhibit` not working |
@@ -200,7 +200,7 @@ RUST_LOG=vibe_comp::xwayland=debug,vibe_comp::input=debug \
 
 ## Related
 
-- [NVIDIA Guide](/wiki/nvidia-guide/)
-- [XWayland](/components/xwayland/)
-- [Input Handling](/components/input-handling/)
-- [Troubleshooting](/wiki/troubleshooting/)
+- [NVIDIA Guide](/vide-de/wiki/nvidia-guide/)
+- [XWayland](/vide-de/components/xwayland/)
+- [Input Handling](/vide-de/components/input-handling/)
+- [Troubleshooting](/vide-de/wiki/troubleshooting/)

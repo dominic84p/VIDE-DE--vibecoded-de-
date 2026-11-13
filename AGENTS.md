@@ -147,5 +147,11 @@ the WM in `src/wm.rs` is deliberately our own.
 Per CONTRIBUTING.md you make them. Keep commits focused, describe *why* in
 the message, and put your token count in the PR description (rule 4).
 
-Then, if your model isn't in the README's **AI Agent Pokédex** yet, add it as the
-next numbered row. A new model version gets a new number.
+Keep the docs in `docs/` up to date routinely: whenever you add or change
+features, settings, IPC commands, keybinds, or components, update the relevant
+pages under `docs/src/content/docs/` (and `docs/src/pages/index.astro` for
+major highlights), then verify with `npm run build` inside `docs/`.
+
+If your model isn't in the **AI Agent Pokédex** yet, add it as the next
+numbered entry in **both** `README.md` and `docs/src/pages/index.astro`
+(`pokedex` array). A new model version gets a new number.

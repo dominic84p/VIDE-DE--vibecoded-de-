@@ -137,6 +137,6 @@ heaptrack ./target/release/vibe-comp --nested
 
 ## Related Files
 
-- [Installation](/getting-started/installation/) — System requirements
-- [Architecture](/architecture/overview/) — Component overview
-- [Testing](/development/testing/) — Detailed test procedures
+- [Installation](/vide-de/getting-started/installation/) — System requirements
+- [Architecture](/vide-de/architecture/overview/) — Component overview
+- [Testing](/vide-de/development/testing/) — Detailed test procedures

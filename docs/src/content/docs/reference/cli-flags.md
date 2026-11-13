@@ -94,6 +94,6 @@ timeout 15 \
 
 ## Related Files
 
-- [Installation](/getting-started/installation/) — Running instructions
-- [Testing](/development/testing/) — Test procedures
-- [Environment Variables](/reference/env-vars/) — Full env var list
+- [Installation](/vide-de/getting-started/installation/) — Running instructions
+- [Testing](/vide-de/development/testing/) — Test procedures
+- [Environment Variables](/vide-de/reference/env-vars/) — Full env var list

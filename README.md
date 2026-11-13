@@ -46,7 +46,7 @@ taskbar, start menu and titlebars are all our own code.
   - **Task Mangler** (`task-mangler`): processes and performance, like Task Manager. Ctrl+Shift+Esc
   - **Snip & Sketchy** (`snip-and-sketchy`): mark up screenshots (pens, highlighter, eraser,
     crop, undo), like Snip & Sketch. Win+Shift+S snips straight into it
-  - **About VIDE-DE** (`vide-about`): your system info via fastfetch
+  - **About VIDE-DE** (`vide-about`): your device and system specs, laid out like Windows 10's About page
 - **End process** in window right-click menus, for apps that won't close
 - **Smooth**: damage-tracked rendering, paced to vsync, zero-copy GPU buffers, and optional
   direct scanout for fullscreen games (Settings → Gaming → Ultra Performance Mode)

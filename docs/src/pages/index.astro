@@ -1,6 +1,8 @@
 ---
 import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
 import { Monitor, AppWindow, Cpu, Gamepad2, Box, HardDrive, Code, Shield, Users, GitBranch, ArrowRight, CheckCircle, ExternalLink, Zap, Layers, Terminal, FolderOpen, Activity, ShieldCheck, BookOpen, Sparkles, LayoutDashboard, Settings, Bug, Moon, Sun } from '@lucide/astro';
+
+const BASE = '/vide-de';
 ---
 
 <StarlightPage frontmatter={{ title: "VIDE-DE", template: "splash" }}>
@@ -19,7 +21,7 @@ import { Monitor, AppWindow, Cpu, Gamepad2, Box, HardDrive, Code, Shield, Users,
         A Wayland compositor + desktop shell built on <strong>Smithay 0.7</strong>, written entirely in Rust through AI-assisted "vibecoding". No human-written code accepted.
       </p>
       <div class="hero-actions">
-        <a href="/docs/getting-started/installation/" class="btn btn-primary">
+        <a href={`${BASE}/docs/getting-started/installation/`} class="btn btn-primary">
           <ArrowRight class="icon-sm" />
           Get Started
         </a>
@@ -29,21 +31,17 @@ import { Monitor, AppWindow, Cpu, Gamepad2, Box, HardDrive, Code, Shield, Users,
         </a>
       </div>
       <div class="hero-links">
-        <a href="/docs/architecture/overview/" class="hero-link">
+        <a href={`${BASE}/docs/architecture/overview/`} class="hero-link">
           <BookOpen class="icon-xs" />
           Architecture
         </a>
-        <a href="/docs/wiki/faq/" class="hero-link">
+        <a href={`${BASE}/docs/wiki/faq/`} class="hero-link">
           <Settings class="icon-xs" />
           FAQ & Wiki
         </a>
-        <a href="/docs/components/window-manager/" class="hero-link">
+        <a href={`${BASE}/docs/components/window-manager/`} class="hero-link">
           <LayoutDashboard class="icon-xs" />
           Components
-        </a>
-        <a href="/changelog/" class="hero-link">
-          <Activity class="icon-xs" />
-          Changelog
         </a>
       </div>
     </div>
@@ -63,7 +61,7 @@ import { Monitor, AppWindow, Cpu, Gamepad2, Box, HardDrive, Code, Shield, Users,
       </div>
       <div class="ai-notice-content">
         <h3>AI-Only Project</h3>
-        <p>This project follows strict contribution rules — see <a href="/docs/development/contributing/" class="underline">Contributing Rules</a></p>
+        <p>This project follows strict contribution rules — see <a href={`${BASE}/docs/development/contributing/`} class="underline">Contributing Rules</a></p>
         <div class="ai-rules">
           <div class="ai-rule">
             <CheckCircle class="icon-xs" />
@@ -334,20 +332,12 @@ import { Monitor, AppWindow, Cpu, Gamepad2, Box, HardDrive, Code, Shield, Users,
       <div class="footer-links">
         <h4>Documentation</h4>
         <ul>
-          <li><a href="/docs/getting-started/installation/">Installation</a></li>
-          <li><a href="/docs/architecture/overview/">Architecture</a></li>
-          <li><a href="/docs/components/window-manager/">Components</a></li>
-          <li><a href="/docs/configuration/settings/">Configuration</a></li>
-          <li><a href="/docs/reference/keybindings/">Keybindings</a></li>
-          <li><a href="/docs/wiki/faq/">FAQ & Wiki</a></li>
-        </ul>
-      </div>
-      <div class="footer-links">
-        <h4>Extras</h4>
-        <ul>
-          <li><a href="/changelog/">Changelog</a></li>
-          <li><a href="/contributors/">Contributors</a></li>
-          <li><a href="/git-browser/">Git Browser</a></li>
+          <li><a href={`${BASE}/docs/getting-started/installation/`}>Installation</a></li>
+          <li><a href={`${BASE}/docs/architecture/overview/`}>Architecture</a></li>
+          <li><a href={`${BASE}/docs/components/window-manager/`}>Components</a></li>
+          <li><a href={`${BASE}/docs/configuration/settings/`}>Configuration</a></li>
+          <li><a href={`${BASE}/docs/reference/keybindings/`}>Keybindings</a></li>
+          <li><a href={`${BASE}/docs/wiki/faq/`}>FAQ & Wiki</a></li>
         </ul>
       </div>
       <div class="footer-links">

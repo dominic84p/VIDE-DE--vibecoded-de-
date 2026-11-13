@@ -74,6 +74,7 @@ Terminal emulator styled like Windows Terminal / PowerShell.
 - **Tabs** (Ctrl+Shift+T)
 - **Split panes** (Ctrl+Shift+D)
 - **Configurable** font, size, opacity
+- **Mouse wheel** scrolls history; apps that track the mouse (vim, htop, mc) get real wheel events, and `Shift+wheel` still scrolls history
 - **Uses egui 0.31** (egui_term version)
 
 ### Screenshot

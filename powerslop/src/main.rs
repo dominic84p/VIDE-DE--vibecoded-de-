@@ -3,7 +3,8 @@
 //! Classic PowerShell 2.0 deep blue console (`#012456`), 2009 startup banner,
 //! `PS /path>` prompt, built-in PowerShell 2.0 cmdlet/alias shims for bash/zsh,
 //! Windows 7 light scrollbar, QuickEdit copy/paste (`Ctrl+C` copies when text
-//! is selected or sends SIGINT otherwise, right-click copies or pastes), and
+//! is selected or sends SIGINT otherwise, right-click pastes), the mouse wheel
+//! sent to apps that track the mouse (Shift+wheel scrolls history), and
 //! `Ctrl+=`/`-`/`0` or `Ctrl+Scroll` font zoom.
 //!
 //! `powerslop -e PROGRAM [ARGS...]` runs a program directly and waits for Enter
@@ -12,6 +13,7 @@
 use std::sync::mpsc::{self, Receiver, Sender};
 
 use alacritty_terminal::grid::Dimensions;
+use alacritty_terminal::term::TermMode;
 use eframe::egui::{self, Color32, FontId, Key, Modifiers, PointerButton, Pos2, Rect, Sense, Vec2, pos2, vec2};
 use egui_term::{
     BackendCommand, BackendSettings, ColorPalette, FontSettings, PtyEvent, TerminalBackend, TerminalFont, TerminalTheme,
@@ -30,6 +32,9 @@ const SB_THUMB_DRAG: Color32 = Color32::from_rgb(0x60, 0x60, 0x60);
 const SB_ARROW: Color32 = Color32::from_rgb(0x50, 0x50, 0x50);
 const SB_ARROW_HOVER: Color32 = Color32::from_rgb(0xda, 0xda, 0xda);
 const BASE_FONT_SIZE: f32 = 15.0;
+/// Wheel travel (egui points) per line of scrollback, and per wheel event sent to an app.
+const LINE_PX: f32 = 12.0;
+const NOTCH_PX: f32 = 36.0;
 
 fn main() -> eframe::Result {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -102,6 +107,8 @@ struct App {
     font_size: f32,
     /// Pointer offset into the thumb while dragging it.
     drag: Option<f32>,
+    /// Wheel travel not yet turned into whole lines.
+    scroll_acc: f32,
 }
 
 /// Classic Windows PowerShell 2.0 console palette on `#012456`.
@@ -222,7 +229,7 @@ fn launcher(shell: &str) -> String {
 impl App {
     fn new(ctx: &egui::Context, run: Option<Vec<String>>, _title: String) -> Self {
         let (events_tx, events_rx) = mpsc::channel();
-        let mut app = Self { backend: None, events_rx, error: None, font_size: BASE_FONT_SIZE, drag: None };
+        let mut app = Self { backend: None, events_rx, error: None, font_size: BASE_FONT_SIZE, drag: None, scroll_acc: 0.0 };
         app.start(ctx, run, events_tx);
         app
     }
@@ -358,6 +365,25 @@ impl App {
 
 /// Forward keyboard events to the PTY when PowerSlop has window focus but the
 /// mouse pointer is outside `term_rect` (working around egui_term's `contains_pointer` gate).
+/// An xterm mouse report for a wheel `button` (64 up, 65 down) at a 0-based cell, in the
+/// encoding the app asked for.
+fn wheel_report(mode: TermMode, button: u8, col: usize, line: usize) -> Vec<u8> {
+    if mode.contains(TermMode::SGR_MOUSE) {
+        return format!("\x1b[<{button};{};{}M", col + 1, line + 1).into_bytes();
+    }
+    let mut out = vec![0x1b, b'[', b'M', 32 + button];
+    for v in [col, line] {
+        let v = 32 + 1 + v as u32;
+        if mode.contains(TermMode::UTF8_MOUSE) {
+            let mut buf = [0; 4];
+            out.extend(char::from_u32(v).unwrap_or(' ').encode_utf8(&mut buf).as_bytes());
+        } else {
+            out.push(v.min(255) as u8);
+        }
+    }
+    out
+}
+
 fn forward_unhovered_keys(ctx: &egui::Context, b: &mut TerminalBackend) {
     let (focused, events) = ctx.input(|i| (i.focused, i.events.clone()));
     if !focused {
@@ -474,13 +500,42 @@ impl eframe::App for App {
             let Some(b) = self.backend.as_mut() else { return };
             let pointer_in_term = ui.input(|i| i.pointer.hover_pos().is_some_and(|p| term_rect.contains(p)));
             if pointer_in_term {
-                let (scroll_delta, ctrl_held) = ui.input(|i| (i.raw_scroll_delta.y, i.modifiers.ctrl));
-                if scroll_delta != 0.0 {
-                    if ctrl_held {
-                        self.font_size = (self.font_size + scroll_delta.signum()).clamp(10.0, 28.0);
+                // The wheel is ours alone: egui_term's view would scroll a second time, and it
+                // turns the wheel into arrow keys even for apps that asked for mouse reports.
+                let (scroll_delta, mods, pos) = ui.input_mut(|i| {
+                    i.events.retain(|e| !matches!(e, egui::Event::MouseWheel { .. }));
+                    (i.raw_scroll_delta.y, i.modifiers, i.pointer.hover_pos())
+                });
+                if scroll_delta != 0.0 && mods.ctrl {
+                    self.font_size = (self.font_size + scroll_delta.signum()).clamp(10.0, 28.0);
+                } else if scroll_delta != 0.0 {
+                    // Touchpads send many small deltas: keep the remainder instead of rounding
+                    // each one away.
+                    self.scroll_acc += scroll_delta;
+                    let content = b.last_content();
+                    let mode = content.terminal_mode;
+                    // Like Konsole: apps that track the mouse (vim, htop, mc) get real wheel
+                    // events, one per notch; Shift+wheel still scrolls our own history.
+                    if mode.intersects(TermMode::MOUSE_MODE) && !mods.shift {
+                        let notches = (self.scroll_acc / NOTCH_PX).trunc();
+                        self.scroll_acc -= notches * NOTCH_PX;
+                        if notches != 0.0 {
+                            let size = &content.terminal_size;
+                            let local = pos.unwrap_or(term_rect.min) - term_rect.min;
+                            let col = (local.x / size.cell_width.max(1) as f32).max(0.0) as usize;
+                            let line = (local.y / size.cell_height.max(1) as f32).max(0.0) as usize;
+                            let col = col.min(content.grid.columns().saturating_sub(1));
+                            let line = line.min(content.grid.screen_lines().saturating_sub(1));
+                            let button = if notches > 0.0 { 64 } else { 65 };
+                            let report = wheel_report(mode, button, col, line);
+                            b.process_command(BackendCommand::Write(report.repeat(notches.abs() as usize)));
+                        }
                     } else {
-                        let lines = (scroll_delta / 12.0).round() as i32;
-                        b.process_command(BackendCommand::Scroll(lines));
+                        let lines = (self.scroll_acc / LINE_PX).trunc();
+                        self.scroll_acc -= lines * LINE_PX;
+                        if lines != 0.0 {
+                            b.process_command(BackendCommand::Scroll(lines as i32));
+                        }
                     }
                 }
             } else {

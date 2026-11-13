@@ -1,6 +1,8 @@
 //! A tiny CPU 2D canvas: rects, rounded rects, circles, text. Everything in
 //! our chrome (panel, titlebars) is painted here and uploaded as one texture.
 
+use std::sync::atomic::{AtomicI32, Ordering};
+
 use fontdue::Font;
 use smithay::{
     backend::{allocator::Fourcc, renderer::element::memory::MemoryRenderBuffer},
@@ -15,9 +17,23 @@ pub const fn hex(c: u32) -> Rgba {
     Rgba((c >> 16) as u8, (c >> 8) as u8, c as u8, 0xff)
 }
 
+/// Pixels per logical pixel that new canvases paint at: the output scale rounded up, so
+/// chrome stays sharp at 200% and is only scaled down (not up) at 125%/150%.
+static SCALE: AtomicI32 = AtomicI32::new(1);
+
+pub fn set_scale(output_scale: f64) {
+    SCALE.store((output_scale.ceil() as i32).clamp(1, 4), Ordering::Relaxed);
+}
+
+/// Drawing calls take logical coordinates; the pixels underneath are `k` times denser.
+/// The buffer carries `k` as its buffer scale, so it always lands at its logical size.
 pub struct Canvas {
     pub w: i32,
     pub h: i32,
+    k: i32,
+    /// Size in pixels: `w * k` by `h * k`.
+    pw: i32,
+    ph: i32,
     /// Premultiplied BGRA, i.e. Argb8888 in memory on little endian.
     px: Vec<u8>,
 }
@@ -25,16 +41,17 @@ pub struct Canvas {
 impl Canvas {
     pub fn new(w: i32, h: i32) -> Self {
         let (w, h) = (w.max(1), h.max(1));
-        Self { w, h, px: vec![0; (w * h * 4) as usize] }
+        let k = SCALE.load(Ordering::Relaxed);
+        Self { w, h, k, pw: w * k, ph: h * k, px: vec![0; (w * h * k * k * 4) as usize] }
     }
 
-    /// Source-over blend of `c` at `cov` coverage (0..=1).
+    /// Source-over blend of `c` at `cov` coverage (0..=1), at a pixel (not logical) position.
     fn blend(&mut self, x: i32, y: i32, c: Rgba, cov: f32) {
-        if x < 0 || y < 0 || x >= self.w || y >= self.h || cov <= 0.0 {
+        if x < 0 || y < 0 || x >= self.pw || y >= self.ph || cov <= 0.0 {
             return;
         }
         let a = c.3 as f32 / 255.0 * cov.min(1.0);
-        let i = ((y * self.w + x) * 4) as usize;
+        let i = ((y * self.pw + x) * 4) as usize;
         let src = [c.2, c.1, c.0];
         for k in 0..3 {
             let d = self.px[i + k] as f32;
@@ -49,8 +66,10 @@ impl Canvas {
     }
 
     pub fn rect(&mut self, x: i32, y: i32, w: i32, h: i32, c: Rgba) {
-        for yy in y.max(0)..(y + h).min(self.h) {
-            for xx in x.max(0)..(x + w).min(self.w) {
+        let k = self.k;
+        let (x, y, w, h) = (x * k, y * k, w * k, h * k);
+        for yy in y.max(0)..(y + h).min(self.ph) {
+            for xx in x.max(0)..(x + w).min(self.pw) {
                 self.blend(xx, yy, c, 1.0);
             }
         }
@@ -58,9 +77,11 @@ impl Canvas {
 
     /// Rounded rectangle with 1px anti-aliased corners.
     pub fn round_rect(&mut self, x: i32, y: i32, w: i32, h: i32, r: i32, c: Rgba) {
-        let r = r.min(w / 2).min(h / 2) as f32;
-        for yy in y.max(0)..(y + h).min(self.h) {
-            for xx in x.max(0)..(x + w).min(self.w) {
+        let k = self.k;
+        let (x, y, w, h) = (x * k, y * k, w * k, h * k);
+        let r = (r * k).min(w / 2).min(h / 2) as f32;
+        for yy in y.max(0)..(y + h).min(self.ph) {
+            for xx in x.max(0)..(x + w).min(self.pw) {
                 let px = xx as f32 + 0.5;
                 let py = yy as f32 + 0.5;
                 // Distance outside the rounded shape (negative = inside).
@@ -73,6 +94,8 @@ impl Canvas {
     }
 
     pub fn circle(&mut self, cx: f32, cy: f32, r: f32, c: Rgba) {
+        let k = self.k as f32;
+        let (cx, cy, r) = (cx * k, cy * k, r * k);
         let (x0, x1) = ((cx - r).floor() as i32, (cx + r).ceil() as i32);
         let (y0, y1) = ((cy - r).floor() as i32, (cy + r).ceil() as i32);
         for yy in y0..=y1 {
@@ -85,6 +108,8 @@ impl Canvas {
 
     /// Anti-aliased line segment of thickness `width`.
     pub fn line(&mut self, x0: f32, y0: f32, x1: f32, y1: f32, width: f32, c: Rgba) {
+        let k = self.k as f32;
+        let (x0, y0, x1, y1, width) = (x0 * k, y0 * k, x1 * k, y1 * k, width * k);
         let pad = width.ceil() as i32 + 1;
         let (minx, maxx) = (x0.min(x1) as i32 - pad, x0.max(x1) as i32 + pad);
         let (miny, maxy) = (y0.min(y1) as i32 - pad, y0.max(y1) as i32 + pad);
@@ -108,20 +133,22 @@ impl Canvas {
         self.rect(x + w - 1, y, 1, h, c);
     }
 
-    /// Blit a premultiplied RGBA icon with its top-left at (x, y).
+    /// Blit a premultiplied RGBA icon with its top-left at (x, y). Icons are sized in
+    /// logical pixels, so on a denser canvas each icon pixel covers k×k.
     pub fn icon(&mut self, icon: &crate::icons::Icon, x: i32, y: i32) {
-        for iy in 0..icon.h as i32 {
-            for ix in 0..icon.w as i32 {
-                let (dx, dy) = (x + ix, y + iy);
-                if dx < 0 || dy < 0 || dx >= self.w || dy >= self.h {
+        let k = self.k;
+        for iy in 0..icon.h as i32 * k {
+            for ix in 0..icon.w as i32 * k {
+                let (dx, dy) = (x * k + ix, y * k + iy);
+                if dx < 0 || dy < 0 || dx >= self.pw || dy >= self.ph {
                     continue;
                 }
-                let s = ((iy * icon.w as i32 + ix) * 4) as usize;
+                let s = ((iy / k * icon.w as i32 + ix / k) * 4) as usize;
                 let a = icon.rgba[s + 3] as f32 / 255.0;
                 if a == 0.0 {
                     continue;
                 }
-                let d = ((dy * self.w + dx) * 4) as usize;
+                let d = ((dy * self.pw + dx) * 4) as usize;
                 // Premultiplied source over: dst = src + dst * (1 - a). Canvas is BGRA.
                 let src = [icon.rgba[s + 2], icon.rgba[s + 1], icon.rgba[s], icon.rgba[s + 3]];
                 for k in 0..4 {
@@ -133,9 +160,11 @@ impl Canvas {
 
     /// Fill with a diagonal two-colour gradient plus a soft glow at (gx, gy).
     pub fn wallpaper(&mut self, a: Rgba, b: Rgba, glow: Rgba, gx: f32, gy: f32, gr: f32) {
-        let (w, h) = (self.w as f32, self.h as f32);
-        for y in 0..self.h {
-            for x in 0..self.w {
+        let k = self.k as f32;
+        let (gx, gy, gr) = (gx * k, gy * k, gr * k);
+        let (w, h) = (self.pw as f32, self.ph as f32);
+        for y in 0..self.ph {
+            for x in 0..self.pw {
                 let t = ((x as f32 / w) * 0.6 + (y as f32 / h) * 0.4).clamp(0.0, 1.0);
                 let mix = |p: u8, q: u8| (p as f32 + (q as f32 - p as f32) * t) as u8;
                 let mut c = [mix(a.0, b.0) as f32, mix(a.1, b.1) as f32, mix(a.2, b.2) as f32];
@@ -144,7 +173,7 @@ impl Canvas {
                 c[0] += (glow.0 as f32 - c[0]) * g;
                 c[1] += (glow.1 as f32 - c[1]) * g;
                 c[2] += (glow.2 as f32 - c[2]) * g;
-                let i = ((y * self.w + x) * 4) as usize;
+                let i = ((y * self.pw + x) * 4) as usize;
                 self.px[i..i + 4].copy_from_slice(&[c[2] as u8, c[1] as u8, c[0] as u8, 255]);
             }
         }
@@ -153,6 +182,9 @@ impl Canvas {
     /// Draw `text` with its left edge at `x`, vertically centred in the row [y, y+h).
     /// Returns the drawn width.
     pub fn text(&mut self, font: &Font, size: f32, x: i32, y: i32, h: i32, c: Rgba, text: &str) -> i32 {
+        // Rasterize at the canvas's density so glyphs are sharp, not blown up.
+        let k = self.k;
+        let (size, x, y, h) = (size * k as f32, x * k, y * k, h * k);
         let lm = font.horizontal_line_metrics(size).unwrap();
         let baseline = y as f32 + (h as f32 + lm.ascent + lm.descent) / 2.0;
         let mut pen = x as f32;
@@ -185,7 +217,7 @@ impl Canvas {
             }
             pen += m.advance_width;
         }
-        (pen - x as f32).round() as i32
+        ((pen - x as f32) / k as f32).round() as i32
     }
 
     /// A square straight-alpha RGBA image (a colour emoji).
@@ -200,13 +232,13 @@ impl Canvas {
     }
 
     pub fn into_buffer(self) -> MemoryRenderBuffer {
-        MemoryRenderBuffer::from_slice(&self.px, Fourcc::Argb8888, (self.w, self.h), 1, Transform::Normal, None)
+        MemoryRenderBuffer::from_slice(&self.px, Fourcc::Argb8888, (self.pw, self.ph), self.k, Transform::Normal, None)
     }
 
     /// Like `into_buffer`, but tells the renderer the whole thing is opaque.
     pub fn into_opaque_buffer(self) -> MemoryRenderBuffer {
-        let full = smithay::utils::Rectangle::from_size((self.w, self.h).into());
-        MemoryRenderBuffer::from_slice(&self.px, Fourcc::Argb8888, (self.w, self.h), 1, Transform::Normal, Some(vec![full]))
+        let full = smithay::utils::Rectangle::from_size((self.pw, self.ph).into());
+        MemoryRenderBuffer::from_slice(&self.px, Fourcc::Argb8888, (self.pw, self.ph), self.k, Transform::Normal, Some(vec![full]))
     }
 }
 

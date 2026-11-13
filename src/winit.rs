@@ -31,19 +31,13 @@ pub fn run(event_loop: &mut EventLoop<'static, State>, state: &mut State) -> Res
     crate::layers::set_output(state, &output);
     let mode = Mode { size, refresh: 60_000 };
     output.change_current_state(Some(mode), Some(Transform::Flipped180), None, Some((0, 0).into()));
-    output.set_preferred(mode);
-    state.output_size = size.to_logical(1);
+    state.set_output_mode(&output, mode);
 
     let mut damage_tracker = OutputDamageTracker::from_output(&output);
 
+    let out = output.clone();
     event_loop.handle().insert_source(winit, move |event, _, state| match event {
-        WinitEvent::Resized { size, .. } => {
-            let mode = Mode { size, refresh: 60_000 };
-            output.change_current_state(Some(mode), None, None, None);
-            output.set_preferred(mode);
-            state.output_size = size.to_logical(1);
-            state.needs_redraw = true;
-        }
+        WinitEvent::Resized { size, .. } => state.set_output_mode(&out, Mode { size, refresh: 60_000 }),
         WinitEvent::Input(event) => {
             crate::supervisor::guard("input", || state.handle_input(event));
         }
@@ -57,6 +51,12 @@ pub fn run(event_loop: &mut EventLoop<'static, State>, state: &mut State) -> Res
         event_loop.dispatch(None, state)?;
         crate::health::enter(crate::health::Phase::Render);
 
+        // Settings → Display scale, so it can be tried nested too.
+        if std::mem::take(&mut state.display_dirty) {
+            if let Some(mode) = output.current_mode() {
+                state.set_output_mode(&output, mode);
+            }
+        }
         if let Some(region) = state.screenshot_requested.take() {
             crate::screenshot::take(backend.renderer(), state, region);
         }

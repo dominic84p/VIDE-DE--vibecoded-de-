@@ -23,7 +23,7 @@ use smithay::{
         session::{libseat::LibSeatSession, Event as SessionEvent, Session},
         udev::{all_gpus, primary_gpu},
     },
-    output::{Mode as WlMode, Output, PhysicalProperties, Scale, Subpixel},
+    output::{Mode as WlMode, Output, PhysicalProperties, Subpixel},
     reexports::{
         calloop::EventLoop,
         drm::control::{connector, Device as _, Mode as DrmMode, ModeTypeFlags},
@@ -58,11 +58,6 @@ fn pick_mode(modes: &[DrmMode], wanted: Option<(u16, u16, i32)>) -> DrmMode {
         .copied()
         .or_else(|| modes.iter().find(|m| m.mode_type().contains(ModeTypeFlags::PREFERRED)).copied())
         .unwrap_or(modes[0])
-}
-
-/// Outputs scale in whole steps; fractional scaling needs wp-fractional-scale, which we don't have.
-fn output_scale(c: &vide_config::Config) -> i32 {
-    (c.display_scale.clamp(0.5, 3.0).round() as i32).max(1)
 }
 
 /// Acceleration profile and speed from our settings. KDE normally does this; without
@@ -125,20 +120,7 @@ fn apply_display(t: &mut Tty, state: &mut State) {
         }
     }
     let wl_mode = WlMode::from(t.mode);
-    let scale = output_scale(&state.config);
-    t.wl_output.change_current_state(Some(wl_mode), None, Some(Scale::Integer(scale)), None);
-    t.wl_output.set_preferred(wl_mode);
-    state.output_size = wl_mode.size.to_logical(scale);
-    state.pointer_loc.x = state.pointer_loc.x.clamp(0.0, state.output_size.w as f64 - 1.0);
-    state.pointer_loc.y = state.pointer_loc.y.clamp(0.0, state.output_size.h as f64 - 1.0);
-    state.arrange_layers();
-    let (work, full) = (state.work_area(), state.output_rect());
-    state.wm.refit(work, full);
-    // Cached chrome was painted for the old size.
-    state.taskbar = None;
-    state.start.menu = None;
-    state.wallpaper = None;
-    state.needs_redraw = true;
+    state.set_output_mode(&t.wl_output.clone(), wl_mode);
 }
 
 pub fn run(event_loop: &mut EventLoop<'static, State>, state: &mut State) -> Result<(), Box<dyn std::error::Error>> {
@@ -215,12 +197,10 @@ pub fn run(event_loop: &mut EventLoop<'static, State>, state: &mut State) -> Res
         },
     );
     let wl_mode = WlMode::from(mode);
-    let scale = output_scale(&state.config);
-    output.change_current_state(Some(wl_mode), None, Some(Scale::Integer(scale)), Some((0, 0).into()));
-    output.set_preferred(wl_mode);
+    output.change_current_state(Some(wl_mode), None, None, Some((0, 0).into()));
     let _global = output.create_global::<State>(&state.dh);
     crate::layers::set_output(state, &output);
-    state.output_size = wl_mode.size.to_logical(scale);
+    state.set_output_mode(&output, wl_mode);
     state.pointer_loc = (state.output_size.w as f64 / 2.0, state.output_size.h as f64 / 2.0).into();
 
     let drm_output = manager

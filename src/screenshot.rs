@@ -141,10 +141,14 @@ fn capture_with_cursor(
     let full = Rectangle::from_size(size);
     let rect = region.and_then(|r| r.intersection(full)).unwrap_or(full);
 
+    // At a fractional scale, capture every physical pixel rather than the logical picture.
+    let scale = state.output_scale;
+    let px = size.to_f64().to_physical(scale).to_i32_round::<i32>();
+    let rect = rect.to_f64().to_physical(scale).to_i32_round::<i32>().intersection(Rectangle::from_size(px)).unwrap_or_default();
     let elements = render::elements_with(renderer, state, cursor);
-    let mut tex: GlesTexture = renderer.create_buffer(Fourcc::Abgr8888, size.to_buffer(1, Transform::Normal))?;
+    let mut tex: GlesTexture = renderer.create_buffer(Fourcc::Abgr8888, (px.w, px.h).into())?;
     let mut fb = renderer.bind(&mut tex)?;
-    let mut tracker = OutputDamageTracker::new(size.to_physical(1), 1.0, Transform::Normal);
+    let mut tracker = OutputDamageTracker::new(px, scale, Transform::Normal);
     tracker.render_output(renderer, &mut fb, 0, &elements, render::CLEAR)?;
 
     let buf_rect = Rectangle::new((rect.loc.x, rect.loc.y).into(), (rect.size.w, rect.size.h).into());

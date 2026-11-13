@@ -959,7 +959,9 @@ impl Desktop {
 
         let stride = w as i32 * 4;
         let Ok((buffer, canvas)) = self.pool.create_buffer(w as i32, h as i32, stride, wl_shm::Format::Argb8888) else { return };
-        let mut c = Canvas { w: w as i32, h: h as i32, px: canvas };
+        // The pool may hand back a slice longer than asked for (odd sizes, like 853x533 at 150%).
+        let px = &mut canvas[..(stride * h as i32) as usize];
+        let mut c = Canvas { w: w as i32, h: h as i32, px };
         c.px.copy_from_slice(&self.wallpaper.as_ref().unwrap().1);
 
         for (i, &(x, y, iw, ih)) in rects.iter().enumerate() {

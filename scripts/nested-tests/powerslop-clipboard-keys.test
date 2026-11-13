@@ -1,0 +1,27 @@
+# Regression: Ctrl+C, Ctrl+X and Ctrl+V in PowerSlop. egui turns them into Copy/Cut/Paste
+# events and drops the keys; PowerSlop once threw those events away too, so ^C never
+# interrupted anything, ^X never reached nano and Ctrl+V never pasted.
+run target/release/powerslop -e python3 scripts/nested-tests/pages/wheel-probe.py --plain
+expect-window "PowerSlop 2.0 - probe" 30
+wait 1
+run wl-copy pasted-ok
+wait 1
+click 300 300
+key ctrl+v
+expect-window "pasted-ok" 5
+key ctrl+c
+expect-window "pasted-ok^C" 5
+key ctrl+x
+expect-window "^C^X" 5
+# Ctrl+Shift+C copies the selection; Ctrl+V pastes it back.
+move 95 62
+down
+move 120 62
+move 146 62
+up
+wait 0.3
+key ctrl+shift+c
+wait 0.5
+key ctrl+v
+expect-window "^Xmarker" 5
+shot done

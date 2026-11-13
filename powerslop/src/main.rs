@@ -460,24 +460,49 @@ impl eframe::App for App {
             }
         }
 
-        // Prevent egui_term from also handling Event::Copy / Event::Paste (which can
-        // overwrite the clipboard with a stale selection or double-paste).
-        ctx.input_mut(|i| {
-            i.events.retain(|ev| !matches!(ev, egui::Event::Copy | egui::Event::Paste(_)));
+        // egui-winit turns Ctrl+C / Ctrl+X / Ctrl+V (with or without Shift) into Copy / Cut /
+        // Paste events and drops the key itself, so those keys are rebuilt from the events here.
+        // Taking them out also keeps egui_term from acting on them a second time.
+        let (clipboard_keys, shift) = ctx.input_mut(|i| {
+            let mut keys = Vec::new();
+            i.events.retain(|ev| match ev {
+                egui::Event::Copy | egui::Event::Cut | egui::Event::Paste(_) => {
+                    keys.push(ev.clone());
+                    false
+                }
+                _ => true,
+            });
+            (keys, i.modifiers.shift)
         });
+        for ev in clipboard_keys {
+            match ev {
+                // Ctrl+Shift+C: copy, like Linux terminals.
+                egui::Event::Copy if shift => {
+                    self.copy(ctx);
+                }
+                // Windoze QuickEdit: Ctrl+C copies when a selection exists, otherwise sends ^C (SIGINT).
+                egui::Event::Copy => {
+                    if !self.quick_copy(ctx) && let Some(b) = self.backend.as_mut() {
+                        b.process_command(BackendCommand::Write(vec![0x03]));
+                    }
+                }
+                // Ctrl+X is the app's (nano's Exit, for one).
+                egui::Event::Cut if !shift => {
+                    if let Some(b) = self.backend.as_mut() {
+                        b.process_command(BackendCommand::Write(vec![0x18]));
+                    }
+                }
+                egui::Event::Paste(_) => self.paste(),
+                _ => {}
+            }
+        }
         let ctrl_shift = |k| ctx.input_mut(|i| i.consume_key(Modifiers::CTRL | Modifiers::SHIFT, k));
         let ctrl = |k| ctx.input_mut(|i| i.consume_key(Modifiers::CTRL, k));
-        if ctrl_shift(Key::C) || ctrl(Key::Insert) {
+        if ctrl(Key::Insert) {
             self.copy(ctx);
         }
-        if ctrl_shift(Key::V) || ctrl(Key::V) || ctx.input_mut(|i| i.consume_key(Modifiers::SHIFT, Key::Insert)) {
+        if ctx.input_mut(|i| i.consume_key(Modifiers::SHIFT, Key::Insert)) {
             self.paste();
-        }
-        // Windoze QuickEdit: Ctrl+C copies when a selection exists, otherwise sends ^C (SIGINT).
-        if ctrl(Key::C) {
-            if !self.quick_copy(ctx) && let Some(b) = self.backend.as_mut() {
-                b.process_command(BackendCommand::Write(vec![0x03]));
-            }
         }
         if ctrl_shift(Key::N) || ctrl_shift(Key::T) {
             if let Ok(exe) = std::env::current_exe() {

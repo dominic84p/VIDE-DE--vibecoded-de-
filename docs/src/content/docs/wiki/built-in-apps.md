@@ -74,7 +74,7 @@ Terminal emulator styled like Windoze Terminal / PowerSlop.
 - **Tabs** (Ctrl+Shift+T)
 - **Split panes** (Ctrl+Shift+D)
 - **Configurable** font, size, opacity
-- **QuickEdit**: right-click copies the selection (and clears it) or pastes when nothing is selected; `Ctrl+C` copies a selection or sends ^C
+- **QuickEdit**: right-click copies the selection (and clears it) or pastes when nothing is selected; `Ctrl+C` copies a selection or sends ^C; `Ctrl+Shift+C` copies; `Ctrl+V` / `Ctrl+Shift+V` paste; `Ctrl+X` goes to the app (nano's Exit)
 - **Mouse wheel** scrolls history; apps that track the mouse (vim, htop, mc) get real wheel events, and `Shift+wheel` still scrolls history
 - **Uses egui 0.31** (egui_term version)
 

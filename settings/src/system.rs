@@ -43,6 +43,44 @@ pub struct DiskInfo {
     pub pct: f32,
 }
 
+/// Keyboard layouts and their variants, from xkb's own rules file.
+#[derive(Clone, Debug, Default)]
+pub struct XkbInfo {
+    /// (code, description), e.g. ("us", "English (US)").
+    pub layouts: Vec<(String, String)>,
+    /// (layout, variant code, description).
+    pub variants: Vec<(String, String, String)>,
+}
+
+pub fn load_xkb() -> XkbInfo {
+    let text = ["/usr/share/X11/xkb/rules/evdev.lst", "/usr/share/X11/xkb/rules/base.lst"]
+        .iter()
+        .find_map(|p| std::fs::read_to_string(p).ok())
+        .unwrap_or_default();
+    let mut info = XkbInfo::default();
+    let mut section = "";
+    for line in text.lines() {
+        if let Some(name) = line.strip_prefix("! ") {
+            section = name.trim();
+            continue;
+        }
+        let line = line.trim();
+        let Some((code, rest)) = line.split_once(char::is_whitespace) else { continue };
+        let rest = rest.trim();
+        match section {
+            "layout" => info.layouts.push((code.to_string(), rest.to_string())),
+            // "intl    us: English (US, intl., with dead keys)"
+            "variant" => {
+                if let Some((layout, desc)) = rest.split_once(':') {
+                    info.variants.push((layout.trim().to_string(), code.to_string(), desc.trim().to_string()));
+                }
+            }
+            _ => {}
+        }
+    }
+    info
+}
+
 /// One row of the portal permission store (`flatpak permissions`). The data column is never
 /// read: for files it holds paths from the user's disk.
 #[derive(Clone, Debug)]
@@ -123,6 +161,8 @@ pub struct System {
     pub services: Vec<ServiceStatus>,
     pub log_tail: String,
     pub privacy: Vec<PermEntry>,
+    pub xkb: Option<XkbInfo>,
+    pub timezones: Vec<String>,
     /// Flatpak application id -> the name people know it by.
     pub app_names: std::collections::HashMap<String, String>,
     pub default_browser: String,
@@ -655,6 +695,10 @@ pub fn volume_percent(v: &serde_json::Value) -> u32 {
 }
 
 /// Connected DRM connectors and their modes, from sysfs.
+pub fn load_timezones() -> Vec<String> {
+    run("timedatectl", &["list-timezones"]).unwrap_or_default().lines().map(|l| l.trim().to_string()).filter(|l| !l.is_empty()).collect()
+}
+
 pub fn display_modes() -> Vec<(String, Vec<u32>)> {
     let mut out: Vec<(String, Vec<u32>)> = Vec::new();
     let Ok(rd) = std::fs::read_dir("/sys/class/drm") else { return out };

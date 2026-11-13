@@ -84,7 +84,7 @@ impl Category {
                 SubPage::Storage,
                 SubPage::About,
             ],
-            Self::Devices => &[SubPage::Bluetooth, SubPage::Mouse, SubPage::Keyboard],
+            Self::Devices => &[SubPage::Bluetooth, SubPage::Mouse, SubPage::Touchpad, SubPage::Keyboard],
             Self::Network => &[SubPage::NetStatus, SubPage::Wifi, SubPage::Ethernet],
             Self::Personalization => &[SubPage::Background, SubPage::Start, SubPage::Taskbar],
             Self::Apps => &[SubPage::AppsFeatures, SubPage::DefaultApps],
@@ -108,6 +108,7 @@ pub enum SubPage {
     About,
     Bluetooth,
     Mouse,
+    Touchpad,
     Keyboard,
     NetStatus,
     Wifi,
@@ -129,7 +130,7 @@ pub enum SubPage {
 }
 
 impl SubPage {
-    const ALL: [Self; 26] = [
+    const ALL: [Self; 27] = [
         Self::Display,
         Self::Sound,
         Self::Notifications,
@@ -138,6 +139,7 @@ impl SubPage {
         Self::About,
         Self::Bluetooth,
         Self::Mouse,
+        Self::Touchpad,
         Self::Keyboard,
         Self::NetStatus,
         Self::Wifi,
@@ -169,6 +171,7 @@ impl SubPage {
             Self::About => "about",
             Self::Bluetooth => "bluetooth",
             Self::Mouse => "mouse",
+            Self::Touchpad => "touchpad",
             Self::Keyboard => "keyboard",
             Self::NetStatus => "network-status",
             Self::Wifi => "wifi",
@@ -200,6 +203,7 @@ impl SubPage {
             Self::About => "About",
             Self::Bluetooth => "Bluetooth & other devices",
             Self::Mouse => "Mouse",
+            Self::Touchpad => "Touchpad",
             Self::Keyboard => "Keyboard",
             Self::NetStatus => "Status",
             Self::Wifi => "Wi-Fi",
@@ -255,6 +259,7 @@ const SEARCH_INDEX: &[SearchItem] = &[
     SearchItem { label: "About your PC & specs", keywords: "about specs cpu ram gpu kernel winver", cat: Category::System, page: SubPage::About },
     SearchItem { label: "Bluetooth & other devices", keywords: "bluetooth pair connect audio", cat: Category::Devices, page: SubPage::Bluetooth },
     SearchItem { label: "Mouse speed & pointer precision", keywords: "mouse pointer precision acceleration speed", cat: Category::Devices, page: SubPage::Mouse },
+    SearchItem { label: "Touchpad: tap to click, scrolling", keywords: "touchpad trackpad tap click natural scroll typing palm laptop", cat: Category::Devices, page: SubPage::Touchpad },
     SearchItem { label: "Keyboard test & shortcuts", keywords: "keyboard typing shortcuts keybinds", cat: Category::Devices, page: SubPage::Keyboard },
     SearchItem { label: "Network status", keywords: "network status internet ip", cat: Category::Network, page: SubPage::NetStatus },
     SearchItem { label: "Wi-Fi networks", keywords: "wifi wireless ssid connect", cat: Category::Network, page: SubPage::Wifi },
@@ -265,6 +270,7 @@ const SEARCH_INDEX: &[SearchItem] = &[
     SearchItem { label: "Apps & features", keywords: "apps programs installed launch", cat: Category::Apps, page: SubPage::AppsFeatures },
     SearchItem { label: "Default apps", keywords: "default apps browser file manager", cat: Category::Apps, page: SubPage::DefaultApps },
     SearchItem { label: "Your account info", keywords: "account user profile session", cat: Category::Accounts, page: SubPage::YourInfo },
+    SearchItem { label: "Notification popups & how long they stay", keywords: "notifications popups toast banner duration seconds", cat: Category::System, page: SubPage::Notifications },
     SearchItem { label: "Date & time", keywords: "date time clock timezone ntp", cat: Category::TimeLanguage, page: SubPage::DateTime },
     SearchItem { label: "Language & region", keywords: "language region locale", cat: Category::TimeLanguage, page: SubPage::Language },
     SearchItem { label: "Game Mode & direct scanout", keywords: "gaming game mode direct scanout ultra performance fps", cat: Category::Gaming, page: SubPage::GameMode },

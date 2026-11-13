@@ -51,6 +51,15 @@ fn humanize_app_id(id: &str) -> String {
         .join(" ")
 }
 
+/// Turn one xkb option on or off in the comma-separated list, keeping the rest.
+fn set_xkb_option(options: &mut String, opt: &str, on: bool) {
+    let mut list: Vec<&str> = options.split(',').filter(|o| !o.is_empty() && *o != opt).collect();
+    if on {
+        list.push(opt);
+    }
+    *options = list.join(",");
+}
+
 pub fn win10_toggle(ui: &mut egui::Ui, value: &mut bool) -> bool {
     let mut changed = false;
     ui.horizontal(|ui| {
@@ -281,10 +290,8 @@ impl Settings {
                 false
             }
             SubPage::Mouse => self.page_mouse(ui),
-            SubPage::Keyboard => {
-                self.page_keyboard(ui);
-                false
-            }
+            SubPage::Touchpad => self.page_touchpad(ui),
+            SubPage::Keyboard => self.page_keyboard(ui),
             SubPage::NetStatus => {
                 self.page_net_status(ui);
                 false
@@ -315,10 +322,7 @@ impl Settings {
                 self.page_your_info(ui);
                 false
             }
-            SubPage::DateTime => {
-                self.page_date_time(ui);
-                false
-            }
+            SubPage::DateTime => self.page_date_time(ui),
             SubPage::Language => {
                 self.page_language(ui);
                 false
@@ -518,17 +522,51 @@ impl Settings {
     }
 
     fn page_notifications(&mut self, ui: &mut egui::Ui) -> bool {
-        section_title(ui, "StatusNotifier & Tray");
-        card_frame().show(ui, |ui| {
-            ui.set_width(ui.available_width());
-            ui.label(RichText::new("System tray icons (StatusNotifierItem) run on the session D-Bus.").color(TEXT).size(13.5));
-            ui.add_space(4.0);
-            ui.label(RichText::new("Apps like Discord, Steam, Antigravity, and nm-applet appear automatically on the taskbar tray.").color(DIM).size(12.5));
+        let mut changed = false;
+        section_title(ui, "Notifications");
+        changed |= setting_block(ui, "Show notification popups", "Notifications always go to the Action Center. This is the popup in the corner.", |ui| {
+            win10_toggle(ui, &mut self.config.toasts)
+        });
+        changed |= setting_block(ui, "How long popups stay", "Apps can ask for longer, and urgent notifications stay until you close them.", |ui| {
+            let mut c = false;
+            ui.add_enabled_ui(self.config.toasts, |ui| {
+                egui::ComboBox::from_id_salt("toast_secs").selected_text(format!("{} seconds", self.config.toast_seconds)).width(150.0).show_ui(ui, |ui| {
+                    for secs in [3u32, 5, 8, 10, 15, 30] {
+                        if ui.selectable_label(self.config.toast_seconds == secs, format!("{secs} seconds")).clicked() {
+                            self.config.toast_seconds = secs;
+                            c = true;
+                        }
+                    }
+                });
+            });
+            c
         });
         ui.add_space(12.0);
-        setting_block(ui, "Hide KDE apps in Start search", "Keeps KDE utility entries out of Start menu search.", |ui| {
+        section_title(ui, "Tray");
+        card_frame().show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.label(RichText::new("Apps like Discord, Steam and nm-applet put their icons on the taskbar by themselves.").color(DIM).size(12.5));
+        });
+        ui.add_space(12.0);
+        changed |= setting_block(ui, "Hide KDE apps in Start search", "Keeps KDE utility entries out of Start menu search.", |ui| {
             win10_toggle(ui, &mut self.config.hide_kde_apps)
-        })
+        });
+        changed
+    }
+
+    fn page_touchpad(&mut self, ui: &mut egui::Ui) -> bool {
+        let mut changed = false;
+        section_title(ui, "Touchpad");
+        ui.label(RichText::new("These apply to touchpads on real hardware, as soon as you change them.").color(DIM).size(12.5));
+        ui.add_space(6.0);
+        changed |= setting_block(ui, "Tap to click", "Tap the touchpad to click; two fingers to right-click.", |ui| win10_toggle(ui, &mut self.config.tap_to_click));
+        changed |= setting_block(ui, "Natural scrolling", "Content follows your fingers, like a phone: swipe up and the page moves up.", |ui| {
+            win10_toggle(ui, &mut self.config.natural_scroll)
+        });
+        changed |= setting_block(ui, "Ignore the touchpad while typing", "Stops your palm from moving the cursor mid-sentence.", |ui| {
+            win10_toggle(ui, &mut self.config.disable_while_typing)
+        });
+        changed
     }
 
     fn page_power(&mut self, ui: &mut egui::Ui) -> bool {
@@ -730,11 +768,124 @@ impl Settings {
         changed
     }
 
-    fn page_keyboard(&mut self, ui: &mut egui::Ui) {
-        section_title(ui, "Keyboard test");
-        ui.label(RichText::new("Type below to test your keyboard layout and key repeat.").color(DIM).size(12.5));
+    fn page_keyboard(&mut self, ui: &mut egui::Ui) -> bool {
+        let mut changed = false;
+        if self.system.xkb.is_none() {
+            self.system.xkb = Some(crate::system::load_xkb());
+        }
+        let xkb = self.system.xkb.take().unwrap_or_default();
+
+        // The config keeps layouts and variants as two comma lists that line up.
+        let mut layouts: Vec<(String, String)> = {
+            let l: Vec<&str> = self.config.xkb_layout.split(',').collect();
+            let v: Vec<&str> = self.config.xkb_variant.split(',').collect();
+            l.iter().enumerate().map(|(i, l)| (l.trim().to_string(), v.get(i).map(|v| v.trim().to_string()).unwrap_or_default())).collect()
+        };
+        let describe = |code: &str| {
+            if code.is_empty() {
+                "System default".to_string()
+            } else {
+                xkb.layouts.iter().find(|(c, _)| c == code).map(|(c, d)| format!("{d} ({c})")).unwrap_or_else(|| code.to_string())
+            }
+        };
+
+        section_title(ui, "Layouts");
+        ui.label(RichText::new("The first one is used when you log in.").color(DIM).size(12.5));
         ui.add_space(6.0);
-        ui.add(egui::TextEdit::multiline(&mut self.kbd_test).desired_rows(4).desired_width(460.0).hint_text("Type here to test keys..."));
+        let mut layouts_changed = false;
+        let mut remove = None;
+        let count = layouts.len();
+        for (i, (layout, variant)) in layouts.iter_mut().enumerate() {
+            card_frame().show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                ui.horizontal(|ui| {
+                    egui::ComboBox::from_id_salt(("kb_layout", i)).selected_text(describe(layout)).width(230.0).height(320.0).show_ui(ui, |ui| {
+                        if ui.selectable_label(layout.is_empty(), "System default").clicked() {
+                            layout.clear();
+                            variant.clear();
+                            layouts_changed = true;
+                        }
+                        for (code, desc) in &xkb.layouts {
+                            if ui.selectable_label(layout == code, format!("{desc} ({code})")).clicked() {
+                                *layout = code.clone();
+                                variant.clear();
+                                layouts_changed = true;
+                            }
+                        }
+                    });
+                    let options: Vec<&(String, String, String)> = xkb.variants.iter().filter(|(l, _, _)| l == layout).collect();
+                    if !options.is_empty() {
+                        let current = options.iter().find(|(_, v, _)| v == variant).map(|(_, _, d)| d.clone()).unwrap_or_else(|| "Standard".into());
+                        egui::ComboBox::from_id_salt(("kb_variant", i)).selected_text(current).width(230.0).height(260.0).show_ui(ui, |ui| {
+                            if ui.selectable_label(variant.is_empty(), "Standard").clicked() {
+                                variant.clear();
+                                layouts_changed = true;
+                            }
+                            for (_, code, desc) in &options {
+                                if ui.selectable_label(variant == code, desc).clicked() {
+                                    *variant = code.clone();
+                                    layouts_changed = true;
+                                }
+                            }
+                        });
+                    }
+                    if count > 1 && ui.button("Remove").clicked() {
+                        remove = Some(i);
+                    }
+                });
+            });
+            ui.add_space(4.0);
+        }
+        if let Some(i) = remove {
+            layouts.remove(i);
+            layouts_changed = true;
+        }
+        if layouts.len() < 4 && ui.button("Add a layout").clicked() {
+            layouts.push(("us".to_string(), String::new()));
+            layouts_changed = true;
+        }
+        if layouts_changed {
+            let only_default = layouts.len() == 1 && layouts[0].0.is_empty();
+            self.config.xkb_layout = if only_default { String::new() } else { layouts.iter().map(|(l, _)| l.as_str()).collect::<Vec<_>>().join(",") };
+            self.config.xkb_variant = if layouts.iter().all(|(_, v)| v.is_empty()) { String::new() } else { layouts.iter().map(|(_, v)| v.as_str()).collect::<Vec<_>>().join(",") };
+            // Switching between layouts needs a shortcut: Alt+Shift unless one is already set.
+            if layouts.len() > 1 && !self.config.xkb_options.split(',').any(|o| o.starts_with("grp:")) {
+                set_xkb_option(&mut self.config.xkb_options, "grp:alt_shift_toggle", true);
+            }
+            changed = true;
+        }
+        ui.add_space(10.0);
+
+        section_title(ui, "Keys");
+        let on = |ui: &mut egui::Ui, opts: &mut String, title: &str, desc: &str, opt: &str| -> bool {
+            let mut v = opts.split(',').any(|o| o == opt);
+            let was = v;
+            let c = setting_block(ui, title, desc, |ui| win10_toggle(ui, &mut v));
+            if c && v != was {
+                set_xkb_option(opts, opt, v);
+            }
+            c
+        };
+        if layouts.len() > 1 {
+            changed |= on(ui, &mut self.config.xkb_options, "Switch layouts with Alt + Shift", "Press both to move to the next layout.", "grp:alt_shift_toggle");
+        }
+        changed |= on(ui, &mut self.config.xkb_options, "Caps Lock acts as Escape", "Handy for editors: a bigger, easier Escape key.", "caps:escape");
+        changed |= on(ui, &mut self.config.xkb_options, "Caps Lock acts as Ctrl", "Moves Ctrl to the home row.", "ctrl:nocaps");
+
+        changed |= setting_block(ui, "Delay before a held key repeats", "Shorter repeats sooner.", |ui| {
+            let r = ui.add(egui::Slider::new(&mut self.config.key_repeat_delay, 150..=1000).suffix(" ms"));
+            r.changed()
+        });
+        changed |= setting_block(ui, "Repeat speed", "Characters per second while a key is held.", |ui| {
+            let r = ui.add(egui::Slider::new(&mut self.config.key_repeat_rate, 5..=60).suffix(" /s"));
+            r.changed()
+        });
+
+        ui.add_space(10.0);
+        section_title(ui, "Keyboard test");
+        ui.label(RichText::new("Type below to try your layout and key repeat.").color(DIM).size(12.5));
+        ui.add_space(6.0);
+        ui.add(egui::TextEdit::multiline(&mut self.kbd_test).desired_rows(3).desired_width(460.0).hint_text("Type here to test keys..."));
         ui.add_space(12.0);
         section_title(ui, "Shortcuts");
         card_frame().show(ui, |ui| {
@@ -745,6 +896,8 @@ impl Settings {
             kv_row(ui, "Win + Shift + S", "Snip & Sketchy screen capture");
             kv_row(ui, "Print Screen", "Fullscreen screenshot");
         });
+        self.system.xkb = Some(xkb);
+        changed
     }
 
     fn page_net_status(&mut self, ui: &mut egui::Ui) {
@@ -1044,20 +1197,54 @@ impl Settings {
         });
     }
 
-    fn page_date_time(&mut self, ui: &mut egui::Ui) {
-        let s = &self.system.specs;
+    fn page_date_time(&mut self, ui: &mut egui::Ui) -> bool {
+        let mut changed = false;
+        if self.system.timezones.is_empty() {
+            self.system.timezones = crate::system::load_timezones();
+        }
+        let current = self.system.specs.timezone.clone();
+        let ntp = self.system.specs.ntp_enabled;
+
         section_title(ui, "Date & time");
-        card_frame().show(ui, |ui| {
-            ui.set_width(ui.available_width());
-            kv_row(ui, "Time zone", &s.timezone);
-            kv_row(ui, "Automatic time (NTP)", if s.ntp_enabled { "On" } else { "Off" });
-        });
-        ui.add_space(8.0);
-        let mut ntp = s.ntp_enabled;
-        if setting_block(ui, "Set time automatically", "Sync system clock with NTP servers (may prompt for polkit).", |ui| win10_toggle(ui, &mut ntp)) {
-            spawn("timedatectl", &["set-ntp", if ntp { "true" } else { "false" }]);
+        changed |= setting_block(ui, "24-hour clock", "Show the taskbar clock as 14:30 instead of 2:30 PM.", |ui| win10_toggle(ui, &mut self.config.clock_24h));
+
+        let mut ntp_on = ntp;
+        if setting_block(ui, "Set time automatically", "Sync the clock with internet time servers (may ask for your password).", |ui| win10_toggle(ui, &mut ntp_on)) {
+            spawn("timedatectl", &["set-ntp", if ntp_on { "true" } else { "false" }]);
             self.system.invalidate();
         }
+
+        // Region, then city: the full list is over four hundred zones.
+        let (region, city) = current.split_once('/').map(|(r, c)| (r.to_string(), c.to_string())).unwrap_or_else(|| (current.clone(), String::new()));
+        let mut regions: Vec<String> = self.system.timezones.iter().filter_map(|z| z.split_once('/').map(|(r, _)| r.to_string())).collect();
+        regions.dedup();
+        let mut pick: Option<String> = None;
+        setting_block(ui, "Time zone", "Changing it may ask for your password.", |ui| {
+            ui.horizontal(|ui| {
+                egui::ComboBox::from_id_salt("tz_region").selected_text(if region.is_empty() { "Region".into() } else { region.clone() }).width(150.0).show_ui(ui, |ui| {
+                    for r in &regions {
+                        if ui.selectable_label(*r == region, r).clicked() {
+                            // First zone in that region until a city is chosen.
+                            pick = self.system.timezones.iter().find(|z| z.starts_with(&format!("{r}/"))).cloned();
+                        }
+                    }
+                });
+                egui::ComboBox::from_id_salt("tz_city").selected_text(if city.is_empty() { "City".into() } else { city.replace('_', " ") }).width(220.0).height(320.0).show_ui(ui, |ui| {
+                    for z in self.system.timezones.iter().filter(|z| z.starts_with(&format!("{region}/"))) {
+                        let name = z[region.len() + 1..].to_string();
+                        if ui.selectable_label(*z == current, name.replace('_', " ")).clicked() {
+                            pick = Some(z.clone());
+                        }
+                    }
+                });
+            });
+            false
+        });
+        if let Some(tz) = pick.filter(|z| *z != current) {
+            spawn("timedatectl", &["set-timezone", &tz]);
+            self.system.invalidate();
+        }
+        changed
     }
 
     fn page_language(&mut self, ui: &mut egui::Ui) {
@@ -1316,5 +1503,21 @@ mod tests {
         assert_eq!(humanize_app_id("io.github.astralvixen.geforce-infinity"), "Geforce Infinity");
         assert_eq!(humanize_app_id("org.kde.konsole"), "Konsole");
         assert_eq!(humanize_app_id("plain"), "Plain");
+    }
+}
+
+#[cfg(test)]
+mod xkb_option_tests {
+    use super::set_xkb_option;
+
+    #[test]
+    fn options_toggle_without_touching_others() {
+        let mut o = "caps:escape".to_string();
+        set_xkb_option(&mut o, "grp:alt_shift_toggle", true);
+        assert_eq!(o, "caps:escape,grp:alt_shift_toggle");
+        set_xkb_option(&mut o, "caps:escape", false);
+        assert_eq!(o, "grp:alt_shift_toggle");
+        set_xkb_option(&mut o, "grp:alt_shift_toggle", false);
+        assert_eq!(o, "");
     }
 }

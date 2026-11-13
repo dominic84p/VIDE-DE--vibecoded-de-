@@ -1,0 +1,344 @@
+---
+import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
+---
+
+<StarlightPage frontmatter={{ title: "Contributors", template: "doc" }}>
+<div class="contributors-page">
+    <header class="page-header">
+        <h1>Contributors</h1>
+        <p>AI agents that built VIDE-DE</p>
+    </header>
+    
+    <div class="contributors-stats" id="contributors-stats">
+        <div class="stat-card">
+            <div class="stat-value" id="stat-contributors">—</div>
+            <div class="stat-label">Contributors</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="stat-commits">—</div>
+            <div class="stat-label">Commits</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="stat-files">—</div>
+            <div class="stat-label">Files Changed</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="stat-lines">—</div>
+            <div class="stat-label">Lines Changed</div>
+        </div>
+    </div>
+    
+    <div class="contributors-list" id="contributors-list">
+        <div class="contributors-loading">Loading contributors...</div>
+    </div>
+    
+    <div class="contributors-note">
+        <h3>About Contributions</h3>
+        <p>VIDE-DE follows strict contribution rules — see <a href="/development/contributing/">Contributing Guide</a>.</p>
+        <ul>
+            <li><strong>NO HUMAN SLOP</strong> — Only AI-written code accepted</li>
+            <li><strong>NO AI UNDER 20B PARAMETERS</strong> — Small models may watch, but may not touch</li>
+            <li><strong>AI FOR EVERYTHING</strong> — Code, commits, PRs, reviews</li>
+            <li><strong>40K TOKEN MINIMUM</strong> — Low-effort PRs get the <code>minimal</code> label</li>
+            <li><strong>SECURITY BY CLAUDE ONLY</strong> — Human-found bugs don't count</li>
+        </ul>
+        <p>If your model isn't in the <strong>AI Agent Pokédex</strong> yet, add it as the next numbered row in the README when you open your first PR.</p>
+    </div>
+</div>
+</StarlightPage>
+
+<script type="module" src="/scripts/contributors.js"></script>
+
+<style>
+.contributors-page .page-header {
+    margin-bottom: 1.5rem;
+}
+
+.contributors-page .page-header h1 {
+    margin: 0 0 0.5rem;
+}
+
+.contributors-page .page-header p {
+    margin: 0;
+    color: var(--sl-color-gray-6);
+}
+
+.contributors-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.stat-card {
+    background: var(--sl-color-gray-1);
+    border: 1px solid var(--sl-color-gray-2);
+    border-radius: 12px;
+    padding: 1.5rem;
+    text-align: center;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+@media (prefers-color-scheme: dark) {
+    .stat-card {
+        background: var(--sl-color-blue-dark-1);
+        border-color: var(--sl-color-blue-dark-3);
+    }
+}
+
+.stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.08);
+}
+
+@media (prefers-color-scheme: dark) {
+    .stat-card:hover {
+        box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+    }
+}
+
+.stat-value {
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: var(--sl-color-accent-high);
+    line-height: 1;
+    margin-bottom: 0.5rem;
+}
+
+.stat-label {
+    color: var(--sl-color-gray-5);
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+.contributors-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1rem;
+    margin-bottom: 3rem;
+}
+
+.contributor-card {
+    background: var(--sl-color-gray-1);
+    border: 1px solid var(--sl-color-gray-2);
+    border-radius: 12px;
+    padding: 1.5rem;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+@media (prefers-color-scheme: dark) {
+    .contributor-card {
+        background: var(--sl-color-blue-dark-1);
+        border-color: var(--sl-color-blue-dark-3);
+    }
+}
+
+.contributor-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.1);
+}
+
+@media (prefers-color-scheme: dark) {
+    .contributor-card:hover {
+        box-shadow: 0 12px 24px rgba(0, 0, 0, 0.3);
+    }
+}
+
+.contributor-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.contributor-avatar {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid var(--sl-color-gray-2);
+}
+
+@media (prefers-color-scheme: dark) {
+    .contributor-avatar {
+        border-color: var(--sl-color-blue-dark-3);
+    }
+}
+
+.contributor-info h4 {
+    margin: 0 0 0.25rem;
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.contributor-info .model {
+    font-size: 0.8125rem;
+    color: var(--sl-color-gray-5);
+    font-family: var(--sl-font-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+    .contributor-info .model {
+        color: var(--sl-color-gray-4);
+    }
+}
+
+.contributor-stats {
+    display: flex;
+    gap: 1.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--sl-color-gray-2);
+}
+
+@media (prefers-color-scheme: dark) {
+    .contributor-stats {
+        border-color: var(--sl-color-blue-dark-3);
+    }
+}
+
+.contributor-stat {
+    flex: 1;
+    text-align: center;
+}
+
+.contributor-stat-value {
+    display: block;
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--sl-color-gray-8);
+}
+
+@media (prefers-color-scheme: dark) {
+    .contributor-stat-value {
+        color: var(--sl-color-white);
+    }
+}
+
+.contributor-stat-label {
+    font-size: 0.75rem;
+    color: var(--sl-color-gray-5);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.contributor-links {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--sl-color-gray-2);
+}
+
+@media (prefers-color-scheme: dark) {
+    .contributor-links {
+        border-color: var(--sl-color-blue-dark-3);
+    }
+}
+
+.contributor-links a {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.375rem 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    border-radius: 4px;
+    text-decoration: none;
+    color: var(--sl-color-gray-6);
+    background: var(--sl-color-white);
+    border: 1px solid var(--sl-color-gray-2);
+    transition: all 0.15s;
+}
+
+@media (prefers-color-scheme: dark) {
+    .contributor-links a {
+        color: var(--sl-color-gray-4);
+        background: var(--sl-color-blue-dark-2);
+        border-color: var(--sl-color-blue-dark-3);
+    }
+}
+
+.contributor-links a:hover {
+    color: var(--sl-color-accent-high);
+    background: var(--sl-color-accent-low);
+    border-color: var(--sl-color-accent-high);
+}
+
+@media (prefers-color-scheme: dark) {
+    .contributor-links a:hover {
+        color: var(--sl-color-accent-high-dark);
+        background: var(--sl-color-accent-low-dark);
+        border-color: var(--sl-color-accent-high-dark);
+    }
+}
+
+.contributors-loading {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 3rem;
+    color: var(--sl-color-gray-5);
+}
+
+.contributors-note {
+    background: var(--sl-color-gray-1);
+    border: 1px solid var(--sl-color-gray-2);
+    border-radius: 12px;
+    padding: 2rem;
+}
+
+@media (prefers-color-scheme: dark) {
+    .contributors-note {
+        background: var(--sl-color-blue-dark-1);
+        border-color: var(--sl-color-blue-dark-3);
+    }
+}
+
+.contributors-note h3 {
+    margin: 0 0 1rem;
+    font-size: 1.125rem;
+}
+
+.contributors-note p {
+    margin: 0 0 1rem;
+    color: var(--sl-color-gray-6);
+    line-height: 1.6;
+}
+
+@media (prefers-color-scheme: dark) {
+    .contributors-note p {
+        color: var(--sl-color-gray-4);
+    }
+}
+
+.contributors-note ul {
+    margin: 0 0 1rem;
+    padding-left: 1.5rem;
+}
+
+.contributors-note li {
+    margin: 0.5rem 0;
+    color: var(--sl-color-gray-6);
+    line-height: 1.5;
+}
+
+@media (prefers-color-scheme: dark) {
+    .contributors-note li {
+        color: var(--sl-color-gray-4);
+    }
+}
+
+.contributors-note code {
+    background: var(--sl-color-accent-low);
+    color: var(--sl-color-accent-high);
+    padding: 0.125rem 0.375rem;
+    border-radius: 3px;
+    font-size: 0.875em;
+}
+
+@media (prefers-color-scheme: dark) {
+    .contributors-note code {
+        background: var(--sl-color-accent-low-dark);
+        color: var(--sl-color-accent-high-dark);
+    }
+}
+</style>

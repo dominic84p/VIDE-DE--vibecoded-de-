@@ -296,7 +296,60 @@ impl XwmHandler for State {
         }
     }
 
-    fn send_selection(&mut self, _xwm: XwmId, _selection: SelectionTarget, _mime_type: String, _fd: OwnedFd) {}
+    fn allow_selection_access(&mut self, _xwm: XwmId, _selection: SelectionTarget) -> bool {
+        matches!(self.keyboard.current_focus(), Some(crate::focus::FocusTarget::X11(_)))
+    }
+
+    fn send_selection(&mut self, _xwm: XwmId, selection: SelectionTarget, mime_type: String, fd: OwnedFd) {
+        match selection {
+            SelectionTarget::Clipboard => {
+                let _ = smithay::wayland::selection::data_device::request_data_device_client_selection(
+                    &self.seat,
+                    mime_type,
+                    fd,
+                );
+            }
+            SelectionTarget::Primary => {
+                let _ = smithay::wayland::selection::primary_selection::request_primary_client_selection(
+                    &self.seat,
+                    mime_type,
+                    fd,
+                );
+            }
+        }
+    }
+
+    fn new_selection(&mut self, _xwm: XwmId, selection: SelectionTarget, mime_types: Vec<String>) {
+        match selection {
+            SelectionTarget::Clipboard => {
+                smithay::wayland::selection::data_device::set_data_device_selection(
+                    &self.dh,
+                    &self.seat,
+                    mime_types,
+                    crate::state::SelectionOwner::X11,
+                );
+            }
+            SelectionTarget::Primary => {
+                smithay::wayland::selection::primary_selection::set_primary_selection(
+                    &self.dh,
+                    &self.seat,
+                    mime_types,
+                    crate::state::SelectionOwner::X11,
+                );
+            }
+        }
+    }
+
+    fn cleared_selection(&mut self, _xwm: XwmId, selection: SelectionTarget) {
+        match selection {
+            SelectionTarget::Clipboard => {
+                smithay::wayland::selection::data_device::clear_data_device_selection(&self.dh, &self.seat);
+            }
+            SelectionTarget::Primary => {
+                smithay::wayland::selection::primary_selection::clear_primary_selection(&self.dh, &self.seat);
+            }
+        }
+    }
 }
 
 impl XWaylandShellHandler for State {

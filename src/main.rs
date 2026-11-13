@@ -67,6 +67,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         |_, display, state| {
             // Safety: we never drop the display while the source is alive.
             unsafe { display.get_mut().dispatch_clients(state).unwrap() };
+            state.popups.cleanup();
             Ok(PostAction::Continue)
         },
     )?;

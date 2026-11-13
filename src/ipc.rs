@@ -74,7 +74,7 @@ fn handle_client(state: &mut State, stream: UnixStream) {
         }
         "copy-png" => match std::fs::read(arg) {
             Ok(bytes) => {
-                set_data_device_selection(&state.dh, &state.seat, vec!["image/png".into()], Arc::new(bytes));
+                set_data_device_selection(&state.dh, &state.seat, vec!["image/png".into()], crate::state::SelectionOwner::Bytes(Arc::new(bytes)));
             }
             Err(e) => tracing::warn!("copy-png {arg}: {e}"),
         },

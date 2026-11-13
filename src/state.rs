@@ -36,7 +36,7 @@ use smithay::{
                 set_data_device_focus, ClientDndGrabHandler, DataDeviceHandler, DataDeviceState, ServerDndGrabHandler,
             },
             primary_selection::{set_primary_focus, PrimarySelectionHandler, PrimarySelectionState},
-            SelectionHandler, SelectionTarget,
+            SelectionHandler, SelectionSource, SelectionTarget,
         },
         shell::xdg::{
             decoration::{XdgDecorationHandler, XdgDecorationState},
@@ -847,24 +847,45 @@ impl ShmHandler for State {
     }
 }
 
+#[derive(Clone)]
+pub enum SelectionOwner {
+    Bytes(Arc<Vec<u8>>),
+    X11,
+}
+
 impl SelectionHandler for State {
-    /// Clipboard contents we own ourselves (screenshots).
-    type SelectionUserData = Arc<Vec<u8>>;
+    /// Clipboard contents we own ourselves (screenshots, calculator, X11 bridge).
+    type SelectionUserData = SelectionOwner;
+
+    fn new_selection(&mut self, ty: SelectionTarget, source: Option<SelectionSource>, _seat: Seat<Self>) {
+        if let Some(xwm) = self.xwm.as_mut() {
+            let _ = xwm.new_selection(ty, source.map(|s| s.mime_types()));
+        }
+    }
 
     fn send_selection(
         &mut self,
-        _ty: SelectionTarget,
-        _mime_type: String,
+        ty: SelectionTarget,
+        mime_type: String,
         fd: OwnedFd,
         _seat: Seat<Self>,
         user_data: &Self::SelectionUserData,
     ) {
-        // A pipe to the pasting app; write off the main thread so a slow reader can't stall us.
-        let data = user_data.clone();
-        std::thread::spawn(move || {
-            use std::io::Write;
-            let _ = std::fs::File::from(fd).write_all(&data);
-        });
+        match user_data {
+            SelectionOwner::Bytes(data) => {
+                // A pipe to the pasting app; write off the main thread so a slow reader can't stall us.
+                let data = data.clone();
+                std::thread::spawn(move || {
+                    use std::io::Write;
+                    let _ = std::fs::File::from(fd).write_all(&data);
+                });
+            }
+            SelectionOwner::X11 => {
+                if let Some(xwm) = self.xwm.as_mut() {
+                    let _ = xwm.send_selection(ty, mime_type, fd, self.loop_handle.clone());
+                }
+            }
+        }
     }
 }
 

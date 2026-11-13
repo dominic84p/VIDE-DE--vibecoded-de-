@@ -190,6 +190,6 @@ fn save(state: &mut State, w: u32, h: u32, rgba: Vec<u8>) -> Option<PathBuf> {
     };
 
     // Also on the clipboard, so it can be pasted straight into a chat.
-    set_data_device_selection(&state.dh, &state.seat, vec!["image/png".into()], Arc::new(png_bytes));
+    set_data_device_selection(&state.dh, &state.seat, vec!["image/png".into()], crate::state::SelectionOwner::Bytes(Arc::new(png_bytes)));
     saved
 }

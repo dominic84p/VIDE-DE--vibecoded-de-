@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, Sender};
 
@@ -25,6 +26,8 @@ struct LoadedIcon {
 pub struct IconCache {
     entries: HashMap<String, IconEntry>,
     search_roots: Arc<Vec<PathBuf>>,
+    appstream_icon_dirs: Arc<Vec<PathBuf>>,
+    cache_dir: Arc<PathBuf>,
     tx: Sender<LoadedIcon>,
     rx: Receiver<LoadedIcon>,
 }
@@ -38,17 +41,32 @@ impl Default for IconCache {
 impl IconCache {
     pub fn new() -> Self {
         let mut roots = Vec::new();
-        if let Ok(home) = std::env::var("HOME") {
-            roots.push(PathBuf::from(&home).join(".local/share/flatpak/exports/share/icons"));
-            roots.push(PathBuf::from(&home).join(".local/share/icons"));
+        let mut appstream_dirs = Vec::new();
+        let home = std::env::var("HOME").ok();
+        if let Some(ref h) = home {
+            roots.push(PathBuf::from(h).join(".local/share/flatpak/exports/share/icons"));
+            roots.push(PathBuf::from(h).join(".local/share/icons"));
+            collect_appstream_icon_dirs(
+                &PathBuf::from(h).join(".local/share/flatpak/appstream"),
+                &mut appstream_dirs,
+            );
         }
         roots.push(PathBuf::from("/var/lib/flatpak/exports/share/icons"));
         roots.push(PathBuf::from("/usr/share/icons"));
         roots.push(PathBuf::from("/usr/share/pixmaps"));
+        collect_appstream_icon_dirs(Path::new("/var/lib/flatpak/appstream"), &mut appstream_dirs);
+
+        let cache_dir = home
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("/tmp"))
+            .join(".cache/window-shopping/icons");
+
         let (tx, rx) = mpsc::channel();
         Self {
             entries: HashMap::new(),
             search_roots: Arc::new(roots),
+            appstream_icon_dirs: Arc::new(appstream_dirs),
+            cache_dir: Arc::new(cache_dir),
             tx,
             rx,
         }
@@ -87,12 +105,14 @@ impl IconCache {
         if !self.entries.contains_key(&key) {
             self.entries.insert(key.clone(), IconEntry::Loading);
             let roots = Arc::clone(&self.search_roots);
+            let appstream = Arc::clone(&self.appstream_icon_dirs);
+            let cache_dir = Arc::clone(&self.cache_dir);
             let tx = self.tx.clone();
             let ctx = ctx.clone();
             let icon_owned = key.clone();
             let pkg_owned = pkg_id.to_string();
             std::thread::spawn(move || {
-                let image = find_and_decode(&roots, &icon_owned, &pkg_owned);
+                let image = find_and_decode(&roots, &appstream, &cache_dir, &icon_owned, &pkg_owned);
                 let _ = tx.send(LoadedIcon {
                     key: icon_owned,
                     image,
@@ -109,7 +129,34 @@ impl IconCache {
     }
 }
 
-fn find_and_decode(roots: &[PathBuf], icon_name: &str, pkg_id: &str) -> Option<ColorImage> {
+fn collect_appstream_icon_dirs(base: &Path, out: &mut Vec<PathBuf>) {
+    let Ok(remotes) = std::fs::read_dir(base) else { return };
+    for remote in remotes.flatten() {
+        let Ok(arches) = std::fs::read_dir(remote.path()) else { continue };
+        for arch in arches.flatten() {
+            let active = arch.path().join("active/icons");
+            if active.is_dir() {
+                out.push(active);
+                continue;
+            }
+            let Ok(revs) = std::fs::read_dir(arch.path()) else { continue };
+            for rev in revs.flatten() {
+                let icons = rev.path().join("icons");
+                if icons.is_dir() {
+                    out.push(icons);
+                }
+            }
+        }
+    }
+}
+
+fn find_and_decode(
+    roots: &[PathBuf],
+    appstream: &[PathBuf],
+    cache_dir: &Path,
+    icon_name: &str,
+    pkg_id: &str,
+) -> Option<ColorImage> {
     let mut candidates = vec![icon_name.to_string()];
     if pkg_id != icon_name && !pkg_id.is_empty() {
         candidates.push(pkg_id.to_string());
@@ -121,6 +168,21 @@ fn find_and_decode(roots: &[PathBuf], icon_name: &str, pkg_id: &str) -> Option<C
         candidates.push(last.to_lowercase());
     }
 
+    // 1. Local Flatpak AppStream icon cache (has uninstalled Flathub apps!)
+    for cand in &candidates {
+        for dir in appstream {
+            for size in ["128x128", "64x64"] {
+                let p = dir.join(size).join(format!("{cand}.png"));
+                if p.is_file()
+                    && let Some(img) = load_rgba(&p, 96)
+                {
+                    return Some(img);
+                }
+            }
+        }
+    }
+
+    // 2. Installed icon themes & pixmaps
     for cand in &candidates {
         if let Some(path) = find_icon_path(roots, cand)
             && let Some(img) = load_rgba(&path, 96)
@@ -128,6 +190,28 @@ fn find_and_decode(roots: &[PathBuf], icon_name: &str, pkg_id: &str) -> Option<C
             return Some(img);
         }
     }
+
+    // 3. On-disk cache or Flathub CDN fetch for reverse-DNS app IDs
+    let flatpak_id = candidates.iter().find(|c| c.matches('.').count() >= 2)?;
+    let cached = cache_dir.join(format!("{flatpak_id}.png"));
+    if cached.is_file()
+        && let Some(img) = load_rgba(&cached, 96)
+    {
+        return Some(img);
+    }
+
+    let _ = std::fs::create_dir_all(cache_dir);
+    let url = format!("https://dl.flathub.org/repo/appstream/x86_64/icons/128x128/{flatpak_id}.png");
+    let status = Command::new("curl")
+        .args(["-fsSL", "--max-time", "5", "-o"])
+        .arg(&cached)
+        .arg(&url)
+        .status()
+        .ok()?;
+    if status.success() && cached.is_file() {
+        return load_rgba(&cached, 96);
+    }
+    let _ = std::fs::remove_file(&cached);
     None
 }
 

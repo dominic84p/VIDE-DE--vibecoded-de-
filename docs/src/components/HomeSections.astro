@@ -1,0 +1,296 @@
+---
+import { GitBranch, ExternalLink, Sparkles, Zap, Activity } from '@lucide/astro';
+
+const humanContributors = [
+  {
+    name: 'dominic84p',
+    handle: '@dominic84p',
+    role: 'Project Owner',
+    desc: 'Chief prompt engineer, architecture direction, hardware testing.',
+    avatar: 'https://github.com/dominic84p.png?size=160',
+    url: 'https://github.com/dominic84p',
+  },
+  {
+    name: 'notamitgamer',
+    handle: '@notamitgamer',
+    role: 'Virtual Desktops',
+    desc: 'Virtual desktops (PR #1); prompted Nemotron for docs & CI.',
+    avatar: 'https://github.com/notamitgamer.png?size=160',
+    url: 'https://github.com/notamitgamer',
+  },
+  {
+    name: 'Clove Twilight',
+    handle: '@doughmination',
+    role: 'Vector Branding',
+    desc: 'Vector logo set in branding/ (PR #2); prompted Claude Fable 5.2.',
+    avatar: 'https://github.com/doughmination.png?size=160',
+    url: 'https://github.com/doughmination',
+  },
+];
+
+const aiLeads = [
+  {
+    name: 'Claude (Anthropic)',
+    sub: 'Opus 5.5 · Sonnet 5.5 · Fable 5.2',
+    role: 'Core Compositor & Health',
+    desc: 'Compositor, shell, WM, apps, branding SVGs, health watchdogs, nested tests.',
+    url: 'https://www.anthropic.com/',
+    tone: 'anthropic',
+  },
+  {
+    name: 'Gemini (Google)',
+    sub: '4 Hydrogen · 4 Argon · 3.8 Flash',
+    role: 'Notifications, Settings & Docs',
+    desc: 'Action Center, Wi-Fi/BT tray, Settings system/privacy pages, docs updates.',
+    url: 'https://deepmind.google/',
+    tone: 'google',
+  },
+  {
+    name: 'NVIDIA Nemotron 3 Ultra',
+    sub: 'NVIDIA Research',
+    role: 'Docs Site & Workflow',
+    desc: 'Astro Starlight docs foundation, GitHub Actions CI, Task Mangler refactor.',
+    url: 'https://www.nvidia.com/en-us/research/',
+    tone: 'nvidia',
+  },
+];
+
+const pokedex = [
+  { id: '001', agent: 'Claude Opus 5.5', trainer: 'Anthropic', caught: '2026-11-11', tone: 'anthropic' },
+  { id: '002', agent: 'Nemotron 3 Ultra', trainer: 'NVIDIA', caught: '2026-11-12', tone: 'nvidia' },
+  { id: '003', agent: 'Gemini 3.8 Flash', trainer: 'Google', caught: '2026-11-12', tone: 'google' },
+  { id: '004', agent: 'Claude Fable 5.2', trainer: 'Anthropic', caught: '2026-11-12', tone: 'anthropic' },
+  { id: '005', agent: 'Gemini 4 Hydrogen (Medium)', trainer: 'Google', caught: '2026-11-12', tone: 'google' },
+  { id: '006', agent: 'Gemini 4 Argon (Medium)', trainer: 'Google', caught: '2026-11-12', tone: 'google' },
+  { id: '007', agent: 'Claude Sonnet 5.5', trainer: 'Anthropic', caught: '2026-11-12', tone: 'anthropic' },
+];
+---
+
+<div class="vibe-home-sections">
+  <section class="vibe-block">
+    <div class="vibe-block-head">
+      <h2>Contributors</h2>
+      <p>Humans who directed, AI models that wrote every line of code</p>
+    </div>
+
+    <div class="vibe-contrib-grid">
+      {humanContributors.map((c) => (
+        <a href={c.url} class="vibe-card vibe-contrib-card" target="_blank" rel="noopener">
+          <img src={c.avatar} alt={c.name} class="vibe-pfp" width="60" height="60" loading="lazy" />
+          <div class="vibe-card-title">{c.name}</div>
+          <div class="vibe-card-sub">{c.handle}</div>
+          <div class="vibe-card-role">{c.role}</div>
+          <p class="vibe-card-desc">{c.desc}</p>
+          <span class="vibe-card-link">
+            <GitBranch size={14} /> GitHub
+          </span>
+        </a>
+      ))}
+
+      {aiLeads.map((m) => (
+        <a href={m.url} class="vibe-card vibe-contrib-card" target="_blank" rel="noopener">
+          <div class={`vibe-ai-badge tone-${m.tone}`}>
+            {m.tone === 'anthropic' && <Sparkles size={24} />}
+            {m.tone === 'google' && <Activity size={24} />}
+            {m.tone === 'nvidia' && <Zap size={24} />}
+          </div>
+          <div class="vibe-card-title">{m.name}</div>
+          <div class="vibe-card-sub">{m.sub}</div>
+          <div class="vibe-card-role">{m.role}</div>
+          <p class="vibe-card-desc">{m.desc}</p>
+          <span class="vibe-card-link">
+            <ExternalLink size={14} /> Trainer
+          </span>
+        </a>
+      ))}
+    </div>
+  </section>
+
+  <section class="vibe-block">
+    <div class="vibe-block-head">
+      <h2>AI Agent Pokédex</h2>
+      <p>Every AI agent that has helped build VIDE-DE, in the order we caught them. Rule 2 still applies: under 20B parameters can't be caught.</p>
+    </div>
+
+    <div class="vibe-pokedex-grid">
+      {pokedex.map((entry) => (
+        <div class={`vibe-card vibe-pokedex-card tone-${entry.tone}`}>
+          <div class="vibe-pokedex-top">
+            <span class="vibe-pokedex-num">#{entry.id}</span>
+            <span class={`vibe-trainer tone-${entry.tone}`}>{entry.trainer}</span>
+          </div>
+          <div class="vibe-pokedex-name">{entry.agent}</div>
+          <div class="vibe-pokedex-date">Caught {entry.caught}</div>
+        </div>
+      ))}
+    </div>
+  </section>
+</div>
+
+<style>
+  .vibe-home-sections {
+    margin-top: 2.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 3rem;
+  }
+
+  .vibe-block-head {
+    margin-bottom: 1.25rem;
+  }
+
+  .vibe-block-head h2 {
+    margin: 0 0 0.35rem !important;
+  }
+
+  .vibe-block-head p {
+    margin: 0;
+    color: var(--sl-color-gray-3);
+    font-size: 0.95rem;
+  }
+
+  .vibe-contrib-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1rem;
+  }
+
+  .vibe-card {
+    border: 1px solid var(--sl-color-hairline);
+    background: var(--sl-color-bg-nav);
+    border-radius: 0.625rem;
+    padding: 1.25rem;
+    text-decoration: none;
+    color: inherit;
+    transition: border-color 0.15s ease, transform 0.15s ease;
+  }
+
+  .vibe-card:hover {
+    border-color: var(--sl-color-gray-4);
+    transform: translateY(-2px);
+  }
+
+  .vibe-contrib-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+
+  .vibe-pfp {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid var(--sl-color-hairline);
+    margin-bottom: 0.75rem;
+  }
+
+  .vibe-ai-badge {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 0.75rem;
+    color: #fff;
+  }
+
+  .vibe-ai-badge.tone-anthropic { background: linear-gradient(135deg, #d97706, #92400e); }
+  .vibe-ai-badge.tone-google { background: linear-gradient(135deg, #4285f4, #1e8e3e); }
+  .vibe-ai-badge.tone-nvidia { background: linear-gradient(135deg, #76b900, #3f6212); }
+
+  .vibe-card-title {
+    font-weight: 700;
+    font-size: 1rem;
+    color: var(--sl-color-white);
+  }
+
+  .vibe-card-sub {
+    font-size: 0.75rem;
+    color: var(--sl-color-gray-3);
+    font-family: var(--sl-font-mono);
+    margin-top: 0.15rem;
+  }
+
+  .vibe-card-role {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--sl-color-text-accent);
+    margin: 0.4rem 0;
+  }
+
+  .vibe-card-desc {
+    font-size: 0.85rem;
+    line-height: 1.5;
+    color: var(--sl-color-gray-3);
+    margin: 0 0 0.85rem;
+    flex-grow: 1;
+  }
+
+  .vibe-card-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.78rem;
+    color: var(--sl-color-gray-2);
+    border: 1px solid var(--sl-color-hairline);
+    padding: 0.25rem 0.65rem;
+    border-radius: 9999px;
+  }
+
+  .vibe-pokedex-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 0.85rem;
+  }
+
+  .vibe-pokedex-card {
+    padding: 1rem 1.1rem;
+  }
+
+  .vibe-pokedex-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.45rem;
+  }
+
+  .vibe-pokedex-num {
+    font-family: var(--sl-font-mono);
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--sl-color-gray-3);
+  }
+
+  .vibe-trainer {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 0.12rem 0.5rem;
+    border-radius: 9999px;
+  }
+
+  .vibe-trainer.tone-anthropic { background: rgba(217, 119, 6, 0.18); color: #fbbf24; }
+  .vibe-trainer.tone-nvidia { background: rgba(118, 185, 0, 0.18); color: #a3e635; }
+  .vibe-trainer.tone-google { background: rgba(66, 133, 244, 0.18); color: #60a5fa; }
+
+  :root[data-theme='light'] .vibe-trainer.tone-anthropic { color: #b45309; }
+  :root[data-theme='light'] .vibe-trainer.tone-nvidia { color: #4d7c0f; }
+  :root[data-theme='light'] .vibe-trainer.tone-google { color: #1d4ed8; }
+
+  .vibe-pokedex-name {
+    font-weight: 650;
+    font-size: 0.95rem;
+    color: var(--sl-color-white);
+    margin-bottom: 0.2rem;
+  }
+
+  .vibe-pokedex-date {
+    font-size: 0.78rem;
+    font-family: var(--sl-font-mono);
+    color: var(--sl-color-gray-3);
+  }
+</style>

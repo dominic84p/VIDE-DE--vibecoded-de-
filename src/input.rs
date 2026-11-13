@@ -571,12 +571,7 @@ impl State {
             },
             Entry::Calc(v) => {
                 let mimes = ["text/plain;charset=utf-8", "text/plain", "UTF8_STRING"].map(String::from).to_vec();
-                smithay::wayland::selection::data_device::set_data_device_selection(
-                    &self.dh,
-                    &self.seat,
-                    mimes,
-                    crate::state::SelectionOwner::Bytes(std::sync::Arc::new(v.into_bytes())),
-                );
+                self.set_clipboard_bytes(mimes, v.into_bytes());
             }
             Entry::Power(a) => return self.power(a),
             Entry::Web(q) => {
@@ -725,7 +720,7 @@ impl State {
             (4, Entry::File(p)) => {
                 let mimes = ["text/plain;charset=utf-8", "text/plain", "UTF8_STRING"].map(String::from).to_vec();
                 let bytes = p.to_string_lossy().into_owned().into_bytes();
-                smithay::wayland::selection::data_device::set_data_device_selection(&self.dh, &self.seat, mimes, crate::state::SelectionOwner::Bytes(std::sync::Arc::new(bytes)));
+                self.set_clipboard_bytes(mimes, bytes);
             }
             _ => {}
         }

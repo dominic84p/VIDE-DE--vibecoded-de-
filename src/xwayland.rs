@@ -367,11 +367,23 @@ impl XwmHandler for State {
     fn send_selection(&mut self, _xwm: XwmId, selection: SelectionTarget, mime_type: String, fd: OwnedFd) {
         match selection {
             SelectionTarget::Clipboard => {
-                let _ = smithay::wayland::selection::data_device::request_data_device_client_selection(
-                    &self.seat,
-                    mime_type,
-                    fd,
-                );
+                // A clipboard we own ourselves (a screenshot): Smithay's client-selection request
+                // refuses those, so hand the bytes over directly.
+                let ours = smithay::wayland::selection::data_device::current_data_device_selection_userdata(&self.seat)
+                    .and_then(|u| match &*u {
+                        crate::state::SelectionOwner::Bytes(data) => Some(data.clone()),
+                        crate::state::SelectionOwner::X11 => None,
+                    });
+                match ours {
+                    Some(data) => crate::state::write_clipboard(data, fd),
+                    None => {
+                        let _ = smithay::wayland::selection::data_device::request_data_device_client_selection(
+                            &self.seat,
+                            mime_type,
+                            fd,
+                        );
+                    }
+                }
             }
             SelectionTarget::Primary => {
                 let _ = smithay::wayland::selection::primary_selection::request_primary_client_selection(

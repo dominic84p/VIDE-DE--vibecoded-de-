@@ -2,7 +2,7 @@
 //! drag out a region first, like the Windoze snipping tool. Saved to
 //! ~/Pictures/Screenshots and put on the clipboard as a PNG.
 
-use std::{io::Write, path::PathBuf, sync::Arc};
+use std::{io::Write, path::PathBuf};
 
 use smithay::{
     backend::{
@@ -16,7 +16,6 @@ use smithay::{
     },
     input::pointer::{CursorIcon, CursorImageStatus},
     utils::{Logical, Point, Rectangle, Transform},
-    wayland::selection::data_device::set_data_device_selection,
 };
 
 use crate::{render, state::State};
@@ -204,6 +203,6 @@ fn save(state: &mut State, w: u32, h: u32, rgba: Vec<u8>) -> Option<PathBuf> {
     };
 
     // Also on the clipboard, so it can be pasted straight into a chat.
-    set_data_device_selection(&state.dh, &state.seat, vec!["image/png".into()], crate::state::SelectionOwner::Bytes(Arc::new(png_bytes)));
+    state.set_clipboard_bytes(vec!["image/png".into()], png_bytes);
     saved
 }

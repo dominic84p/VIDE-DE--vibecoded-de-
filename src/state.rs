@@ -130,6 +130,9 @@ pub struct State {
     pub dh: DisplayHandle,
     pub compositor_state: CompositorState,
     pub xdg_shell_state: XdgShellState,
+    /// xdg-foreign: lets a portal's file picker attach to the window that opened it
+    /// (Firefox warns without it, and the dialog opens detached from its app).
+    pub xdg_foreign_state: smithay::wayland::xdg_foreign::XdgForeignState,
     pub xdg_decoration_state: XdgDecorationState,
     pub shm_state: ShmState,
     pub seat_state: SeatState<Self>,
@@ -278,6 +281,7 @@ impl State {
         Self {
             compositor_state: CompositorState::new::<Self>(&dh),
             xdg_shell_state: XdgShellState::new::<Self>(&dh),
+            xdg_foreign_state: smithay::wayland::xdg_foreign::XdgForeignState::new::<Self>(&dh),
             xdg_decoration_state: XdgDecorationState::new::<Self>(&dh),
             shm_state: ShmState::new::<Self>(&dh, vec![]),
             data_device_state: DataDeviceState::new::<Self>(&dh),
@@ -1000,6 +1004,32 @@ pub enum SelectionOwner {
     X11,
 }
 
+impl State {
+    /// Put bytes we own on the clipboard (screenshots, a calculator result, a file path).
+    /// Smithay only tells our `new_selection` about clipboards that apps set, so X11 apps
+    /// would never hear of this one unless the X11 WM is told here.
+    pub fn set_clipboard_bytes(&mut self, mime_types: Vec<String>, bytes: Vec<u8>) {
+        smithay::wayland::selection::data_device::set_data_device_selection(
+            &self.dh,
+            &self.seat,
+            mime_types.clone(),
+            SelectionOwner::Bytes(Arc::new(bytes)),
+        );
+        if let Some(xwm) = self.xwm.as_mut() {
+            let _ = xwm.new_selection(SelectionTarget::Clipboard, Some(mime_types));
+        }
+    }
+}
+
+/// Write clipboard bytes into a pasting app's pipe, off the main thread so a slow reader
+/// can't stall us.
+pub fn write_clipboard(data: Arc<Vec<u8>>, fd: OwnedFd) {
+    std::thread::spawn(move || {
+        use std::io::Write;
+        let _ = std::fs::File::from(fd).write_all(&data);
+    });
+}
+
 impl SelectionHandler for State {
     /// Clipboard contents we own ourselves (screenshots, calculator, X11 bridge).
     type SelectionUserData = SelectionOwner;
@@ -1019,14 +1049,7 @@ impl SelectionHandler for State {
         user_data: &Self::SelectionUserData,
     ) {
         match user_data {
-            SelectionOwner::Bytes(data) => {
-                // A pipe to the pasting app; write off the main thread so a slow reader can't stall us.
-                let data = data.clone();
-                std::thread::spawn(move || {
-                    use std::io::Write;
-                    let _ = std::fs::File::from(fd).write_all(&data);
-                });
-            }
+            SelectionOwner::Bytes(data) => write_clipboard(data.clone(), fd),
             SelectionOwner::X11 => {
                 if let Some(xwm) = self.xwm.as_mut() {
                     let _ = xwm.send_selection(ty, mime_type, fd, self.loop_handle.clone());
@@ -1160,6 +1183,13 @@ impl ClientData for ClientState {
 
 delegate_compositor!(State);
 delegate_xdg_shell!(State);
+
+impl smithay::wayland::xdg_foreign::XdgForeignHandler for State {
+    fn xdg_foreign_state(&mut self) -> &mut smithay::wayland::xdg_foreign::XdgForeignState {
+        &mut self.xdg_foreign_state
+    }
+}
+smithay::delegate_xdg_foreign!(State);
 delegate_xdg_decoration!(State);
 delegate_shm!(State);
 delegate_seat!(State);

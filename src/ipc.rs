@@ -14,7 +14,6 @@ use std::{
     io::{BufRead, BufReader, Write},
     os::unix::net::{UnixListener, UnixStream},
     path::PathBuf,
-    sync::Arc,
     time::Duration,
 };
 
@@ -23,7 +22,6 @@ use smithay::{
     input::pointer::AxisFrame,
     reexports::calloop::{generic::Generic, Interest, LoopHandle, Mode, PostAction},
     utils::SERIAL_COUNTER,
-    wayland::selection::data_device::set_data_device_selection,
 };
 
 use crate::state::State;
@@ -108,7 +106,7 @@ fn handle_client(state: &mut State, stream: UnixStream) {
         }
         "copy-png" => match std::fs::read(arg) {
             Ok(bytes) => {
-                set_data_device_selection(&state.dh, &state.seat, vec!["image/png".into()], crate::state::SelectionOwner::Bytes(Arc::new(bytes)));
+                state.set_clipboard_bytes(vec!["image/png".into()], bytes);
             }
             Err(e) => tracing::warn!("copy-png {arg}: {e}"),
         },

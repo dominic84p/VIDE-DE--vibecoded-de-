@@ -1152,7 +1152,12 @@ impl State {
             }
             Target::Window(Hit::Client(s, _)) => {
                 let root = self.root_of(&s);
-                self.focus(Some(root.clone()), serial);
+                // A click inside a popup (dropdown, menu, permission prompt) must not hand keyboard
+                // focus back to its parent: the popup sees that as losing focus, closes itself, and
+                // the click that was meant for one of its items never lands.
+                if !self.is_in_popup(&s) {
+                    self.focus(Some(root.clone()), serial);
+                }
                 let mods = self.keyboard.modifier_state();
                 if left && if self.tty { mods.logo } else { mods.alt } {
                     // Mod+drag moves from anywhere; the client never sees this click.
@@ -1178,6 +1183,15 @@ impl State {
             PowerAction::ShutDown => self.spawn("systemctl poweroff"),
         }
         self.toggle_start();
+    }
+
+    /// Is `s` a popup, or a subsurface of one?
+    fn is_in_popup(&self, s: &WlSurface) -> bool {
+        let mut top = s.clone();
+        while let Some(parent) = get_parent(&top) {
+            top = parent;
+        }
+        self.popups.find_popup(&top).is_some()
     }
 
     /// The toplevel surface that `s` (a subsurface or popup) belongs to.

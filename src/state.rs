@@ -507,7 +507,8 @@ impl State {
         let Ok(root) = find_popup_root_surface(&kind) else { return };
         let Some(w) = self.wm.find(&root) else { return };
         let mut target = self.work_area();
-        target.loc -= w.surface_loc();
+        // The popup's geometry is relative to its parent's window geometry, so is the area it must fit.
+        target.loc -= w.pos;
         target.loc -= get_popup_toplevel_coords(&kind);
         popup.with_pending_state(|s| s.geometry = s.positioner.get_unconstrained_geometry(target));
     }

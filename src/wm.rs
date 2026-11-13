@@ -460,7 +460,9 @@ impl Wm {
         for w in self.windows.iter().rev().filter(|w| !w.minimized && w.mapped && w.workspace == self.current_workspace) {
             let sloc = w.surface_loc();
             for (popup, offset) in PopupManager::popups_for_surface(w.surface()) {
-                let ploc = sloc + offset - popup.geometry().loc;
+                // A popup's offset is relative to its parent's window geometry, not its surface:
+                // apps with client-side shadows (Chromium, GTK, Electron) have the two apart.
+                let ploc = w.pos + offset - popup.geometry().loc;
                 if let Some((s, o)) = under_from_surface_tree(popup.wl_surface(), point, ploc, WindowSurfaceType::ALL) {
                     return Some(Hit::Client(s, o.to_f64()));
                 }

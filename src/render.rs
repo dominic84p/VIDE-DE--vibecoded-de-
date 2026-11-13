@@ -274,7 +274,8 @@ pub fn elements_with(renderer: &mut GlesRenderer, state: &mut State, cursor: boo
         let active = Some(w.surface()) == focused.as_ref();
         let sloc = w.surface_loc();
         for (popup, offset) in PopupManager::popups_for_surface(w.surface()) {
-            let ploc = sloc + offset - popup.geometry().loc;
+            // Relative to the parent's window geometry (`pos`), not its surface (`sloc`).
+            let ploc = w.pos + offset - popup.geometry().loc;
             out.extend(surface_tree(renderer, popup.wl_surface(), ploc, Kind::Unspecified));
         }
         out.extend(surface_tree(renderer, w.surface(), sloc, Kind::Unspecified));

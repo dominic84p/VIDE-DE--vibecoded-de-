@@ -105,6 +105,14 @@ the WM in `src/wm.rs` is deliberately our own.
 
 ## Gotchas we already hit
 
+- **A popup's offset is relative to its parent's *window geometry* (`w.pos`), not its surface
+  origin (`surface_loc()`).** Apps with client-side shadows (Chromium, Electron, GTK) have the two
+  apart, so popups were drawn offset by the shadow inset. Use `w.pos + offset - popup.geometry().loc`
+  to draw, hit-test and unconstrain.
+- **Never re-focus the parent window on a click that lands inside one of its popups.** Chromium's
+  dropdowns and permission prompts take keyboard focus; handing it back to the parent makes them
+  close before the click is delivered, so nothing in them could be selected. See
+  `scripts/nested-tests/popup-select-chromium.test`.
 - **NVIDIA:** hardware cursor and overlay planes are unreliable, and direct
   scanout of client buffers skips our sync wait, so `tty.rs` renders with
   `FrameFlags::empty()` (always composite). Don't switch back to `DEFAULT`.

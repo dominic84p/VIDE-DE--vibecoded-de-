@@ -278,7 +278,7 @@ impl App {
 
     fn paste(&mut self) {
         let Some(b) = self.backend.as_mut() else { return };
-        match std::process::Command::new("wl-paste").args(["--no-newline"]).output() {
+        match std::process::Command::new("wl-paste").args(["--no-newline", "--type", "text"]).output() {
             Ok(out) if out.status.success() && !out.stdout.is_empty() => {
                 b.process_command(BackendCommand::Write(out.stdout));
             }

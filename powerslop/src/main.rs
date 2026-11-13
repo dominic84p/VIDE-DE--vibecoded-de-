@@ -433,9 +433,13 @@ impl eframe::App for App {
         if ctrl_shift(Key::V) || ctrl(Key::V) || ctx.input_mut(|i| i.consume_key(Modifiers::SHIFT, Key::Insert)) {
             self.paste();
         }
-        // Windows QuickEdit: Ctrl+C copies when a selection exists, otherwise sends ^C.
-        if !self.selection().is_empty() && ctrl(Key::C) {
-            self.copy(ctx);
+        // Windows QuickEdit: Ctrl+C copies when a selection exists, otherwise sends ^C (SIGINT).
+        if ctrl(Key::C) {
+            if !self.selection().is_empty() {
+                self.copy(ctx);
+            } else if let Some(b) = self.backend.as_mut() {
+                b.process_command(BackendCommand::Write(vec![0x03]));
+            }
         }
         if ctrl_shift(Key::N) || ctrl_shift(Key::T) {
             if let Ok(exe) = std::env::current_exe() {

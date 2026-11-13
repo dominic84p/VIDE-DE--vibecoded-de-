@@ -167,7 +167,7 @@ Process/performance monitor styled like Windows Task Manager.
 ┌────────────────────────────────────────────────┐
 │ Task Mangler  [Processes] [Performance] [Startup]│
 ├────────────────────────────────────────────────┤
-│  🔍 Search...                    [End Task]    │
+│  [Search...]                     [End Task]    │
 ├──────────────┬─────┬──────┬────────┬───────────┤
 │ Name         │ PID │ CPU% │ Memory │ Status    │
 ├──────────────┼─────┼──────┼────────┼───────────┤
@@ -224,7 +224,7 @@ User marks up → Save/Copy/Share
 
 ```
 ┌────────────────────────────────────────────────┐
-│ Snip & Sketchy  [🖊] [🖍] [🧽] [○] [□] [T] [✂]   │
+│ Snip & Sketchy [Pen] [Mark] [Erase] [O] [□] [T] [Crop] │
 ├────────────────────────────────────────────────┤
 │                                                │
 │   [Screenshot with annotations]               │

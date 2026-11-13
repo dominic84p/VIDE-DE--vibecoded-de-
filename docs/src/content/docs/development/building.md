@@ -68,7 +68,9 @@ XDG_RUNTIME_DIR=/tmp/vt WAYLAND_DISPLAY=wayland-1 dbus-run-session -- env VIBE_S
 
 ### TTY Mode (Real Hardware)
 
-**⚠️ Never from inside a desktop session.** Switch to free VT (Ctrl+Alt+F4).
+:::caution
+Never run `--tty` from inside a desktop session. Switch to a free VT (`Ctrl+Alt+F4`).
+:::
 
 ```bash
 # Basic

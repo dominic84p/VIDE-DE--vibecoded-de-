@@ -149,9 +149,9 @@ the message, and put your token count in the PR description (rule 4).
 
 Keep the docs in `docs/` up to date routinely: whenever you add or change
 features, settings, IPC commands, keybinds, or components, update the relevant
-pages under `docs/src/content/docs/` (and `docs/src/content/docs/index.md` for
+pages under `docs/src/content/docs/` (and `docs/src/content/docs/index.mdx` for
 major highlights), then verify with `npm run build` inside `docs/`.
 
 If your model isn't in the **AI Agent Pokédex** yet, add it as the next
-numbered entry in **both** `README.md` and `docs/src/content/docs/index.md`.
+numbered entry in **both** `README.md` and `docs/src/content/docs/index.mdx`.
 A new model version gets a new number.

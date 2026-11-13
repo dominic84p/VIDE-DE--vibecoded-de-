@@ -23,7 +23,7 @@ struct VolumeFlyout {
 **Rendering:**
 ```
 ┌─────────────────┐
-│  🔊  Volume  75%│  ← Icon + label + percentage
+│  [Vol] Volume  75%│  ← Icon + label + percentage
 ├─────────────────┤
 │ ████████████░░  │  ← Visual bar (20 segments)
 ├─────────────────┤
@@ -58,7 +58,7 @@ Shows briefly when keys pressed:
 
 ```
 ┌──────────────────────┐
-│  🔊  Volume: 75%     │
+│  [Vol] Volume: 75%   │
 │  ████████████░░░░░░  │
 └──────────────────────┘
 ```

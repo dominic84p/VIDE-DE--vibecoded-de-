@@ -81,7 +81,9 @@ dbus-run-session -- env VIBE_STARTUP=konsole timeout 12 ./target/release/vibe-co
 
 ### TTY Mode (Real Hardware)
 
-**⚠️ Never run `--tty` from inside a running desktop session.** It competes for the GPU and seat.
+:::caution
+Never run `--tty` from inside a running desktop session. It competes for the GPU and seat.
+:::
 
 1. Switch to a free VT: `Ctrl+Alt+F4`
 2. Log in as your normal user

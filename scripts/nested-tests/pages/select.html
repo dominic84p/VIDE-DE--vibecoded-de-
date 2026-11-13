@@ -1,0 +1,6 @@
+<!doctype html><meta charset=utf-8><title>select test</title>
+<body style="font:32px sans-serif;margin:0;padding:30px">
+<select id=s style="font-size:32px;padding:6px"><option>one</option><option>two</option><option>three</option><option>four</option></select>
+<div id=o style="margin-top:30px">value: one</div>
+<!-- The window title carries the result, so the test can assert it without reading pixels. -->
+<script>s.onchange = () => { o.textContent = 'value: ' + s.value; document.title = 'picked ' + s.value; };</script>

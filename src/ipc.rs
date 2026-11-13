@@ -72,7 +72,13 @@ fn handle_client(state: &mut State, stream: UnixStream) {
             }
             state.start_screenshot(false)
         }
-        "pointer-move" | "pointer-click" | "pointer-down" | "pointer-up" | "key" | "type" | "pointer-pos" => {
+        "popups" => {
+            if !state.test_control {
+                return tracing::warn!("control socket: popups needs VIBE_TEST_INPUT");
+            }
+            let _ = (&stream).write_all(state.describe_popups().as_bytes());
+        }
+        "pointer-move" | "pointer-click" | "pointer-down" | "pointer-up" | "key" | "type" | "pointer-pos" | "pointer-state" => {
             if !state.test_control {
                 return tracing::warn!("control socket: {cmd} needs VIBE_TEST_INPUT");
             }
@@ -171,6 +177,21 @@ impl State {
         let t = self.now_ms();
         match cmd {
             "pointer-pos" => return Some(format!("{} {}\n", self.pointer_loc.x.round(), self.pointer_loc.y.round())),
+            "pointer-state" => {
+                let kind = |s: &smithay::reexports::wayland_server::protocol::wl_surface::WlSurface| {
+                    if self.popups.find_popup(s).is_some() { "popup" } else { "other" }
+                };
+                let ours = self.pointer_focus.as_ref().map(|(s, o)| format!("{} origin={:?}", kind(s), o));
+                let theirs = self.pointer.current_focus().map(|s| kind(&s).to_string());
+                return Some(format!(
+                    "grabbed={} ours={:?} smithay_focus={:?} at=({:.0},{:.0})\n",
+                    self.pointer.is_grabbed(),
+                    ours,
+                    theirs,
+                    self.pointer_loc.x,
+                    self.pointer_loc.y
+                ));
+            }
             "pointer-move" => {
                 let mut it = arg.split_whitespace().filter_map(|v| v.parse::<f64>().ok());
                 if let (Some(x), Some(y)) = (it.next(), it.next()) {
@@ -223,5 +244,28 @@ impl State {
         }
         self.needs_redraw = true;
         None
+    }
+}
+
+impl State {
+    /// For the nested-test script: every popup with the numbers that decide where it is drawn and
+    /// where clicks land on it.
+    pub fn describe_popups(&self) -> String {
+        use smithay::desktop::PopupManager;
+        let mut out = String::new();
+        for w in &self.wm.windows {
+            let sloc = w.surface_loc();
+            out += &format!("window {} pos={:?} surface_loc={:?} geometry={:?}\n", w.app_id(), w.pos, sloc, w.geometry());
+            for (popup, offset) in PopupManager::popups_for_surface(w.surface()) {
+                let g = popup.geometry();
+                let drawn = w.pos + offset - g.loc;
+                let (pending_geo, anchor) = match &popup {
+                    smithay::desktop::PopupKind::Xdg(p) => p.with_pending_state(|s| (s.geometry, s.positioner.anchor_rect)),
+                    _ => Default::default(),
+                };
+                out += &format!("  popup offset={offset:?} geometry={g:?} drawn_at={drawn:?} pending_geometry={pending_geo:?} anchor_rect={anchor:?}\n");
+            }
+        }
+        out
     }
 }

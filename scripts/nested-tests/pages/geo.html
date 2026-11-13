@@ -1,0 +1,6 @@
+<!doctype html><meta charset=utf-8><title>geo asking</title>
+<body style="font:28px sans-serif;padding:20px"><pre id=o>asking...</pre>
+<script>navigator.geolocation.getCurrentPosition(
+  p => { o.textContent = 'ok'; document.title = 'geo ok'; },
+  e => { o.textContent = 'error ' + e.code; document.title = 'geo error ' + e.code; },
+  { timeout: 60000 });</script>

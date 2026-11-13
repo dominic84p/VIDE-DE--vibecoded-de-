@@ -1,0 +1,16 @@
+# Regression: clicking an item in a Chromium dropdown must select it. It used to close the
+# list without selecting, because every click re-focused the parent window and took keyboard
+# focus from the popup (and popups were drawn offset by the parent's client-side shadow).
+run chromium --user-data-dir=/tmp/vide-nt-chromium --password-store=basic --no-first-run --no-default-browser-check --ozone-platform=wayland file://$PWD/scripts/nested-tests/pages/select.html
+expect-window "select test" 40
+wait 6
+click 173 193
+wait 1.5
+shot opened
+move 150 332
+wait 0.5
+down
+wait 0.15
+up
+expect-window "picked three" 8
+shot selected

@@ -1,0 +1,10 @@
+# Regression: the buttons of Firefox's location prompt must be clickable. Block makes the
+# page's geolocation call fail with code 1 (permission denied), which shows in the title.
+run python3 -m http.server 8765 --bind 127.0.0.1 --directory scripts/nested-tests/pages
+run rm -rf /tmp/vide-nt-ff && mkdir -p /tmp/vide-nt-ff && cp scripts/nested-tests/pages/firefox-user.js /tmp/vide-nt-ff/user.js && exec /usr/lib/firefox/firefox --no-remote --profile /tmp/vide-nt-ff http://127.0.0.1:8765/geo.html
+expect-window "geo asking" 90
+wait 4
+shot prompt
+click 608 190
+expect-window "geo error 1" 10
+shot blocked

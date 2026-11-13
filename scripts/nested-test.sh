@@ -22,7 +22,7 @@
 #   run CMD...                   start a program as a client of the nested compositor
 #   run-host CMD...              the same, but with your real runtime dir for read-only access
 #                                to audio and systemd (still drawn on the nested screen)
-#   expect-window TEXT [SECS]    wait until a window's app id or title contains TEXT, else fail
+#   expect-window TEXT [SECS]    (quote multi-word TEXT) wait until a window's app id or title contains TEXT, else fail
 #   move X Y | click X Y [left|right|middle] | down | up
 #   key NAME[+NAME...]           e.g. key enter, key ctrl+l   (a-z 0-9 esc tab enter space arrows ...)
 #   type TEXT                    lowercase letters, digits, space and . / - , (capitals use shift)
@@ -60,6 +60,10 @@ mkdir -p "$OUT"
 RT="$(mktemp -d /tmp/vide-nt.XXXXXX)"
 CF="$RT/config"; mkdir -p "$CF/vide-de"
 [ -n "$CONFIG" ] && cp "$CONFIG" "$CF/vide-de/settings.conf"
+# Session startup launches the KDE wallet when nothing on the (private) bus provides a keyring, and
+# that pops a password prompt over every test. Nothing here needs a keyring.
+mkdir -p "$RT/bin"
+printf '#!/bin/sh\nexit 0\n' > "$RT/bin/ksecretd"; chmod +x "$RT/bin/ksecretd"
 
 doc_mounts() { mount | grep -c "$XDG_RUNTIME_DIR/doc" || true; }
 BEFORE="$(doc_mounts)"
@@ -76,6 +80,9 @@ def P(*a, end='\n'):
     result.write(' '.join(str(x) for x in a) + end)
 
 env = dict(os.environ, VIBE_TEST_INPUT="1")
+# Stubs (see nested-test.sh) come first, for the compositor and for every client.
+os.environ["PATH"] = os.path.join(RT, "bin") + ":" + os.environ["PATH"]
+env["PATH"] = os.environ["PATH"]
 if os.environ.get("NT_STARTUP"):
     env["VIBE_STARTUP"] = os.environ["NT_STARTUP"]
 log = open(os.path.join(OUT, "compositor.log"), "w")
@@ -137,7 +144,9 @@ for n, raw in enumerate(open(os.environ["NT_TEST"]), 1):
         kids.append(subprocess.Popen(rest, shell=True, env=client_env(cmd == "run-host"),
                                      stdout=open(os.path.join(OUT, f"client{len(kids)+1}.log"), "w"), stderr=subprocess.STDOUT))
     elif cmd == "expect-window":
-        needle, _, secs = rest.partition(" ")
+        import shlex
+        words = shlex.split(rest)           # quotes allowed: expect-window "select test" 40
+        needle, secs = words[0], (words[1] if len(words) > 1 else "")
         deadline = time.time() + float(secs or 20)
         while time.time() < deadline and needle not in ipc("windows"):
             time.sleep(0.4)

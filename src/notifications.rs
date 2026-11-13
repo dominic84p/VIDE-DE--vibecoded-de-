@@ -7,6 +7,7 @@
 
 use std::{
     collections::HashMap,
+    time::{Duration, Instant},
     sync::{
         atomic::{AtomicU32, Ordering},
         mpsc, Arc,
@@ -16,7 +17,7 @@ use std::{
 use smithay::{
     backend::renderer::element::memory::MemoryRenderBuffer,
     reexports::calloop::channel::Sender as LoopSender,
-    utils::{Logical, Rectangle},
+    utils::{Logical, Point, Rectangle},
 };
 use zbus::{
     blocking::connection,
@@ -87,6 +88,10 @@ pub struct Notification {
     pub body: String,
     pub actions: Vec<(String, String)>,
     pub timestamp: String,
+    /// freedesktop urgency hint: 0 low, 1 normal, 2 critical.
+    pub urgency: u8,
+    /// `expire_timeout` as sent: -1 server's choice, 0 never, else milliseconds.
+    pub timeout_ms: i32,
 }
 
 #[derive(Clone, PartialEq, Debug, Default)]
@@ -226,8 +231,8 @@ impl Server {
         summary: String,
         body: String,
         actions: Vec<String>,
-        _hints: HashMap<String, OwnedValue>,
-        _expire_timeout: i32,
+        hints: HashMap<String, OwnedValue>,
+        expire_timeout: i32,
     ) -> u32 {
         let id = if replaces_id != 0 {
             replaces_id
@@ -255,6 +260,8 @@ impl Server {
             body: strip_markup(&body),
             actions: action_pairs,
             timestamp: chrono::Local::now().format("%H:%M").to_string(),
+            urgency: hints.get("urgency").and_then(|v| v.downcast_ref::<u8>().ok()).unwrap_or(1),
+            timeout_ms: expire_timeout,
         };
 
         let _ = self.events.send(NotifEvent::Added(notif));
@@ -338,6 +345,8 @@ impl State {
         self.action_center.open = !self.action_center.open;
         if self.action_center.open {
             self.action_center.hover = ActionCenterHit::Nothing;
+            self.toasts.list.clear();
+            self.toasts.panel = None;
             self.close_flyout();
             // Bluetooth / airplane state for the tiles.
             self.refresh_network();
@@ -397,6 +406,7 @@ impl State {
     pub fn handle_notif_event(&mut self, ev: NotifEvent) {
         match ev {
             NotifEvent::Added(notif) => {
+                let notif_for_toast = notif.clone();
                 if let Some(pos) = self.action_center.notifications.iter().position(|n| n.id == notif.id) {
                     self.action_center.notifications[pos] = notif;
                 } else {
@@ -406,9 +416,12 @@ impl State {
                     }
                 }
                 self.action_center.panel = None;
+                self.push_toast(notif_for_toast);
                 self.needs_redraw = true;
             }
             NotifEvent::Closed(id) => {
+                self.toasts.list.retain(|t| t.notif.id != id);
+                self.toasts.panel = None;
                 self.action_center.notifications.retain(|n| n.id != id);
                 self.action_center.panel = None;
                 self.needs_redraw = true;
@@ -630,6 +643,258 @@ fn draw_action_center(
     ActionCenterPanel { key, buffer: c.into_buffer(), hits }
 }
 
+// ------------------------------------------------------------------ toasts
+
+const TOAST_W: i32 = 364;
+const TOAST_MARGIN: i32 = 12;
+const TOAST_GAP: i32 = 8;
+const MAX_TOASTS: usize = 3;
+const TOAST_BTN_H: i32 = 32;
+const TOAST_SECS: u64 = 5;
+
+pub struct Toast {
+    pub notif: Notification,
+    since: Instant,
+    /// `None` stays until dismissed (critical, or the app asked for no timeout).
+    ttl: Option<Duration>,
+}
+
+#[derive(Clone, PartialEq, Debug, Default)]
+pub enum ToastHit {
+    #[default]
+    Nothing,
+    Body(u32),
+    Close(u32),
+    Action(u32, String),
+}
+
+impl ToastHit {
+    fn id(&self) -> Option<u32> {
+        match self {
+            ToastHit::Nothing => None,
+            ToastHit::Body(id) | ToastHit::Close(id) | ToastHit::Action(id, _) => Some(*id),
+        }
+    }
+}
+
+#[derive(Clone, PartialEq)]
+struct ToastKey {
+    items: Vec<Notification>,
+    hover: ToastHit,
+}
+
+struct ToastPanel {
+    key: ToastKey,
+    buffer: MemoryRenderBuffer,
+    hits: Vec<(Rectangle<i32, Logical>, ToastHit)>,
+    size: (i32, i32),
+}
+
+/// Popups for new notifications, stacked bottom-right above the taskbar.
+#[derive(Default)]
+pub struct Toasts {
+    /// Oldest first, so the newest sits lowest, next to the taskbar.
+    pub list: Vec<Toast>,
+    pub hover: ToastHit,
+    panel: Option<ToastPanel>,
+}
+
+fn toast_card_h(n: &Notification) -> i32 {
+    let lines = n.body.lines().filter(|l| !l.trim().is_empty()).take(2).count() as i32;
+    let actions = n.actions.iter().any(|(k, _)| k != "default");
+    // Header row, title, body; the button row (if any) sits flush at the bottom edge.
+    52 + lines * 18 + if actions { 10 + TOAST_BTN_H } else { 12 }
+}
+
+impl State {
+    /// A new notification: show it as a toast, unless Focus assist is on (it still lands
+    /// in the Action Center, which is the point of Focus assist).
+    fn push_toast(&mut self, notif: Notification) {
+        if self.action_center.focus_assist {
+            return;
+        }
+        let ttl = match (notif.urgency, notif.timeout_ms) {
+            (2, _) | (_, 0) => None,
+            (_, ms) if ms > 0 => Some(Duration::from_millis(ms as u64).max(Duration::from_secs(2))),
+            _ => Some(Duration::from_secs(TOAST_SECS)),
+        };
+        let toast = Toast { notif, since: Instant::now(), ttl };
+        // The same id replaces its toast in place (progress updates, chat messages).
+        if let Some(t) = self.toasts.list.iter_mut().find(|t| t.notif.id == toast.notif.id) {
+            *t = toast;
+        } else {
+            self.toasts.list.push(toast);
+            if self.toasts.list.len() > MAX_TOASTS {
+                self.toasts.list.remove(0);
+            }
+        }
+        self.toasts.panel = None;
+    }
+
+    /// Called every second: dismiss toasts that ran out, except the one under the pointer.
+    pub fn toast_tick(&mut self) {
+        if self.toasts.list.is_empty() {
+            return;
+        }
+        let now = Instant::now();
+        let hovered = self.toasts.hover.id();
+        for t in &mut self.toasts.list {
+            if Some(t.notif.id) == hovered {
+                t.since = now;
+            }
+        }
+        let before = self.toasts.list.len();
+        self.toasts.list.retain(|t| t.ttl.is_none_or(|d| now.duration_since(t.since) < d));
+        if self.toasts.list.len() != before {
+            self.toasts.hover = ToastHit::Nothing;
+            self.toasts.panel = None;
+            self.needs_redraw = true;
+        }
+    }
+
+    /// Hidden while the Action Center shows the same notifications, and under a fullscreen
+    /// app (the taskbar is hidden there too).
+    fn toasts_visible(&self) -> bool {
+        if self.toasts.list.is_empty() || self.action_center.open {
+            return false;
+        }
+        let focused = self.focused();
+        let fullscreen = self.wm.top().is_some_and(|w| w.fullscreen.is_some() && Some(w.surface()) == focused.as_ref());
+        self.start.open || !fullscreen
+    }
+
+    fn toast_origin(&self, size: (i32, i32)) -> Point<i32, Logical> {
+        (self.output_size.w - size.0 - TOAST_MARGIN, self.output_size.h - TASKBAR_H - TOAST_MARGIN - size.1).into()
+    }
+
+    pub fn toasts_picture(&mut self) -> Option<(MemoryRenderBuffer, Point<i32, Logical>)> {
+        if !self.toasts_visible() {
+            return None;
+        }
+        let key = ToastKey { items: self.toasts.list.iter().map(|t| t.notif.clone()).collect(), hover: self.toasts.hover.clone() };
+        if self.toasts.panel.as_ref().is_none_or(|p| p.key != key) {
+            self.toasts.panel = Some(draw_toasts(self.font.as_ref(), &mut self.icons, key));
+        }
+        let p = self.toasts.panel.as_ref()?;
+        Some((p.buffer.clone(), self.toast_origin(p.size)))
+    }
+
+    /// What's under `pos` in the toast stack. The gaps between cards are see-through, so
+    /// they report `None` and the click goes on to whatever is behind.
+    pub fn toast_at(&self, pos: Point<f64, Logical>) -> Option<ToastHit> {
+        if !self.toasts_visible() {
+            return None;
+        }
+        let p = self.toasts.panel.as_ref()?;
+        let local = (pos - self.toast_origin(p.size).to_f64()).to_i32_round();
+        p.hits.iter().find(|(r, _)| r.contains(local)).map(|(_, h)| h.clone())
+    }
+
+    pub fn set_toast_hover(&mut self, hit: ToastHit) {
+        if self.toasts.hover != hit {
+            self.toasts.hover = hit;
+            self.toasts.panel = None;
+        }
+    }
+
+    pub fn toast_click(&mut self, hit: ToastHit) {
+        let invoke = |state: &mut State, id: u32, action: &str| {
+            if let Some(tx) = &state.notif_tx {
+                let _ = tx.send(NotifCmd::InvokeAction(id, action.to_string()));
+            }
+            state.action_center.notifications.retain(|n| n.id != id);
+            state.action_center.panel = None;
+        };
+        let id = match hit {
+            ToastHit::Nothing => return,
+            // The X only hides the popup; the notification stays in the Action Center.
+            ToastHit::Close(id) => id,
+            ToastHit::Action(id, action) => {
+                invoke(self, id, &action);
+                id
+            }
+            ToastHit::Body(id) => {
+                if self.toasts.list.iter().any(|t| t.notif.id == id && t.notif.actions.iter().any(|(k, _)| k == "default")) {
+                    invoke(self, id, "default");
+                }
+                id
+            }
+        };
+        self.toasts.list.retain(|t| t.notif.id != id);
+        self.toasts.hover = ToastHit::Nothing;
+        self.toasts.panel = None;
+        self.needs_redraw = true;
+    }
+}
+
+fn draw_toasts(font: Option<&fontdue::Font>, icons: &mut crate::icons::Icons, key: ToastKey) -> ToastPanel {
+    let h = key.items.iter().map(toast_card_h).sum::<i32>() + (key.items.len() as i32 - 1).max(0) * TOAST_GAP;
+    let mut c = Canvas::new(TOAST_W, h);
+    let mut hits = Vec::new();
+    let Some(f) = font else { return ToastPanel { key, buffer: c.into_buffer(), hits, size: (TOAST_W, h) } };
+    let hover = |x: &ToastHit| key.hover == *x;
+
+    // Windows 10's look: a flat dark card, the app's small icon and name on top, the
+    // title and text under it, and the X only while the pointer is over the toast.
+    let mut y = 0;
+    for n in &key.items {
+        let ch = toast_card_h(n);
+        let over = key.hover.id() == Some(n.id);
+        c.rect(0, y, TOAST_W, ch, BG);
+        c.outline(0, y, TOAST_W, ch, BORDER);
+        hits.push((rect(0, y, TOAST_W, ch), ToastHit::Body(n.id)));
+
+        let icon = [n.app_icon.as_str(), n.app_name.as_str()]
+            .into_iter()
+            .filter(|id| !id.is_empty())
+            .find_map(|id| crate::ui::app_icon(icons, id, 16));
+        let mut tx = 12;
+        if let Some(icon) = &icon {
+            c.icon(icon, 12, y + 10);
+            tx = 12 + 16 + 8;
+        }
+        c.text(f, 12.0, tx, y + 8, 18, BODY, &crate::canvas::ellipsize(f, 12.0, &n.app_name, TOAST_W - tx - 44));
+        c.text(f, 14.0, 12, y + 30, 22, WHITE, &crate::canvas::ellipsize(f, 14.0, &n.summary, TOAST_W - 24));
+        let lines: Vec<&str> = n.body.lines().filter(|l| !l.trim().is_empty()).take(2).collect();
+        for (i, line) in lines.iter().enumerate() {
+            c.text(f, 13.0, 12, y + 52 + i as i32 * 18, 18, BODY, &crate::canvas::ellipsize(f, 13.0, line, TOAST_W - 24));
+        }
+
+        if over {
+            let close = ToastHit::Close(n.id);
+            let (cx, cy, cs) = (TOAST_W - 32, y + 1, 30);
+            if hover(&close) {
+                c.rect(cx, cy, cs, cs, BUTTON);
+            }
+            let (x0, y0) = (cx as f32 + 10.0, cy as f32 + 10.0);
+            c.line(x0, y0, x0 + 10.0, y0 + 10.0, 1.2, WHITE);
+            c.line(x0 + 10.0, y0, x0, y0 + 10.0, 1.2, WHITE);
+            hits.push((rect(cx, cy, cs, cs), close));
+        }
+
+        // Full-width buttons with a thin gap between them, flush with the card's edges.
+        let actions: Vec<_> = n.actions.iter().filter(|(k, _)| k != "default").take(3).collect();
+        if !actions.is_empty() {
+            let count = actions.len() as i32;
+            let gap = 2;
+            let bw = (TOAST_W - 2 - (count - 1) * gap) / count;
+            let by = y + ch - TOAST_BTN_H - 1;
+            for (i, (action_key, label)) in actions.into_iter().enumerate() {
+                let bx = 1 + i as i32 * (bw + gap);
+                let hit = ToastHit::Action(n.id, action_key.clone());
+                c.rect(bx, by, bw, TOAST_BTN_H, if hover(&hit) { hex(0x5c5c5c) } else { TILE });
+                let lw = measure(f, 12.0, label);
+                c.text(f, 12.0, bx + (bw - lw).max(8) / 2, by, TOAST_BTN_H, WHITE, &crate::canvas::ellipsize(f, 12.0, label, bw - 12));
+                hits.push((rect(bx, by, bw, TOAST_BTN_H), hit));
+            }
+        }
+        y += ch + TOAST_GAP;
+    }
+    // Later entries win in hit tests, so the X and buttons go in front of the card.
+    hits.reverse();
+    ToastPanel { key, buffer: c.into_buffer(), hits, size: (TOAST_W, h) }
+}
+
 const GEAR: &str = r##"<circle cx="10" cy="10" r="2.6" fill="none" stroke="#fff" stroke-width="1.3"/><path d="M10 2.5v2.2M10 15.3v2.2M2.5 10h2.2M15.3 10h2.2M4.7 4.7l1.6 1.6M13.7 13.7l1.6 1.6M4.7 15.3l1.6-1.6M13.7 6.3l1.6-1.6" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/><circle cx="10" cy="10" r="5.4" fill="none" stroke="#fff" stroke-width="1.3"/>"##;
 const MOON: &str = r##"<path d="M14.5 13.2A6.5 6.5 0 0 1 7.3 3.4a6.5 6.5 0 1 0 7.2 9.8z" fill="none" stroke="#fff" stroke-width="1.3" stroke-linejoin="round"/>"##;
 const SNIP: &str = r##"<path d="M3 3h3M8.5 3h3M14 3h3v3M17 8.5v3M17 14v3h-3M11.5 17h-3M6 17H3v-3M3 11.5v-3M3 6V3" stroke="#fff" stroke-width="1.3" stroke-linecap="round"/><path d="M10 7v6M7 10h6" stroke="#fff" stroke-width="1.3" stroke-linecap="round"/>"##;
@@ -649,6 +914,8 @@ mod tests {
             body: "World".into(),
             actions: vec![("default".into(), "Open".into())],
             timestamp: "12:00".into(),
+            urgency: 1,
+            timeout_ms: -1,
         };
 
         // Add

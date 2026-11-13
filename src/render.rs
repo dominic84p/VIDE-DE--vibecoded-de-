@@ -128,6 +128,13 @@ pub fn elements_with(renderer: &mut GlesRenderer, state: &mut State, cursor: boo
         out.push(Elem::Solid(SolidColorRenderElement::from_buffer(&state.dim, (0, 0), 1.0, 1.0, Kind::Unspecified)));
     }
 
+    // Notification toasts, above the Action Center and flyouts.
+    crate::supervisor::guard("toasts", || {
+        if let Some((buf, at)) = state.toasts_picture() {
+            out.extend(image(renderer, &buf, at, Kind::Unspecified));
+        }
+    });
+
     // Task View desktop switcher.
     crate::supervisor::guard("task view", || {
         let desktops_at = state.desktops_rect().loc;

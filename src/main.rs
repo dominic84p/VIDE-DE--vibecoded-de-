@@ -85,6 +85,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             state.reload_config_if_changed();
         });
         supervisor::guard("supervisor", || state.supervisor_tick());
+        supervisor::guard("toasts", || state.toast_tick());
         TimeoutAction::ToDuration(Duration::from_secs(1))
     })?;
 

@@ -202,6 +202,8 @@ enum Target {
     Desktops(Option<usize>),
     /// Over the Action Center (notifications).
     ActionCenter(crate::notifications::ActionCenterHit),
+    /// Over a notification toast.
+    Toast(crate::notifications::ToastHit),
     Start(StartHit),
     Taskbar(TaskbarHit),
     Window(Hit),
@@ -741,6 +743,9 @@ impl State {
                 return Target::Menu(m.item_at(pos));
             }
         }
+        if let Some(hit) = self.toast_at(pos) {
+            return Target::Toast(hit);
+        }
         if self.desktops.open && self.desktops_rect().to_f64().contains(pos) {
             return Target::Desktops(self.desktop_at(pos));
         }
@@ -840,6 +845,10 @@ impl State {
                 Target::ActionCenter(h) => h.clone(),
                 _ => crate::notifications::ActionCenterHit::Nothing,
             };
+            self.set_toast_hover(match &target {
+                Target::Toast(h) => h.clone(),
+                _ => crate::notifications::ToastHit::Nothing,
+            });
             let fly_hover = if self.flyout_rect().to_f64().contains(pos) { self.flyout_action(pos) } else { None };
             if self.tray.hover != fly_hover {
                 self.tray.hover = fly_hover;
@@ -849,7 +858,7 @@ impl State {
                 self.action_center.panel = None;
             }
             self.hover = match target {
-                Target::Menu(_) | Target::Desktops(_) | Target::ActionCenter(_) => Hover::None,
+                Target::Menu(_) | Target::Desktops(_) | Target::ActionCenter(_) | Target::Toast(_) => Hover::None,
                 Target::Start(h) => Hover::Start(h),
                 Target::Taskbar(h) => Hover::Taskbar(h),
                 Target::Window(Hit::Client(s, origin)) => {
@@ -953,6 +962,14 @@ impl State {
         let right = button == BTN_RIGHT;
         let target = self.target(pos);
         self.needs_redraw = true;
+
+        // A notification toast takes its own clicks.
+        if let Target::Toast(hit) = &target {
+            if left {
+                self.toast_click(hit.clone());
+            }
+            return;
+        }
 
         // Tray flyout: clicks on it drive the slider; clicks elsewhere close it
         // (except on the tray buttons themselves, which toggle).
@@ -1150,7 +1167,7 @@ impl State {
                 }
                 forward(self);
             }
-            Target::Menu(_) | Target::Desktops(_) | Target::ActionCenter(_) => {}
+            Target::Menu(_) | Target::Desktops(_) | Target::ActionCenter(_) | Target::Toast(_) => {}
         }
     }
 

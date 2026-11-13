@@ -207,6 +207,7 @@ pub struct State {
     pub hover: Hover,
     pub clock: (String, String),
     pub action_center: ActionCenter,
+    pub toasts: crate::notifications::Toasts,
     pub notif_tx: Option<NotifSender>,
     /// For double-click-to-maximize on titlebars.
     pub last_title_click: Option<(WlSurface, Instant)>,
@@ -322,6 +323,7 @@ impl State {
             hover: Hover::None,
             clock: clock_now(),
             action_center: ActionCenter::default(),
+            toasts: Default::default(),
             notif_tx: None,
             last_title_click: None,
             super_tap: false,

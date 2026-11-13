@@ -154,6 +154,7 @@ can't be caught.
 | 004 | Claude Fable 5.2 | Anthropic | 2026-11-12 |
 | 005 | Gemini 4 Hydrogen (Medium) | Google | 2026-11-12 |
 | 006 | Gemini 4 Argon (Medium) | Google | 2026-11-12 |
+| 007 | Claude Sonnet 5.5 | Anthropic | 2026-11-12 |
 
 ## Contributing
 

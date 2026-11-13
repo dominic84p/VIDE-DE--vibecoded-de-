@@ -173,6 +173,15 @@ const WALLPAPERS: &[(&str, &[u8])] = &[
     ("vibe.png", include_bytes!("../assets/wallpapers/vibe.png")),
 ];
 
+/// Our notification sounds (made by scripts/make-sounds.py).
+const SOUNDS: &[(&str, &[u8])] = &[
+    ("ding.wav", include_bytes!("../assets/sounds/ding.wav")),
+    ("chime.wav", include_bytes!("../assets/sounds/chime.wav")),
+    ("pop.wav", include_bytes!("../assets/sounds/pop.wav")),
+    ("bell.wav", include_bytes!("../assets/sounds/bell.wav")),
+    ("glass.wav", include_bytes!("../assets/sounds/glass.wav")),
+];
+
 /// Install the built-ins that exist next to our binary. Marked OnlyShowIn=VIDE-DE so
 /// other desktops don't list them. Files are only rewritten when they changed.
 pub fn install_builtin() {
@@ -193,6 +202,10 @@ pub fn install_builtin() {
     let walls = vide_config::wallpapers_dir();
     for (name, bytes) in WALLPAPERS {
         write(&walls.join(name), bytes);
+    }
+    let sounds = vide_config::sounds_dir();
+    for (name, bytes) in SOUNDS {
+        write(&sounds.join(name), bytes);
     }
     for (bin, id, name, comment, icon, categories) in BUILTIN {
         let exe = bin_dir.join(bin);

@@ -1,0 +1,23 @@
+# Emoji and Arabic in a window title come out in the titlebar and taskbar (font fallback);
+# dragging a Start tile onto the taskbar pins it there; a notification plays our sound (the
+# test's private runtime dir has no PipeWire, so it's only checked in the log, never heard).
+run target/release/powerslop -e sh -c 'printf "\033]0;emoji 😀👍 عربي ok\007"; sleep 60'
+expect-window "emoji" 30
+wait 1.5
+shot 1-fonts
+click 24 780
+wait 1.2
+move 394 338
+down
+move 400 420
+move 460 640
+move 540 780
+wait 0.6
+shot 2-dragging
+up
+wait 1
+shot 3-pinned
+run sh -c 'cat "$XDG_CONFIG_HOME/vide-de/pins.conf"'
+wait 1
+run notify-send "Hello" "sound test"
+expect-log "notification sound" 8

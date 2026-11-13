@@ -53,6 +53,8 @@ pub struct Config {
     /// Windoze 10's "default Windoze mode": light taskbar, Start, Action Center and menus
     /// instead of dark. Apps stay light either way.
     pub light_mode: bool,
+    /// The sound a new notification plays: one of `SOUNDS` by id, or "none".
+    pub notification_sound: String,
 }
 
 impl Default for Config {
@@ -82,6 +84,7 @@ impl Default for Config {
             toast_seconds: 5,
             clock_24h: false,
             light_mode: false,
+            notification_sound: "ding".into(),
         }
     }
 }
@@ -123,6 +126,7 @@ impl Config {
                 "toast_seconds" => c.toast_seconds = v.parse().unwrap_or(5).clamp(2, 60),
                 "clock_24h" => c.clock_24h = v == "true",
                 "light_mode" => c.light_mode = v == "true",
+                "notification_sound" if !v.is_empty() => c.notification_sound = v.to_string(),
                 _ => {}
             }
         }
@@ -140,7 +144,7 @@ impl Config {
              display_mode={}\ndisplay_scale={:.2}\nnight_light={}\nnight_light_strength={:.2}\nidle_lock_minutes={}\n\
              tap_to_click={}\nnatural_scroll={}\ndisable_while_typing={}\n\
              xkb_layout={}\nxkb_variant={}\nxkb_options={}\nkey_repeat_delay={}\nkey_repeat_rate={}\n\
-             toasts={}\ntoast_seconds={}\nclock_24h={}\nlight_mode={}\n",
+             toasts={}\ntoast_seconds={}\nclock_24h={}\nlight_mode={}\nnotification_sound={}\n",
             self.hide_kde_apps,
             self.mouse_flat,
             self.mouse_speed,
@@ -162,7 +166,8 @@ impl Config {
             self.toasts,
             self.toast_seconds,
             self.clock_24h,
-            self.light_mode
+            self.light_mode,
+            self.notification_sound
         );
         // Write-then-rename so the compositor never reads a half-written file.
         let tmp = path.with_extension("conf.tmp");
@@ -174,6 +179,19 @@ impl Config {
     pub fn mtime() -> Option<std::time::SystemTime> {
         std::fs::metadata(Self::path()).and_then(|m| m.modified()).ok()
     }
+}
+
+/// Our notification sounds, (id, name in Settings). Installed to `sounds_dir()` as `<id>.wav`.
+pub const SOUNDS: &[(&str, &str)] = &[("ding", "Ding"), ("chime", "Chime"), ("pop", "Pop"), ("bell", "Bell"), ("glass", "Glass")];
+
+/// Where VIDE-DE installs its notification sounds.
+pub fn sounds_dir() -> PathBuf {
+    wallpapers_dir().with_file_name("sounds")
+}
+
+/// The file for a sound id, if it's one of ours ("none" and unknown ids have none).
+pub fn sound_file(id: &str) -> Option<PathBuf> {
+    SOUNDS.iter().any(|(s, _)| *s == id).then(|| sounds_dir().join(format!("{id}.wav")))
 }
 
 /// Where VIDE-DE installs its bundled wallpapers.

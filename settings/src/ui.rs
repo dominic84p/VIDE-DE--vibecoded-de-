@@ -542,6 +542,26 @@ impl Settings {
             });
             c
         });
+        changed |= setting_block(ui, "Notification sound", "Plays when a notification arrives, except in Focus assist.", |ui| {
+            let mut c = false;
+            let name = |id: &str| vide_config::SOUNDS.iter().find(|(s, _)| *s == id).map_or("None", |(_, n)| *n);
+            ui.horizontal(|ui| {
+                egui::ComboBox::from_id_salt("notif_sound").selected_text(name(&self.config.notification_sound)).width(150.0).show_ui(ui, |ui| {
+                    for (id, label) in vide_config::SOUNDS.iter().copied().chain([("none", "None")]) {
+                        if ui.selectable_label(self.config.notification_sound == id, label).clicked() {
+                            self.config.notification_sound = id.to_string();
+                            preview_sound(id);
+                            c = true;
+                        }
+                    }
+                });
+                let can_play = vide_config::sound_file(&self.config.notification_sound).is_some();
+                if ui.add_enabled(can_play, egui::Button::new("▶  Play")).clicked() {
+                    preview_sound(&self.config.notification_sound);
+                }
+            });
+            c
+        });
         ui.add_space(12.0);
         section_title(ui, "Tray");
         card_frame().show(ui, |ui| {
@@ -1534,5 +1554,14 @@ mod xkb_option_tests {
         assert_eq!(o, "grp:alt_shift_toggle");
         set_xkb_option(&mut o, "grp:alt_shift_toggle", false);
         assert_eq!(o, "");
+    }
+}
+
+/// Play a notification sound once, for choosing one.
+fn preview_sound(id: &str) {
+    if let Some(file) = vide_config::sound_file(id) {
+        std::thread::spawn(move || {
+            let _ = std::process::Command::new("pw-play").arg(file).status();
+        });
     }
 }

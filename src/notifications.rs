@@ -80,6 +80,9 @@ pub struct Notification {
     pub urgency: u8,
     /// `expire_timeout` as sent: -1 server's choice, 0 never, else milliseconds.
     pub timeout_ms: i32,
+    /// The app asked for silence (`suppress-sound`), or for its own sound (`sound-file`).
+    pub silent: bool,
+    pub sound_file: Option<String>,
 }
 
 #[derive(Clone, PartialEq, Debug, Default)]
@@ -253,6 +256,8 @@ impl Server {
             timestamp: chrono::Local::now().format("%H:%M").to_string(),
             urgency: hints.get("urgency").and_then(|v| v.downcast_ref::<u8>().ok()).unwrap_or(1),
             timeout_ms: expire_timeout,
+            silent: hints.get("suppress-sound").and_then(|v| v.downcast_ref::<bool>().ok()).unwrap_or(false),
+            sound_file: hints.get("sound-file").and_then(|v| v.downcast_ref::<String>().ok()),
         };
 
         let _ = self.events.send(NotifEvent::Added(notif));
@@ -402,6 +407,7 @@ impl State {
                 if let Some(pos) = self.action_center.notifications.iter().position(|n| n.id == notif.id) {
                     self.action_center.notifications[pos] = notif;
                 } else {
+                    self.play_notification_sound(&notif);
                     self.action_center.notifications.insert(0, notif);
                     self.action_center.unseen += 1;
                     self.taskbar = None;
@@ -708,6 +714,30 @@ fn toast_card_h(n: &Notification) -> i32 {
 }
 
 impl State {
+    /// Windoze-style sound for a new notification: the one picked in Settings, or the app's own
+    /// `sound-file`. Quiet in Focus assist and when the app asks for silence.
+    fn play_notification_sound(&mut self, notif: &Notification) {
+        if notif.silent || self.action_center.focus_assist {
+            return;
+        }
+        let file = notif
+            .sound_file
+            .clone()
+            .filter(|f| std::path::Path::new(f).is_file())
+            .or_else(|| vide_config::sound_file(&self.config.notification_sound).map(|p| p.to_string_lossy().into_owned()));
+        if let Some(file) = file {
+            tracing::info!("notification sound: {file}");
+            match std::process::Command::new("pw-play").arg(&file).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).spawn() {
+                Ok(child) => crate::supervisor::reap(child),
+                Err(_) => {
+                    if let Ok(child) = std::process::Command::new("paplay").arg(&file).spawn() {
+                        crate::supervisor::reap(child);
+                    }
+                }
+            }
+        }
+    }
+
     /// A new notification: show it as a toast, unless Focus assist is on (it still lands
     /// in the Action Center, which is the point of Focus assist).
     fn push_toast(&mut self, notif: Notification) {
@@ -917,6 +947,8 @@ mod tests {
             timestamp: "12:00".into(),
             urgency: 1,
             timeout_ms: -1,
+            silent: false,
+            sound_file: None,
         };
 
         // Add

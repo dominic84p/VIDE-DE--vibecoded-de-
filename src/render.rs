@@ -235,9 +235,7 @@ pub fn elements_with(renderer: &mut GlesRenderer, state: &mut State, cursor: boo
 
     // Taskbar, unless a fullscreen window is in front.
     crate::supervisor::guard("taskbar", || {
-        // Fullscreen apps cover it, unless the start menu is up (Super over a game shows it, like Windoze).
-        let fullscreen_top = state.wm.top().is_some_and(|w| w.fullscreen.is_some() && Some(w.surface()) == focused.as_ref());
-        if !fullscreen_top || state.start.open {
+        if state.taskbar_shown() {
             let key = TaskbarKey {
                 width: ow,
                 items: state.taskbar_items(focused.as_ref()),

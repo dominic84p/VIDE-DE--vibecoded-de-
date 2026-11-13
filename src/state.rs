@@ -181,6 +181,7 @@ pub struct State {
     pub switcher: Option<crate::switcher::Switcher>,
     pub snap_buf: smithay::backend::renderer::element::solid::SolidColorBuffer,
     pub tray: crate::tray::Tray,
+    pub clipboard: crate::clipboard::Clipboard,
     /// Settings from ~/.config/vide-de/settings.conf (written by vide-settings).
     pub config: vide_config::Config,
     pub config_mtime: Option<std::time::SystemTime>,
@@ -223,6 +224,8 @@ pub struct State {
     pub xwayland_shell_state: XWaylandShellState,
     /// Xwayland's display number, once it's up (for apps' DISPLAY).
     pub xdisplay: Option<u32>,
+    /// Xwayland's own PID: End process must never hit it (every X11 app would go with it).
+    pub xwayland_pid: Option<u32>,
     /// X11 windows that asked to be mapped but whose Wayland surface hasn't shown up yet.
     pub x11_pending: Vec<X11Surface>,
     /// X11 menus/tooltips: they position themselves and sit above everything.
@@ -321,6 +324,7 @@ impl State {
             switcher: None,
             snap_buf: Default::default(),
             tray: crate::tray::Tray::new(),
+            clipboard: Default::default(),
             config: vide_config::Config::load(),
             config_mtime: vide_config::Config::mtime(),
             mouse_config_dirty: true,
@@ -348,6 +352,7 @@ impl State {
             xwm: None,
             xwayland_shell_state: XWaylandShellState::new::<Self>(&dh),
             xdisplay: None,
+            xwayland_pid: None,
             x11_pending: Vec::new(),
             x11_overrides: Vec::new(),
             xwayland_crashes: Default::default(),
@@ -399,6 +404,21 @@ impl State {
 
     /// True while any compositor shell overlay (Start, Task View, tray flyout, menu, Alt+Tab, snip)
     /// is open and should own the mouse instead of an underlying game's pointer lock.
+    /// A focused fullscreen app hides the taskbar, unless something that belongs to it is
+    /// open: Start (Super over a game), a taskbar button's menu, a tray flyout, the Action
+    /// Center or Task View. Otherwise right-clicking a taskbar button under Start closed
+    /// Start and took the taskbar away along with it.
+    pub fn taskbar_shown(&self) -> bool {
+        let focused = self.focused();
+        let fullscreen_top = self.wm.top().is_some_and(|w| w.fullscreen.is_some() && Some(w.surface()) == focused.as_ref());
+        !fullscreen_top
+            || self.start.open
+            || self.menu.is_some()
+            || self.tray.flyout.is_some()
+            || self.action_center.open
+            || self.desktops.open
+    }
+
     pub fn shell_overlay_open(&self) -> bool {
         self.start.open
             || self.desktops.open
@@ -1001,6 +1021,8 @@ impl ShmHandler for State {
 #[derive(Clone)]
 pub enum SelectionOwner {
     Bytes(Arc<Vec<u8>>),
+    /// A copy kept after the app that made it closed: bytes per mime type.
+    Saved(Arc<std::collections::HashMap<String, Arc<Vec<u8>>>>),
     X11,
 }
 
@@ -1009,6 +1031,7 @@ impl State {
     /// Smithay only tells our `new_selection` about clipboards that apps set, so X11 apps
     /// would never hear of this one unless the X11 WM is told here.
     pub fn set_clipboard_bytes(&mut self, mime_types: Vec<String>, bytes: Vec<u8>) {
+        self.clipboard_forget();
         smithay::wayland::selection::data_device::set_data_device_selection(
             &self.dh,
             &self.seat,
@@ -1035,6 +1058,10 @@ impl SelectionHandler for State {
     type SelectionUserData = SelectionOwner;
 
     fn new_selection(&mut self, ty: SelectionTarget, source: Option<SelectionSource>, _seat: Seat<Self>) {
+        if ty == SelectionTarget::Clipboard {
+            let mimes = source.as_ref().map(|s| s.mime_types()).unwrap_or_default();
+            self.clipboard_changed(&mimes, false);
+        }
         if let Some(xwm) = self.xwm.as_mut() {
             let _ = xwm.new_selection(ty, source.map(|s| s.mime_types()));
         }
@@ -1050,6 +1077,11 @@ impl SelectionHandler for State {
     ) {
         match user_data {
             SelectionOwner::Bytes(data) => write_clipboard(data.clone(), fd),
+            SelectionOwner::Saved(map) => {
+                if let Some(data) = map.get(&mime_type) {
+                    write_clipboard(data.clone(), fd);
+                }
+            }
             SelectionOwner::X11 => {
                 if let Some(xwm) = self.xwm.as_mut() {
                     let _ = xwm.send_selection(ty, mime_type, fd, self.loop_handle.clone());

@@ -17,6 +17,10 @@ use crate::{
 const ROW: i32 = 32;
 const PAD: i32 = 4;
 const MIN_W: i32 = 200;
+/// Windoze 10's taskbar jump list: flush on the taskbar, taller rows, an icon on each.
+const JUMP_W: i32 = 256;
+const JUMP_ROW: i32 = 40;
+const JUMP_PAD: i32 = 6;
 
 #[derive(Clone, PartialEq, Debug)]
 pub enum Action {
@@ -26,6 +30,8 @@ pub enum Action {
     Maximize(WlSurface),
     Fullscreen(WlSurface),
     Close(WlSurface),
+    /// "Close all windows" on a taskbar button with several.
+    CloseAll(Vec<WlSurface>),
     /// SIGKILL the window's process: for apps that won't close.
     Kill(WlSurface),
     Spawn(String),
@@ -44,12 +50,20 @@ pub enum Action {
     SignOut,
 }
 
+/// A row's icon in a jump list: the app's own, or one of our glyphs (SVG drawn in white).
+pub enum MenuIcon {
+    Image(std::rc::Rc<crate::icons::Icon>),
+    Glyph(&'static str),
+}
+
 pub struct Menu {
     pub pos: Point<i32, Logical>,
     pub items: Vec<(String, Action)>,
     pub hover: Option<usize>,
     pub size: Size<i32, Logical>,
     pub(crate) picture: Option<(Option<usize>, MemoryRenderBuffer)>,
+    /// Set for a taskbar jump list: one icon per item.
+    jump: Option<Vec<Option<MenuIcon>>>,
 }
 
 impl Menu {
@@ -59,15 +73,25 @@ impl Menu {
 
     /// Row index at a point (global coords), skipping separators.
     pub fn item_at(&self, p: Point<f64, Logical>) -> Option<usize> {
+        let (pad, row) = self.metrics();
         let local = p - self.pos.to_f64();
-        if local.x < 0.0 || local.x >= self.size.w as f64 || local.y < PAD as f64 {
+        if local.x < 0.0 || local.x >= self.size.w as f64 || local.y < pad as f64 {
             return None;
         }
-        let i = ((local.y as i32 - PAD) / ROW) as usize;
+        let i = ((local.y as i32 - pad) / row) as usize;
         self.items.get(i).filter(|(_, a)| !matches!(a, Action::Separator | Action::Inert)).map(|_| i)
     }
 
+    /// Top padding and row height.
+    fn metrics(&self) -> (i32, i32) {
+        if self.jump.is_some() { (JUMP_PAD, JUMP_ROW) } else { (PAD, ROW) }
+    }
+
     pub fn picture(&mut self, font: Option<&fontdue::Font>) -> &MemoryRenderBuffer {
+        if self.jump.is_some() && self.picture.as_ref().is_none_or(|(h, _)| *h != self.hover) {
+            let buf = self.draw_jump_list(font);
+            self.picture = Some((self.hover, buf));
+        }
         if self.picture.as_ref().is_none_or(|(h, _)| *h != self.hover) {
             let mut c = Canvas::new(self.size.w, self.size.h);
             c.fill(th().menu);
@@ -98,7 +122,67 @@ impl Menu {
     }
 }
 
+impl Menu {
+    fn draw_jump_list(&self, font: Option<&fontdue::Font>) -> MemoryRenderBuffer {
+        let mut c = Canvas::new(self.size.w, self.size.h);
+        c.fill(th().menu);
+        let icons = self.jump.as_deref().unwrap_or(&[]);
+        for (i, (label, action)) in self.items.iter().enumerate() {
+            let y = JUMP_PAD + i as i32 * JUMP_ROW;
+            if *action == Action::Separator {
+                c.rect(0, y + JUMP_ROW / 2, self.size.w, 1, th().border);
+                continue;
+            }
+            if self.hover == Some(i) {
+                c.rect(0, y, self.size.w, JUMP_ROW, th().menu_hover);
+            }
+            let mid = y + JUMP_ROW / 2;
+            match icons.get(i).and_then(|i| i.as_ref()) {
+                Some(MenuIcon::Image(icon)) => c.icon(icon, 16, mid - icon.h as i32 / 2),
+                Some(MenuIcon::Glyph(svg)) => crate::tray::glyph(&mut c, (*svg).into(), 24.0, mid as f32, 16),
+                None => {}
+            }
+            if let Some(f) = font {
+                let color = if *action == Action::Inert { th().disabled } else { th().text };
+                c.text(f, 14.0, 48, y, JUMP_ROW, color, &crate::canvas::ellipsize(f, 14.0, label, self.size.w - 60));
+            }
+        }
+        c.into_buffer()
+    }
+}
+
+// Jump list glyphs (20x20, white), after Windoze 10's.
+const PIN: &str = r##"<path d="M11.8 2.6l5.6 5.6-1.6.6-3.2 3.2.3 3.2-1.4 1.4-3.6-3.6-4.8 4.8M8.3 9.5l-3-.3-1.4 1.4 7.6 7.6M11.8 2.6l-.6 1.6-3 3" fill="none" stroke="#fff" stroke-width="1.1" stroke-linejoin="round"/>"##;
+const UNPIN: &str = r##"<path d="M11.8 2.6l5.6 5.6-1.6.6-3.2 3.2.3 3.2-1.4 1.4-3.6-3.6-4.8 4.8M8.3 9.5l-3-.3-1.4 1.4 7.6 7.6M11.8 2.6l-.6 1.6-3 3M2.5 2.5l15 15" fill="none" stroke="#fff" stroke-width="1.1" stroke-linejoin="round"/>"##;
+const CLOSE: &str = r##"<path d="M4.5 4.5l11 11M15.5 4.5l-11 11" stroke="#fff" stroke-width="1.2"/>"##;
+const END: &str = r##"<circle cx="10" cy="10" r="6.8" fill="none" stroke="#fff" stroke-width="1.2"/><path d="M5.2 14.8l9.6-9.6" stroke="#fff" stroke-width="1.2"/>"##;
+
 impl State {
+    /// A taskbar button's jump list, flush on the taskbar and centred on the button at `x`.
+    pub fn open_jump_list(&mut self, x: i32, rows: Vec<(String, Action, Option<MenuIcon>)>) {
+        let h = rows.len() as i32 * JUMP_ROW + JUMP_PAD * 2;
+        let pos = Point::from(((x - JUMP_W / 2).clamp(0, (self.output_size.w - JUMP_W).max(0)), self.output_size.h - TASKBAR_H - h));
+        let (items, icons): (Vec<_>, Vec<_>) = rows.into_iter().map(|(l, a, i)| ((l, a), i)).unzip();
+        self.release_pointer();
+        self.menu = Some(Menu { pos, items, hover: None, size: Size::from((JUMP_W, h)), picture: None, jump: Some(icons) });
+        self.needs_redraw = true;
+    }
+
+    /// The jump list rows every app gets: launch it, pin or unpin it.
+    fn jump_app_rows(&mut self, app: usize) -> Vec<(String, Action, Option<MenuIcon>)> {
+        let a = self.apps[app].clone();
+        let icon = crate::ui::app_icon(&mut self.icons, &a.icon, 16).map(MenuIcon::Image);
+        let pinned = self.pins.taskbar.contains(&a.id);
+        vec![
+            (a.name.clone(), Action::Launch(app), icon),
+            (
+                if pinned { "Unpin from taskbar" } else { "Pin to taskbar" }.into(),
+                Action::PinTaskbar(a.id.clone()),
+                Some(MenuIcon::Glyph(if pinned { UNPIN } else { PIN })),
+            ),
+        ]
+    }
+
     /// Open a menu with its top-left near `at`, kept on screen.
     pub fn open_menu(&mut self, at: Point<i32, Logical>, items: Vec<(String, Action)>) {
         let text_w = self
@@ -113,7 +197,7 @@ impl State {
             at.y.clamp(0, (screen.h - size.h).max(0)),
         ));
         self.release_pointer();
-        self.menu = Some(Menu { pos, items, hover: None, size, picture: None });
+        self.menu = Some(Menu { pos, items, hover: None, size, picture: None, jump: None });
         self.needs_redraw = true;
     }
 
@@ -143,32 +227,33 @@ impl State {
         self.open_menu(at, items);
     }
 
-    /// Right-click on a taskbar button: Windoze-style jump list, anchored above the taskbar.
-    pub fn open_taskbar_menu(&mut self, surface: &WlSurface, x: i32) {
-        let Some(w) = self.wm.find(surface) else { return };
-        let s = surface.clone();
+    /// Right-click on a taskbar button: Windoze 10's jump list for the app, with its windows'
+    /// Close (all) and End process.
+    pub fn open_taskbar_menu(&mut self, windows: &[WlSurface], x: i32) {
+        let Some(last) = windows.last().cloned() else { return };
+        let Some(w) = self.wm.find(&last) else { return };
         let app = crate::apps::match_app(&self.apps, &w.app_id()).and_then(|a| self.apps.iter().position(|b| b.id == a.id));
-        let mut items = Vec::new();
-        if let Some(i) = app {
-            let id = self.apps[i].id.clone();
-            let pin = if self.pins.taskbar.contains(&id) { "Unpin from taskbar" } else { "Pin to taskbar" };
-            items.push((self.apps[i].name.clone(), Action::Launch(i)));
-            items.push((pin.into(), Action::PinTaskbar(id)));
-            items.push((String::new(), Action::Separator));
-        }
-        if w.minimized {
-            items.push(("Restore".into(), Action::Restore(s.clone())));
+        let mut rows = match app {
+            Some(i) => self.jump_app_rows(i),
+            // No .desktop file: the window's own name and icon.
+            None => {
+                let icon = crate::ui::app_icon(&mut self.icons, &w.app_id(), 16).map(MenuIcon::Image);
+                vec![(w.title(), Action::Inert, icon)]
+            }
+        };
+        if windows.len() > 1 {
+            rows.push(("Close all windows".into(), Action::CloseAll(windows.to_vec()), Some(MenuIcon::Glyph(CLOSE))));
         } else {
-            items.push(("Minimize".into(), Action::Minimize(s.clone())));
+            rows.push(("Close window".into(), Action::Close(last.clone()), Some(MenuIcon::Glyph(CLOSE))));
         }
-        if w.maximized.is_some() {
-            items.push(("Restore size".into(), Action::Restore(s.clone())));
-        } else {
-            items.push(("Maximize".into(), Action::Maximize(s.clone())));
-        }
-        items.push(("Close window".into(), Action::Close(s.clone())));
-        items.push(("End process".into(), Action::Kill(s)));
-        self.open_menu_above_taskbar(x, items);
+        rows.push(("End process".into(), Action::Kill(last), Some(MenuIcon::Glyph(END))));
+        self.open_jump_list(x, rows);
+    }
+
+    /// A pinned app with no windows.
+    pub fn open_pinned_jump_list(&mut self, app: usize, x: i32) {
+        let rows = self.jump_app_rows(app);
+        self.open_jump_list(x, rows);
     }
 
     pub fn open_menu_above_taskbar(&mut self, x: i32, items: Vec<(String, Action)>) {
@@ -202,6 +287,8 @@ impl State {
     pub fn window_pid(&self, surface: &WlSurface) -> Option<u32> {
         let w = self.wm.find(surface)?;
         match w.x11() {
+            // _NET_WM_PID is only a hint, and inside a Flatpak it's the sandbox's own numbering;
+            // `kill_window_process` asks the X server instead.
             Some(x) => x.pid(),
             None => {
                 use smithay::reexports::wayland_server::Resource;
@@ -211,18 +298,29 @@ impl State {
         }
     }
 
+    /// End process: SIGKILL the app that owns the window, now. For X11 windows the X server
+    /// knows the real PID (XRes), which is right even for Flatpak apps; asking it is a blocking
+    /// round trip to Xwayland, which this thread serves, so that happens on a thread of its own.
     pub fn kill_window_process(&mut self, surface: &WlSurface) {
-        let Some(pid) = self.window_pid(surface).filter(|&p| p > 1 && p != std::process::id()) else {
-            tracing::warn!("end process: couldn't find a PID; asking the window to close instead");
-            if let Some(w) = self.wm.find(surface) {
-                w.close();
+        let Some(w) = self.wm.find(surface) else { return };
+        let ours = std::process::id();
+        let xwayland = self.xwayland_pid;
+        let safe = move |pid: u32| pid > 1 && pid != ours && Some(pid) != xwayland;
+        match (w.x11(), self.xdisplay) {
+            (Some(x), Some(display)) => {
+                let (window, title) = (x.window_id(), w.title());
+                std::thread::spawn(move || match x11_client_pid(display, window).filter(|&p| safe(p)) {
+                    Some(pid) => sigkill(pid, &title),
+                    None => tracing::warn!("end process: no PID for X11 window {window:#x} ({title})"),
+                });
             }
-            return;
-        };
-        tracing::info!("end process: SIGKILL {pid}");
-        match std::process::Command::new("kill").args(["-9", &pid.to_string()]).spawn() {
-            Ok(child) => crate::supervisor::reap(child),
-            Err(e) => tracing::warn!("end process: {e}"),
+            _ => match self.window_pid(surface).filter(|&p| safe(p)) {
+                Some(pid) => sigkill(pid, &w.title()),
+                None => {
+                    tracing::warn!("end process: couldn't find a PID; asking the window to close instead");
+                    w.close();
+                }
+            },
         }
     }
 
@@ -268,6 +366,13 @@ impl State {
                 self.wm.fullscreen(&s, rect);
                 self.focus(Some(s), serial);
             }
+            Action::CloseAll(list) => {
+                for s in &list {
+                    if let Some(w) = self.wm.find(s) {
+                        w.close();
+                    }
+                }
+            }
             Action::Close(s) => {
                 if let Some(w) = self.wm.find(&s) {
                     w.close();
@@ -296,4 +401,20 @@ impl State {
         }
         self.needs_redraw = true;
     }
+}
+
+fn sigkill(pid: u32, title: &str) {
+    tracing::info!("end process: SIGKILL {pid} ({title})");
+    if let Err(e) = std::process::Command::new("kill").args(["-KILL", &pid.to_string()]).status() {
+        tracing::warn!("end process: {e}");
+    }
+}
+
+/// The PID of the X client owning `window`, from the X server's own records (XRes).
+fn x11_client_pid(display: u32, window: u32) -> Option<u32> {
+    use x11rb::protocol::res::{query_client_ids, ClientIdMask, ClientIdSpec};
+    let (conn, _) = x11rb::rust_connection::RustConnection::connect(Some(&format!(":{display}"))).ok()?;
+    let spec = ClientIdSpec { client: window, mask: ClientIdMask::LOCAL_CLIENT_PID };
+    let reply = query_client_ids(&conn, &[spec]).ok()?.reply().ok()?;
+    reply.ids.iter().find(|id| id.spec.mask == ClientIdMask::LOCAL_CLIENT_PID).and_then(|id| id.value.first().copied())
 }

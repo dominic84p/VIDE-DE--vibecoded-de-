@@ -15,7 +15,7 @@ smithay = { version = "0.7", default-features = false, features = ["backend_wini
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 vide-config = { version = "0.1.0", path = "config" }
-x11rb = "0.13"
+x11rb = { version = "0.13", features = ["res"] }
 xcursor = "0.3.11"
 zbus = "5"
 

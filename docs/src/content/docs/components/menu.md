@@ -41,7 +41,7 @@ enum MenuAction {
 | Trigger | Menu | Items |
 |---------|------|-------|
 | Right-click titlebar | Window menu | Restore, Minimize, Maximize (greyed when they don't apply), Close; End process when the app is not responding |
-| Right-click taskbar button | Window menu | Same as titlebar |
+| Right-click taskbar button | Jump list (Windoze 10 style: flush on the taskbar, an icon per row) | App name (launch another), Pin/Unpin from taskbar, Close window (Close all windows with several), End process (SIGKILL; X11 apps' real PID via XRes, so Flatpak apps too) |
 | Right-click taskbar empty | Taskbar menu | Settings, Task Manager, Task View |
 | Right-click desktop | Desktop menu (drawn by `vide-desktop`) | View ▸ (icon size, auto arrange), Sort by ▸, Refresh, New ▸ Folder, Open in PowerSlop, Display settings, Personalize. Submenus open on hover; it opens upward near the taskbar |
 | Right-click tray icon | SNI menu | App-provided menu |

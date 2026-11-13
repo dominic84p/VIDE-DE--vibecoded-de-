@@ -14,7 +14,7 @@ VIDE-DE implements and uses these Wayland protocols via Smithay 0.7.
 | `wl_compositor` | 4 | Surface creation | `CompositorState` |
 | `wl_subcompositor` | 1 | Sub-surfaces | `CompositorState` |
 | `wl_shm` | 1 | Shared memory buffers | `ShmState` |
-| `wl_data_device_manager` | 3 | Clipboard, DnD | `DataDeviceState` |
+| `wl_data_device_manager` | 3 | Clipboard, DnD. A copy outlives the app that made it (`clipboard.rs`), and our own copies (screenshots) reach X11 apps too | `DataDeviceState` |
 | `wl_seat` | 7 | Input devices | `SeatState` |
 | `wl_output` | 4 | Output management | `OutputState` |
 
@@ -24,6 +24,7 @@ VIDE-DE implements and uses these Wayland protocols via Smithay 0.7.
 |----------|---------|---------|---------|
 | `xdg_wm_base` | 2 | Toplevel/popup windows | `XdgShellState` |
 | `xdg_decoration` | 1 | Server-side decorations | `DecorationState` |
+| `zxdg_exporter_v2` / `zxdg_importer_v2` | 1 | xdg-foreign: portal dialogs attach to the app that opened them | `XdgForeignState` |
 | `wlr_layer_shell` | 1 | Desktop, panels, overlays | `LayerShellState` |
 | `wlr_foreign_toplevel` | 2 | Window management for external tools | (Not implemented) |
 

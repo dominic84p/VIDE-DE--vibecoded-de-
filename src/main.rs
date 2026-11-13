@@ -1,5 +1,6 @@
 mod apps;
 mod canvas;
+mod clipboard;
 mod cursor;
 mod desktops;
 mod focus;
@@ -78,6 +79,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // Safety: we never drop the display while the source is alive.
             // A panic in one protocol handler shouldn't end every client's session.
             supervisor::guard("wayland dispatch", || unsafe { display.get_mut().dispatch_clients(state).unwrap() });
+            state.clipboard_check_owner();
             state.popups.cleanup();
             Ok(PostAction::Continue)
         },

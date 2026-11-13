@@ -736,8 +736,7 @@ impl State {
     }
 
     fn taskbar_visible(&self) -> bool {
-        let focused = self.focused();
-        self.start.open || !self.wm.top().is_some_and(|w| w.fullscreen.is_some() && Some(w.surface()) == focused.as_ref())
+        self.taskbar_shown()
     }
 
     fn target(&self, pos: Point<f64, Logical>) -> Target {

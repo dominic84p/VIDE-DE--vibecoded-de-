@@ -68,6 +68,7 @@ fn spawn(handle: &LoopHandle<'static, State>, state: &mut State, first: bool) {
                 tracing::info!("Xwayland ready on :{display_number}");
                 state.xwm = Some(wm);
                 state.xdisplay = Some(display_number);
+                state.xwayland_pid = client.get_credentials(&state.dh).ok().map(|c| c.pid as u32);
                 if !first {
                     // A new server may have a new display number; D-Bus-activated apps need it too.
                     state.spawn("dbus-update-activation-environment --systemd DISPLAY 2>/dev/null || dbus-update-activation-environment DISPLAY");
@@ -199,6 +200,7 @@ impl XwmHandler for State {
         tracing::warn!("Xwayland died");
         self.xwm = None;
         self.xdisplay = None;
+        self.xwayland_pid = None;
         for w in std::mem::take(&mut self.x11_overrides).into_iter().chain(std::mem::take(&mut self.x11_pending)) {
             self.forget_x11(&w);
         }
@@ -372,6 +374,7 @@ impl XwmHandler for State {
                 let ours = smithay::wayland::selection::data_device::current_data_device_selection_userdata(&self.seat)
                     .and_then(|u| match &*u {
                         crate::state::SelectionOwner::Bytes(data) => Some(data.clone()),
+                        crate::state::SelectionOwner::Saved(map) => map.get(&mime_type).cloned(),
                         crate::state::SelectionOwner::X11 => None,
                     });
                 match ours {
@@ -398,6 +401,7 @@ impl XwmHandler for State {
     fn new_selection(&mut self, _xwm: XwmId, selection: SelectionTarget, mime_types: Vec<String>) {
         match selection {
             SelectionTarget::Clipboard => {
+                self.clipboard_changed(&mime_types, true);
                 smithay::wayland::selection::data_device::set_data_device_selection(
                     &self.dh,
                     &self.seat,
@@ -420,6 +424,7 @@ impl XwmHandler for State {
         match selection {
             SelectionTarget::Clipboard => {
                 smithay::wayland::selection::data_device::clear_data_device_selection(&self.dh, &self.seat);
+                self.clipboard_x11_cleared();
             }
             SelectionTarget::Primary => {
                 smithay::wayland::selection::primary_selection::clear_primary_selection(&self.dh, &self.seat);

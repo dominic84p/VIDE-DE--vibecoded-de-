@@ -319,19 +319,10 @@ impl State {
 
     pub fn open_task_button_menu(&mut self, i: usize, x: i32) {
         let Some(item) = self.taskbar.as_ref().and_then(|t| t.key.items.get(i)).cloned() else { return };
-        match item.windows.last() {
-            Some(w) => self.open_taskbar_menu(w, x),
-            None => {
-                let Some(id) = item.pinned else { return };
-                let Some(idx) = self.apps.iter().position(|a| a.id == id) else { return };
-                use crate::menu::Action;
-                let items = vec![
-                    (self.apps[idx].name.clone(), Action::Launch(idx)),
-                    (String::new(), Action::Separator),
-                    ("Unpin from taskbar".into(), Action::PinTaskbar(id)),
-                ];
-                self.open_menu_above_taskbar(x, items);
-            }
+        if !item.windows.is_empty() {
+            self.open_taskbar_menu(&item.windows, x);
+        } else if let Some(idx) = item.pinned.and_then(|id| self.apps.iter().position(|a| a.id == id)) {
+            self.open_pinned_jump_list(idx, x);
         }
     }
 }

@@ -48,6 +48,8 @@ use wayland_client::{
 const MARGIN: i32 = 8;
 const MENU_W: i32 = 240;
 const MENU_ROW: i32 = 30;
+const MENU_SEP: i32 = 9;
+const MENU_PAD: i32 = 4;
 const DOUBLE_CLICK: Duration = Duration::from_millis(400);
 const DRAG_START: f64 = 5.0;
 /// Room left for our taskbar at the bottom of the screen.
@@ -236,18 +238,90 @@ enum MenuAction {
     Refresh,
     NewFolder,
     Personalize,
+    DisplaySettings,
     Terminal,
-    About,
     IconSize(u32),
     AutoArrange,
     Sort(SortBy),
 }
 
+/// What sits in a menu row's left gutter, like Windows: a check for on/off options,
+/// a dot for the one picked out of several.
+#[derive(Clone, Copy, PartialEq)]
+enum Mark {
+    None,
+    Check,
+    Bullet,
+}
+
+#[derive(Clone)]
+struct MenuItem {
+    label: String,
+    action: Option<MenuAction>,
+    /// A submenu ("View >"), opened on hover.
+    sub: Vec<MenuItem>,
+    mark: Mark,
+}
+
+impl MenuItem {
+    fn new(label: &str, action: MenuAction) -> Self {
+        Self { label: label.into(), action: Some(action), sub: Vec::new(), mark: Mark::None }
+    }
+    fn sep() -> Self {
+        Self { label: String::new(), action: None, sub: Vec::new(), mark: Mark::None }
+    }
+    fn sub(label: &str, sub: Vec<MenuItem>) -> Self {
+        Self { label: label.into(), action: None, sub, mark: Mark::None }
+    }
+    fn marked(mut self, on: bool, mark: Mark) -> Self {
+        if on {
+            self.mark = mark;
+        }
+        self
+    }
+    fn is_sep(&self) -> bool {
+        self.action.is_none() && self.sub.is_empty()
+    }
+    fn height(&self) -> i32 {
+        if self.is_sep() { MENU_SEP } else { MENU_ROW }
+    }
+}
+
 struct Menu {
     x: i32,
     y: i32,
-    items: Vec<(String, Option<MenuAction>)>,
+    items: Vec<MenuItem>,
     hover: Option<usize>,
+    /// The open submenu and the row it belongs to.
+    child: Option<(usize, Box<Menu>)>,
+}
+
+impl Menu {
+    fn height(items: &[MenuItem]) -> i32 {
+        items.iter().map(MenuItem::height).sum::<i32>() + MENU_PAD * 2
+    }
+
+    fn contains(&self, x: f64, y: f64) -> bool {
+        let (x, y) = (x as i32, y as i32);
+        x >= self.x && x < self.x + MENU_W && y >= self.y && y < self.y + Self::height(&self.items)
+    }
+
+    /// Top of each row, local to the menu.
+    fn row_top(&self, i: usize) -> i32 {
+        MENU_PAD + self.items[..i].iter().map(MenuItem::height).sum::<i32>()
+    }
+
+    /// The (non-separator) row under a point.
+    fn row_at(&self, x: f64, y: f64) -> Option<usize> {
+        if !self.contains(x, y) {
+            return None;
+        }
+        let ly = y as i32 - self.y;
+        (0..self.items.len()).find(|&i| {
+            let top = self.row_top(i);
+            ly >= top && ly < top + self.items[i].height() && !self.items[i].is_sep()
+        })
+    }
 }
 
 /// Left button held on an item: maybe a click, maybe the start of a drag.
@@ -422,12 +496,52 @@ impl Desktop {
         })
     }
 
-    fn menu_item_at(&self, x: f64, y: f64) -> Option<usize> {
-        let m = self.menu.as_ref()?;
-        let (lx, ly) = (x as i32 - m.x, y as i32 - m.y - 4);
-        (lx >= 0 && lx < MENU_W && ly >= 0)
-            .then(|| (ly / MENU_ROW) as usize)
-            .filter(|&i| m.items.get(i).is_some_and(|(_, a)| a.is_some()))
+    /// Track the pointer over the menu: hover rows, and open a row's submenu (Windows keeps
+    /// a submenu open until another row of its parent is hovered).
+    fn menu_motion(&mut self, x: f64, y: f64) -> bool {
+        let (sw, sh) = (self.size.0 as i32, self.size.1 as i32 - TASKBAR_H);
+        let Some(m) = self.menu.as_mut() else { return false };
+        if let Some((_, child)) = m.child.as_mut().filter(|(_, c)| c.contains(x, y)) {
+            let row = child.row_at(x, y);
+            let changed = child.hover != row;
+            child.hover = row;
+            return changed;
+        }
+        let row = m.row_at(x, y);
+        if row.is_none() || row == m.hover {
+            return false;
+        }
+        m.hover = row;
+        let i = row.unwrap();
+        if m.child.as_ref().is_some_and(|(ci, _)| *ci == i) {
+            return true;
+        }
+        m.child = None;
+        if !m.items[i].sub.is_empty() {
+            let items = m.items[i].sub.clone();
+            let h = Menu::height(&items);
+            let mut cx = m.x + MENU_W - 3;
+            if cx + MENU_W > sw {
+                cx = m.x - MENU_W + 3;
+            }
+            let cy = (m.y + m.row_top(i) - MENU_PAD).min(sh - h - 2).max(0);
+            m.child = Some((i, Box::new(Menu { x: cx.max(0), y: cy, items, hover: None, child: None })));
+        }
+        true
+    }
+
+    /// A click while the menu is open: the action picked, if any, and whether the menu stays.
+    fn menu_click(&mut self, x: f64, y: f64) -> (Option<MenuAction>, bool) {
+        let Some(m) = self.menu.as_mut() else { return (None, false) };
+        if let Some((_, child)) = m.child.as_ref().filter(|(_, c)| c.contains(x, y)) {
+            return (child.row_at(x, y).and_then(|i| child.items[i].action.clone()), child.row_at(x, y).is_none());
+        }
+        match m.row_at(x, y) {
+            // A submenu row just shows its submenu.
+            Some(i) if m.items[i].action.is_none() => (None, true),
+            Some(i) => (m.items[i].action.clone(), false),
+            None => (None, m.contains(x, y)),
+        }
     }
 
     fn open(&self, i: usize) {
@@ -593,8 +707,8 @@ impl Desktop {
                 }
             }
             MenuAction::Personalize => spawn("vide-settings", &["--page", "personalization"]),
+            MenuAction::DisplaySettings => spawn("vide-settings", &["--page", "display"]),
             MenuAction::Terminal => spawn("powerslop", &[]),
-            MenuAction::About => spawn("vide-about", &[]),
             MenuAction::IconSize(s) => {
                 self.prefs.icon = s;
                 self.prefs.save();
@@ -646,12 +760,8 @@ impl Desktop {
                     return;
                 }
                 let hover = self.item_at(x, y);
-                let mh = self.menu_item_at(x, y);
-                if hover != self.hover || self.menu.as_ref().is_some_and(|m| m.hover != mh) {
+                if self.menu_motion(x, y) || hover != self.hover {
                     self.hover = hover;
-                    if let Some(m) = self.menu.as_mut() {
-                        m.hover = mh;
-                    }
                     self.dirty = true;
                 }
             }
@@ -667,7 +777,10 @@ impl Desktop {
                 }
                 // An open menu takes the next click.
                 if self.menu.is_some() {
-                    let picked = self.menu_item_at(x, y).and_then(|i| self.menu.as_ref().and_then(|m| m.items[i].1.clone()));
+                    let (picked, stays) = self.menu_click(x, y);
+                    if stays {
+                        return;
+                    }
                     self.menu = None;
                     if let (Some(a), BTN_LEFT) = (picked, button) {
                         self.run(a);
@@ -701,34 +814,44 @@ impl Desktop {
                             self.selected = vec![i];
                             self.anchor = Some(i);
                         }
-                        let mut items = vec![("Open".to_string(), Some(MenuAction::Open))];
+                        let mut items = vec![MenuItem::new("Open", MenuAction::Open)];
                         if self.items[i].real {
-                            items.push((String::new(), None));
-                            items.push(("Rename\tF2".into(), Some(MenuAction::Rename)));
-                            items.push(("Delete\tDel".into(), Some(MenuAction::Delete)));
+                            items.push(MenuItem::sep());
+                            items.push(MenuItem::new("Delete", MenuAction::Delete));
+                            items.push(MenuItem::new("Rename", MenuAction::Rename));
                         }
                         self.open_menu(x, y, items);
                     }
                     (BTN_RIGHT, None) => {
                         self.selected.clear();
-                        let check = |on: bool, s: &str| format!("{}{s}", if on { "✓  " } else { "     " });
                         let p = &self.prefs;
+                        // Windows 10's desktop menu.
                         let items = vec![
-                            (check(p.icon >= 64, "Large icons"), Some(MenuAction::IconSize(64))),
-                            (check(p.icon == 48, "Medium icons"), Some(MenuAction::IconSize(48))),
-                            (check(p.icon <= 32, "Small icons"), Some(MenuAction::IconSize(32))),
-                            (check(p.auto_arrange, "Auto arrange icons"), Some(MenuAction::AutoArrange)),
-                            (String::new(), None),
-                            (check(p.sort == SortBy::Name, "Sort by name"), Some(MenuAction::Sort(SortBy::Name))),
-                            (check(p.sort == SortBy::Modified, "Sort by date modified"), Some(MenuAction::Sort(SortBy::Modified))),
-                            (check(p.sort == SortBy::Type, "Sort by type"), Some(MenuAction::Sort(SortBy::Type))),
-                            (String::new(), None),
-                            ("Refresh".into(), Some(MenuAction::Refresh)),
-                            ("New folder".into(), Some(MenuAction::NewFolder)),
-                            ("Open in PowerSlop".into(), Some(MenuAction::Terminal)),
-                            (String::new(), None),
-                            ("Personalize".into(), Some(MenuAction::Personalize)),
-                            ("About VIDE-DE".into(), Some(MenuAction::About)),
+                            MenuItem::sub(
+                                "View",
+                                vec![
+                                    MenuItem::new("Large icons", MenuAction::IconSize(64)).marked(p.icon >= 64, Mark::Bullet),
+                                    MenuItem::new("Medium icons", MenuAction::IconSize(48)).marked(p.icon == 48, Mark::Bullet),
+                                    MenuItem::new("Small icons", MenuAction::IconSize(32)).marked(p.icon <= 32, Mark::Bullet),
+                                    MenuItem::sep(),
+                                    MenuItem::new("Auto arrange icons", MenuAction::AutoArrange).marked(p.auto_arrange, Mark::Check),
+                                ],
+                            ),
+                            MenuItem::sub(
+                                "Sort by",
+                                vec![
+                                    MenuItem::new("Name", MenuAction::Sort(SortBy::Name)).marked(p.sort == SortBy::Name, Mark::Bullet),
+                                    MenuItem::new("Item type", MenuAction::Sort(SortBy::Type)).marked(p.sort == SortBy::Type, Mark::Bullet),
+                                    MenuItem::new("Date modified", MenuAction::Sort(SortBy::Modified)).marked(p.sort == SortBy::Modified, Mark::Bullet),
+                                ],
+                            ),
+                            MenuItem::new("Refresh", MenuAction::Refresh),
+                            MenuItem::sep(),
+                            MenuItem::sub("New", vec![MenuItem::new("Folder", MenuAction::NewFolder)]),
+                            MenuItem::sep(),
+                            MenuItem::new("Open in PowerSlop", MenuAction::Terminal),
+                            MenuItem::new("Display settings", MenuAction::DisplaySettings),
+                            MenuItem::new("Personalize", MenuAction::Personalize),
                         ];
                         self.open_menu(x, y, items);
                     }
@@ -807,11 +930,13 @@ impl Desktop {
         }
     }
 
-    fn open_menu(&mut self, x: f64, y: f64, items: Vec<(String, Option<MenuAction>)>) {
-        let h = items.len() as i32 * MENU_ROW + 8;
+    fn open_menu(&mut self, x: f64, y: f64, items: Vec<MenuItem>) {
+        let h = Menu::height(&items);
         let mx = (x as i32).min(self.size.0 as i32 - MENU_W - 2).max(0);
-        let my = (y as i32).min(self.size.1 as i32 - h - 2).max(0);
-        self.menu = Some(Menu { x: mx, y: my, items, hover: None });
+        // Above the taskbar, which covers the bottom of our layer: flip up like Windows does.
+        let bottom = self.size.1 as i32 - TASKBAR_H;
+        let my = if y as i32 + h > bottom { (y as i32 - h).max(0) } else { y as i32 };
+        self.menu = Some(Menu { x: mx, y: my, items, hover: None, child: None });
     }
 
     // ------------------------------------------------------------ drawing
@@ -868,26 +993,10 @@ impl Desktop {
         }
 
         if let Some(m) = &self.menu {
-            let mh = m.items.len() as i32 * MENU_ROW + 8;
-            c.rect(m.x, m.y, MENU_W, mh, [0x2b, 0x2b, 0x2b, 0xf8]);
-            c.outline(m.x, m.y, MENU_W, mh, [0x4a, 0x4a, 0x4a, 0xff]);
-            for (i, (label, action)) in m.items.iter().enumerate() {
-                let ry = m.y + 4 + i as i32 * MENU_ROW;
-                if action.is_none() {
-                    c.rect(m.x + 12, ry + MENU_ROW / 2, MENU_W - 24, 1, [0x4a, 0x4a, 0x4a, 0xff]);
-                    continue;
-                }
-                if m.hover == Some(i) {
-                    c.rect(m.x + 1, ry, MENU_W - 2, MENU_ROW, [0xff, 0xff, 0xff, 0x1f]);
-                }
-                if let Some(f) = &self.font {
-                    let (text, shortcut) = label.split_once('\t').unwrap_or((label, ""));
-                    c.text(f, m.x + 14, ry + 8, text, [0xff, 0xff, 0xff, 0xff]);
-                    if !shortcut.is_empty() {
-                        let sw = text_width(f, shortcut);
-                        c.text(f, m.x + MENU_W - 14 - sw, ry + 8, shortcut, [0xa0, 0xa0, 0xa0, 0xff]);
-                    }
-                }
+            let light = self.config.light_mode;
+            draw_menu(&mut c, self.font.as_ref(), m, light);
+            if let Some((_, child)) = &m.child {
+                draw_menu(&mut c, self.font.as_ref(), child, light);
             }
         }
 
@@ -1032,3 +1141,80 @@ impl ProvidesRegistryState for Desktop {
 
 delegate_registry!(Desktop);
 smithay_client_toolkit::delegate_dispatch2!(Desktop);
+
+/// A context menu in Windows 10's dark or light style. Colours are BGRA.
+fn draw_menu(c: &mut Canvas, font: Option<&fontdue::Font>, m: &Menu, light: bool) {
+    let (bg, border, hover, text) = if light {
+        ([0xf2, 0xf2, 0xf2, 0xff], [0xcc, 0xcc, 0xcc, 0xff], [0xda, 0xda, 0xda, 0xff], [0x00, 0x00, 0x00, 0xff])
+    } else {
+        ([0x2b, 0x2b, 0x2b, 0xff], [0x4a, 0x4a, 0x4a, 0xff], [0x41, 0x41, 0x41, 0xff], [0xff, 0xff, 0xff, 0xff])
+    };
+    let h = Menu::height(&m.items);
+    c.rect(m.x, m.y, MENU_W, h, bg);
+    c.outline(m.x, m.y, MENU_W, h, border);
+    for (i, item) in m.items.iter().enumerate() {
+        let ry = m.y + m.row_top(i);
+        if item.is_sep() {
+            c.rect(m.x + 1, ry + MENU_SEP / 2, MENU_W - 2, 1, border);
+            continue;
+        }
+        let open = m.child.as_ref().is_some_and(|(ci, _)| *ci == i);
+        if m.hover == Some(i) || open {
+            c.rect(m.x + 2, ry, MENU_W - 4, MENU_ROW, hover);
+        }
+        let mid = ry + MENU_ROW / 2;
+        match item.mark {
+            Mark::Check => check_mark(c, m.x + 14, mid, text),
+            Mark::Bullet => dot(c, m.x + 16, mid, 3.0, text),
+            Mark::None => {}
+        }
+        if let Some(f) = font {
+            c.text(f, m.x + 34, ry + 8, &item.label, text);
+        }
+        if !item.sub.is_empty() || open {
+            chevron(c, m.x + MENU_W - 18, mid, text);
+        }
+    }
+}
+
+/// Anti-aliased line, by stamping coverage along it.
+fn line(c: &mut Canvas, (x0, y0): (f32, f32), (x1, y1): (f32, f32), width: f32, col: [u8; 4]) {
+    let len = ((x1 - x0).powi(2) + (y1 - y0).powi(2)).sqrt().max(1.0);
+    let (minx, maxx) = (x0.min(x1) - width, x0.max(x1) + width);
+    let (miny, maxy) = (y0.min(y1) - width, y0.max(y1) + width);
+    for py in miny.floor() as i32..=maxy.ceil() as i32 {
+        for px in minx.floor() as i32..=maxx.ceil() as i32 {
+            let (fx, fy) = (px as f32 + 0.5, py as f32 + 0.5);
+            let t = (((fx - x0) * (x1 - x0) + (fy - y0) * (y1 - y0)) / (len * len)).clamp(0.0, 1.0);
+            let d = ((fx - x0 - t * (x1 - x0)).powi(2) + (fy - y0 - t * (y1 - y0)).powi(2)).sqrt();
+            let cov = (width / 2.0 + 0.5 - d).clamp(0.0, 1.0);
+            if cov > 0.0 {
+                c.blend(px, py, col, cov);
+            }
+        }
+    }
+}
+
+fn check_mark(c: &mut Canvas, x: i32, y: i32, col: [u8; 4]) {
+    let (x, y) = (x as f32, y as f32);
+    line(c, (x, y), (x + 3.5, y + 3.5), 1.3, col);
+    line(c, (x + 3.5, y + 3.5), (x + 10.0, y - 4.0), 1.3, col);
+}
+
+fn dot(c: &mut Canvas, x: i32, y: i32, r: f32, col: [u8; 4]) {
+    for py in y - r as i32 - 1..=y + r as i32 + 1 {
+        for px in x - r as i32 - 1..=x + r as i32 + 1 {
+            let d = (((px - x) as f32).powi(2) + ((py - y) as f32).powi(2)).sqrt();
+            let cov = (r + 0.5 - d).clamp(0.0, 1.0);
+            if cov > 0.0 {
+                c.blend(px, py, col, cov);
+            }
+        }
+    }
+}
+
+fn chevron(c: &mut Canvas, x: i32, y: i32, col: [u8; 4]) {
+    let (x, y) = (x as f32, y as f32);
+    line(c, (x, y - 4.0), (x + 4.0, y), 1.1, col);
+    line(c, (x + 4.0, y), (x, y + 4.0), 1.1, col);
+}

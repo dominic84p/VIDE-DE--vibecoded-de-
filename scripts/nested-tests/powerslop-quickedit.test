@@ -1,0 +1,17 @@
+# Regression: Windows QuickEdit in PowerSlop. Right-click copies the selection and clears it, so
+# the next right-click pastes; it used to keep the selection, so right-click only ever copied.
+run target/release/powerslop -e python3 scripts/nested-tests/pages/wheel-probe.py --plain
+expect-window "probe ready" 30
+wait 1
+move 95 62
+down
+move 120 62
+move 146 62
+up
+wait 0.3
+shot selected
+click 300 300 right
+wait 0.5
+shot copied
+click 300 300 right
+expect-window "probe got marker" 5

@@ -117,6 +117,10 @@ the WM in `src/wm.rs` is deliberately our own.
   dropdowns and permission prompts take keyboard focus; handing it back to the parent makes them
   close before the click is delivered, so nothing in them could be selected. See
   `scripts/nested-tests/popup-select-chromium.test`.
+- **Firefox's `<select>` lists are not popups**: GTK draws them as a subsurface of the window,
+  so clicks on them land on the already-focused toplevel. Never bounce keyboard focus
+  (leave + enter) on a click into the focused window; Firefox closes the list on the leave.
+  See `scripts/nested-tests/popup-select-firefox.test`.
 - **NVIDIA:** hardware cursor and overlay planes are unreliable, and direct
   scanout of client buffers skips our sync wait, so `tty.rs` renders with
   `FrameFlags::empty()` (always composite). Don't switch back to `DEFAULT`.

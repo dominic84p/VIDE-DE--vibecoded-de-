@@ -3,7 +3,7 @@
 //! Classic PowerShell 2.0 deep blue console (`#012456`), 2009 startup banner,
 //! `PS /path>` prompt, built-in PowerShell 2.0 cmdlet/alias shims for bash/zsh,
 //! Windows 7 light scrollbar, QuickEdit copy/paste (`Ctrl+C` copies when text
-//! is selected or sends SIGINT otherwise, right-click pastes), the mouse wheel
+//! is selected or sends SIGINT otherwise, right-click copies or pastes), the mouse wheel
 //! sent to apps that track the mouse (Shift+wheel scrolls history), and
 //! `Ctrl+=`/`-`/`0` or `Ctrl+Scroll` font zoom.
 //!
@@ -13,6 +13,7 @@
 use std::sync::mpsc::{self, Receiver, Sender};
 
 use alacritty_terminal::grid::Dimensions;
+use alacritty_terminal::selection::SelectionType;
 use alacritty_terminal::term::TermMode;
 use eframe::egui::{self, Color32, FontId, Key, Modifiers, PointerButton, Pos2, Rect, Sense, Vec2, pos2, vec2};
 use egui_term::{
@@ -283,6 +284,19 @@ impl App {
         true
     }
 
+    /// Windows QuickEdit copy: copy the selection and drop it, so the next right-click pastes
+    /// and the next Ctrl+C interrupts instead of copying the same text again.
+    fn quick_copy(&mut self, ctx: &egui::Context) -> bool {
+        if !self.copy(ctx) {
+            return false;
+        }
+        if let Some(b) = self.backend.as_mut() {
+            // A selection that starts and ends on the same point is empty.
+            b.process_command(BackendCommand::SelectStart(SelectionType::Simple, 0.0, 0.0));
+        }
+        true
+    }
+
     fn paste(&mut self) {
         let Some(b) = self.backend.as_mut() else { return };
         match std::process::Command::new("wl-paste").args(["--no-newline", "--type", "text"]).output() {
@@ -461,9 +475,7 @@ impl eframe::App for App {
         }
         // Windows QuickEdit: Ctrl+C copies when a selection exists, otherwise sends ^C (SIGINT).
         if ctrl(Key::C) {
-            if !self.selection().is_empty() {
-                self.copy(ctx);
-            } else if let Some(b) = self.backend.as_mut() {
+            if !self.quick_copy(ctx) && let Some(b) = self.backend.as_mut() {
                 b.process_command(BackendCommand::Write(vec![0x03]));
             }
         }
@@ -493,7 +505,7 @@ impl eframe::App for App {
             let right_click = ui.input(|i| {
                 i.pointer.button_clicked(PointerButton::Secondary) && i.pointer.interact_pos().is_some_and(|p: Pos2| term_rect.contains(p))
             });
-            if right_click {
+            if right_click && !self.quick_copy(ctx) {
                 self.paste();
             }
 

@@ -557,7 +557,7 @@ impl State {
     }
 
     /// Run whatever a start menu row stands for.
-    fn activate_start_entry(&mut self, i: usize) {
+    pub(crate) fn activate_start_entry(&mut self, i: usize) {
         use crate::search::Entry;
         let Some(entry) = self.start.results.get(i).cloned() else { return };
         let quote = |p: &std::path::Path| format!("'{}'", p.to_string_lossy().replace('\'', "'\\''"));
@@ -832,6 +832,7 @@ impl State {
             return;
         }
         self.task_drag_motion(pos.x);
+        self.start_drag_motion(pos);
 
         let mut focus = None;
         if self.wm.grab.is_some() {
@@ -942,6 +943,12 @@ impl State {
                 _ => {}
             }
             self.needs_redraw = true;
+            return;
+        }
+
+        if state == ButtonState::Released && button == BTN_LEFT && self.start_drag.is_some() {
+            let at = self.pointer_loc;
+            self.start_drag_release(at);
             return;
         }
 
@@ -1060,7 +1067,11 @@ impl State {
                     }
                 } else if left {
                     match hit {
-                        StartHit::Item(i) => self.activate_start_entry(i),
+                        // Apps wait for release: a drag pins them to the taskbar instead.
+                        StartHit::Item(i) => match self.start.results.get(i) {
+                            Some(&crate::search::Entry::App(app)) => self.press_start_app(app, crate::pins::StartClick::Entry(i), pos),
+                            _ => self.activate_start_entry(i),
+                        },
                         StartHit::Filter(f) => {
                             self.start.filter = f;
                             self.refresh_start();
@@ -1068,9 +1079,7 @@ impl State {
                         StartHit::Action(a) => self.start_action(a),
                         StartHit::Tile(t) => {
                             if let Some(&(i, _)) = self.start_tiles().get(t) {
-                                let app = self.apps[i].clone();
-                                self.launch(&app);
-                                self.toggle_start();
+                                self.press_start_app(i, crate::pins::StartClick::Tile(t), pos);
                             }
                         }
                         StartHit::Rail(r) => self.rail_click(r, pos.to_i32_round()),

@@ -175,6 +175,7 @@ pub struct State {
     pub start: Start,
     pub pins: crate::pins::Pins,
     pub task_drag: Option<crate::pins::TaskDrag>,
+    pub start_drag: Option<crate::pins::StartDrag>,
     pub file_index: crate::search::FileIndex,
     pub menu: Option<crate::menu::Menu>,
     /// Alt+Tab in progress.
@@ -322,6 +323,7 @@ impl State {
             start: Start::default(),
             pins: crate::pins::Pins::load(),
             task_drag: None,
+            start_drag: None,
             file_index: Default::default(),
             menu: None,
             switcher: None,

@@ -47,6 +47,12 @@ enum MenuAction {
 | Right-click tray icon | SNI menu | App-provided menu |
 | Right-click volume/brightness | System tray menu | Mute, Open Mixer, etc. |
 
+## Pinning by Dragging
+
+Drag an app out of Start (the list or a tile) onto the taskbar to pin it where you drop it, as in
+Windoze 10; its icon follows the pointer with "Pin to taskbar" over the taskbar. A plain click on an
+app in Start launches it on release. Pinned taskbar buttons can be dragged to reorder them.
+
 ## Keyboard Navigation
 
 ```rust

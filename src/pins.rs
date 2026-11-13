@@ -3,7 +3,11 @@
 
 use std::{collections::HashMap, path::PathBuf};
 
-use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
+use smithay::{
+    backend::renderer::element::memory::MemoryRenderBuffer,
+    reexports::wayland_server::protocol::wl_surface::WlSurface,
+    utils::{Logical, Point},
+};
 
 use crate::{
     search::Entry,
@@ -17,9 +21,10 @@ pub struct Pins {
     pub launches: HashMap<String, u32>,
 }
 
+/// Next to settings.conf, so it follows XDG_CONFIG_HOME too (nested tests set it so they
+/// never touch the real pins).
 fn path() -> PathBuf {
-    let home = std::env::var("HOME").unwrap_or_default();
-    PathBuf::from(home).join(".config/vide-de/pins.conf")
+    vide_config::Config::path().with_file_name("pins.conf")
 }
 
 impl Pins {
@@ -324,6 +329,102 @@ impl State {
         } else if let Some(idx) = item.pinned.and_then(|id| self.apps.iter().position(|a| a.id == id)) {
             self.open_pinned_jump_list(idx, x);
         }
+    }
+}
+
+/// An app held down in Start (list or tile): a click on release, or dragged onto the taskbar
+/// to pin it there, as in Windoze 10.
+pub struct StartDrag {
+    pub app: usize,
+    pub start: Point<f64, Logical>,
+    pub moved: bool,
+    /// What a plain click does instead.
+    pub click: StartClick,
+    /// The icon that follows the pointer, plain and with "Pin to taskbar" for over the taskbar.
+    pub ghost: Option<(MemoryRenderBuffer, MemoryRenderBuffer)>,
+}
+
+#[derive(Clone, Copy)]
+pub enum StartClick {
+    Entry(usize),
+    Tile(usize),
+}
+
+impl State {
+    pub fn press_start_app(&mut self, app: usize, click: StartClick, at: Point<f64, Logical>) {
+        self.start_drag = Some(StartDrag { app, start: at, moved: false, click, ghost: None });
+    }
+
+    pub fn start_drag_motion(&mut self, at: Point<f64, Logical>) {
+        let Some(d) = self.start_drag.as_mut() else { return };
+        let moved = at - d.start;
+        if !d.moved && moved.x.hypot(moved.y) < 8.0 {
+            return;
+        }
+        if !d.moved {
+            d.moved = true;
+            let icon = crate::ui::app_icon(&mut self.icons, &self.apps[d.app].icon, 32);
+            let ghost = |label: bool| {
+                // The label sits above the icon, as on Windoze: below would be off the screen.
+                let mut c = crate::canvas::Canvas::new(150, 58);
+                match &icon {
+                    Some(i) => c.icon(i, 0, 26),
+                    None => c.round_rect(0, 26, 32, 32, 4, crate::theme::ACCENT),
+                }
+                if let (true, Some(f)) = (label, self.font.as_ref()) {
+                    let t = "Pin to taskbar";
+                    let w = crate::canvas::measure(f, 12.0, t) + 12;
+                    c.rect(0, 0, w, 22, crate::theme::th().menu);
+                    c.outline(0, 0, w, 22, crate::theme::th().border);
+                    c.text(f, 12.0, 6, 0, 22, crate::theme::th().text, t);
+                }
+                c.into_buffer()
+            };
+            let pair = (ghost(false), ghost(true));
+            if let Some(d) = self.start_drag.as_mut() {
+                d.ghost = Some(pair);
+            }
+        }
+        self.needs_redraw = true;
+    }
+
+    /// Let go: a click does what it always did; a drag that ends on the taskbar pins the app at
+    /// that spot (moving it there if it was pinned already).
+    pub fn start_drag_release(&mut self, at: Point<f64, Logical>) {
+        let Some(d) = self.start_drag.take() else { return };
+        self.needs_redraw = true;
+        if !d.moved {
+            match d.click {
+                StartClick::Entry(i) => self.activate_start_entry(i),
+                StartClick::Tile(_) => {
+                    let app = self.apps[d.app].clone();
+                    self.launch(&app);
+                    self.toggle_start();
+                }
+            }
+            return;
+        }
+        if at.y < (self.output_size.h - crate::ui::TASKBAR_H) as f64 {
+            return;
+        }
+        let id = self.apps[d.app].id.clone();
+        let slot = ((at.x as i32 - crate::ui::TASK_BUTTONS_X + crate::ui::TASK_W / 2) / crate::ui::TASK_W).max(0) as usize;
+        self.pins.taskbar.retain(|p| *p != id);
+        let slot = slot.min(self.pins.taskbar.len());
+        self.pins.taskbar.insert(slot, id);
+        self.pins.save();
+        self.taskbar = None;
+        if self.start.open {
+            self.toggle_start();
+        }
+    }
+
+    /// The icon following the pointer while dragging from Start.
+    pub fn start_drag_ghost(&self) -> Option<&MemoryRenderBuffer> {
+        let d = self.start_drag.as_ref().filter(|d| d.moved)?;
+        let (plain, pin) = d.ghost.as_ref()?;
+        let over_taskbar = self.pointer_loc.y >= (self.output_size.h - crate::ui::TASKBAR_H) as f64;
+        Some(if over_taskbar { pin } else { plain })
     }
 }
 

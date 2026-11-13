@@ -90,6 +90,9 @@ pub fn elements_with(renderer: &mut GlesRenderer, state: &mut State, cursor: boo
     let (ow, oh) = (state.output_size.w, state.output_size.h);
     let focused = state.focused();
 
+    // An app being dragged out of Start, just under the cursor.
+    let ghost = state.start_drag_ghost().cloned().map(|g| (g, state.pointer_loc.to_i32_round() + Point::from((-16, -42))));
+
     // Cursor on top of everything.
     let ptr = state.pointer_loc.to_i32_round();
     let status = if cursor { state.cursor_status.clone() } else { CursorImageStatus::Hidden };
@@ -105,6 +108,9 @@ pub fn elements_with(renderer: &mut GlesRenderer, state: &mut State, cursor: boo
             let (buf, hot) = state.cursors.get(*icon);
             out.extend(image(renderer, buf, ptr - *hot, Kind::Cursor));
         }
+    }
+    if let Some((g, at)) = ghost {
+        out.extend(image(renderer, &g, at, Kind::Unspecified));
     }
 
     // Alt+Tab: live window thumbnails on top of the panel picture.

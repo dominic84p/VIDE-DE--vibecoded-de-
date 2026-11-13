@@ -14,7 +14,7 @@ VIDE-DE implements and uses these Wayland protocols via Smithay 0.7.
 | `wl_compositor` | 4 | Surface creation | `CompositorState` |
 | `wl_subcompositor` | 1 | Sub-surfaces | `CompositorState` |
 | `wl_shm` | 1 | Shared memory buffers | `ShmState` |
-| `wl_data_device_manager` | 3 | Clipboard, DnD. A copy outlives the app that made it (`clipboard.rs`), and our own copies (screenshots) reach X11 apps too | `DataDeviceState` |
+| `wl_data_device_manager` | 3 | Clipboard, DnD. A copy outlives the app that made it (`clipboard.rs`), our own copies (screenshots) reach X11 apps too, and the focused app is offered the clipboard again shortly after focus and on Ctrl+V / Shift+Insert (apps that make their clipboard device late would otherwise miss it) | `DataDeviceState` |
 | `wl_seat` | 7 | Input devices | `SeatState` |
 | `wl_output` | 4 | Output management | `OutputState` |
 

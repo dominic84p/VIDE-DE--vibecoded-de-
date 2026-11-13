@@ -1,0 +1,21 @@
+# Over a fullscreen X11 app (Chromium on Xwayland): Start keeps the taskbar up, right-clicking
+# the app's taskbar button keeps it up too and shows the jump list, and End process kills the
+# app through its real PID (XRes).
+expect-log "Xwayland ready" 20
+run chromium --ozone-platform=x11 --user-data-dir=/tmp/vide-nt-chx --password-store=basic --no-first-run --no-default-browser-check about:blank
+expect-window Chromium 40
+wait 3
+key alt+f
+wait 1.5
+shot 1-fullscreen
+key alt+space
+wait 1
+shot 2-start
+click 520 780 right
+wait 1
+shot 3-jumplist
+click 520 734
+wait 3
+windows
+shot 4-ended
+expect-log "end process: SIGKILL" 5

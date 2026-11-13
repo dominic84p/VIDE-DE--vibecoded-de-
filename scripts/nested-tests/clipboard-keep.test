@@ -1,0 +1,23 @@
+# Regression: a copy outlives the app it came from, and an app opened afterwards can paste it
+# with Ctrl+V (Smithay doesn't offer the clipboard to a device made after the app got focus,
+# so we offer it again). Copy in one PowerSlop, kill it, paste into a new one.
+run target/release/powerslop -e python3 scripts/nested-tests/pages/wheel-probe.py --plain
+expect-window "PowerSlop 2.0 - probe" 30
+wait 1.5
+move 95 62
+down
+move 120 62
+move 146 62
+up
+wait 0.8
+key ctrl+shift+c
+wait 1
+run sh -c 'pkill -TERM -s "$(ps -o sid= -p $$ | tr -d " ")" -x powerslop'
+expect-log "keeping its copy" 10
+wait 1
+run target/release/powerslop -e python3 scripts/nested-tests/pages/wheel-probe.py --plain
+expect-window "PowerSlop 2.0 - probe" 30
+wait 1.5
+click 400 300
+key ctrl+v
+expect-window "probe got marker" 5

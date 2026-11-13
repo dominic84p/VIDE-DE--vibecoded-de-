@@ -356,6 +356,14 @@ impl State {
             let modified = handle.modified_sym();
             let raw = handle.raw_syms().first().copied().unwrap_or(Keysym::from(KEY_NoSymbol));
 
+            // A paste shortcut: offer the app the clipboard again just before it sees the key, in
+            // case its clipboard device missed the last offer.
+            if pressed
+                && ((mods.ctrl && matches!(raw, Keysym::v | Keysym::V)) || (mods.shift && raw == Keysym::Insert))
+            {
+                state.reoffer_selection();
+            }
+
             // Super tap (press + release with nothing in between) toggles the start menu.
             // Alt+Tab in progress: letting go of Alt picks, Esc backs out.
             if state.switcher.is_some() {

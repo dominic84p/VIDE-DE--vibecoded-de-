@@ -182,6 +182,9 @@ pub struct State {
     pub snap_buf: smithay::backend::renderer::element::solid::SolidColorBuffer,
     pub tray: crate::tray::Tray,
     pub clipboard: crate::clipboard::Clipboard,
+    /// The client with keyboard focus, kept here because the keyboard can't be asked from inside
+    /// its own key filter (`reoffer_selection` runs there).
+    pub focused_client: Option<smithay::reexports::wayland_server::Client>,
     /// Settings from ~/.config/vide-de/settings.conf (written by vide-settings).
     pub config: vide_config::Config,
     pub config_mtime: Option<std::time::SystemTime>,
@@ -325,6 +328,7 @@ impl State {
             snap_buf: Default::default(),
             tray: crate::tray::Tray::new(),
             clipboard: Default::default(),
+            focused_client: None,
             config: vide_config::Config::load(),
             config_mtime: vide_config::Config::mtime(),
             mouse_config_dirty: true,
@@ -417,6 +421,16 @@ impl State {
             || self.tray.flyout.is_some()
             || self.action_center.open
             || self.desktops.open
+    }
+
+    /// Send the focused app a fresh offer of the clipboard (and primary selection), so clipboard
+    /// devices it made since getting focus learn what's there.
+    pub fn reoffer_selection(&mut self) {
+        let Some(client) = self.focused_client.clone() else { return };
+        set_data_device_focus(&self.dh, &self.seat, None);
+        set_data_device_focus(&self.dh, &self.seat, Some(client.clone()));
+        set_primary_focus(&self.dh, &self.seat, None);
+        set_primary_focus(&self.dh, &self.seat, Some(client));
     }
 
     pub fn shell_overlay_open(&self) -> bool {
@@ -983,7 +997,20 @@ impl SeatHandler for State {
     fn focus_changed(&mut self, seat: &Seat<Self>, focused: Option<&FocusTarget>) {
         let client = focused.and_then(|f| f.surface()).and_then(|s| self.dh.get_client(s.id()).ok());
         set_data_device_focus(&self.dh, seat, client.clone());
-        set_primary_focus(&self.dh, seat, client);
+        set_primary_focus(&self.dh, seat, client.clone());
+        self.focused_client = client.clone();
+        // Apps often make their clipboard device only after they get focus (egui does it on a
+        // thread), and Smithay offers the clipboard to a device only when focus or the
+        // clipboard changes. Offer it again a moment later so a just-opened app can paste.
+        if let Some(c) = client {
+            use smithay::reexports::calloop::timer::{TimeoutAction, Timer};
+            let _ = self.loop_handle.insert_source(Timer::from_duration(std::time::Duration::from_millis(400)), move |_, _, state| {
+                if state.focused_client.as_ref() == Some(&c) {
+                    state.reoffer_selection();
+                }
+                TimeoutAction::Drop
+            });
+        }
     }
 
     fn cursor_image(&mut self, _seat: &Seat<Self>, image: CursorImageStatus) {

@@ -3,7 +3,7 @@ title: 'Overview'
 description: 'A Wayland desktop environment with its own compositor, written in Rust and vibecoded end to end.'
 ---
 
-**VIDE-DE** (`vibecoded-de`) is a Wayland compositor and Windows 10-inspired desktop shell built on **Smithay 0.7**, written entirely in Rust through AI-assisted "vibecoding".
+**VIDE-DE** (`vibecoded-de`) is a Wayland compositor and Windoze 10-inspired desktop shell built on **Smithay 0.7**, written entirely in Rust through AI-assisted "vibecoding".
 
 :::note[AI-Only Project]
 All code, commits, PRs, and reviews are AI-written. See [Contributing Rules](/vide-de/development/contributing/) before submitting changes.
@@ -12,7 +12,7 @@ All code, commits, PRs, and reviews are AI-written. See [Contributing Rules](/vi
 ## Features at a Glance
 
 - **Dual Backend Architecture** — Runs nested inside another desktop (`winit`) or on real hardware (`--tty` with DRM/KMS, libinput, and libseat). Both backends share the same rendering pipeline.
-- **Windows 10-Style Desktop** — Bottom taskbar with Start button, search box, window buttons, system tray (PipeWire volume, brightness, SNI app icons), Action Center, 10 virtual desktops, Task View, and edge/corner window snapping.
+- **Windoze 10-Style Desktop** — Bottom taskbar with Start button, search box, window buttons, system tray (PipeWire volume, brightness, SNI app icons), Action Center, 10 virtual desktops, Task View, and edge/corner window snapping.
 - **CPU-Painted UI** — All compositor chrome (taskbar, start menu, titlebars) is painted on the CPU into cached `MemoryRenderBuffer`s via `canvas.rs` and composited on the GPU with damage tracking.
 - **XWayland + Gaming** — GPU-accelerated X11 apps via `linux-dmabuf` with explicit sync (`linux-drm-syncobj`), relative pointer + pointer constraints for games, and optional direct scanout.
 - **Six Built-in Apps** — `Settings`, `PowerSlop` (terminal), `File Exploder`, `Task Mangler`, `Snip & Sketchy`, and `About VIDE-DE`, automatically registered as `.desktop` entries.

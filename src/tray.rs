@@ -2,7 +2,7 @@
 //! Brightness dims the picture in the compositor, so it works on any monitor, not
 //! just laptop panels.
 //!
-//! The network flyout is Windows 10's: available networks (click one to expand it,
+//! The network flyout is Windoze 10's: available networks (click one to expand it,
 //! Connect asks for the security key right in the flyout), "Network & Internet
 //! settings", and the Wi-Fi / Airplane mode / Mobile hotspot tiles. NetworkManager,
 //! rfkill and BlueZ are asked on a thread, so a slow `nmcli` never stalls a frame;
@@ -34,7 +34,7 @@ const SLIDER_X: i32 = 60;
 const SLIDER_W: i32 = FLYOUT_W - SLIDER_X - 64;
 /// Lowest brightness we allow, so the screen can't be dimmed to black by accident.
 pub const MIN_BRIGHTNESS: f32 = 0.2;
-/// Windows' wording for a wrong Wi-Fi password, in its two lines.
+/// Windoze' wording for a wrong Wi-Fi password, in its two lines.
 const WRONG_KEY: [&str; 2] = ["The network security key isn't correct.", "Please try again."];
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -236,7 +236,7 @@ fn snapshot() -> NetSnapshot {
     {
         n.active = true;
     }
-    // Windows lists the connected network first, then by signal.
+    // Windoze lists the connected network first, then by signal.
     s.networks.sort_by(|a, b| b.active.cmp(&a.active).then(b.signal.cmp(&a.signal)));
     s.networks.truncate(20);
     for line in command("nmcli", &["-t", "-f", "NAME,TYPE", "connection", "show"]).unwrap_or_default().lines() {
@@ -317,7 +317,7 @@ impl State {
                     self.tray.expanded = None;
                     self.tray.password = None;
                 } else if self.tray.net.networks.iter().any(|n| n.ssid == ssid && n.secure) {
-                    // Ask again, with Windows' wrong-key message.
+                    // Ask again, with Windoze' wrong-key message.
                     self.tray.expanded = Some(ssid);
                     self.tray.password = Some(String::new());
                     self.tray.password_error = true;
@@ -345,7 +345,7 @@ impl State {
                 self.tray.password = None;
                 self.tray.scroll = 0;
                 self.refresh_network();
-                // Windows rescans when the flyout opens; results land a few seconds later.
+                // Windoze rescans when the flyout opens; results land a few seconds later.
                 std::thread::spawn(|| run_quiet("nmcli", &["device", "wifi", "rescan"]));
                 self.refresh_network_in(Duration::from_secs(4));
             }
@@ -447,7 +447,7 @@ impl State {
         hits.iter().rev().find(|(r, _)| r.contains(local)).map(|(_, a)| a.clone())
     }
 
-    /// Run a network flyout click. The flyout stays open, as in Windows, except for
+    /// Run a network flyout click. The flyout stays open, as in Windoze, except for
     /// the links that open Settings.
     pub fn run_flyout_action(&mut self, a: FlyoutAction) {
         let settings = |state: &mut State| {
@@ -619,7 +619,7 @@ fn rect(x: i32, y: i32, w: i32, h: i32) -> Rectangle<i32, Logical> {
     Rectangle::new((x, y).into(), (w, h).into())
 }
 
-/// A flat Windows flyout button; returns its rect.
+/// A flat Windoze flyout button; returns its rect.
 fn button(c: &mut Canvas, font: &fontdue::Font, x: i32, y: i32, w: i32, label: &str, hover: bool) -> Rectangle<i32, Logical> {
     c.rect(x, y, w, 32, if hover { th().button_hover } else { th().button });
     if hover {
@@ -630,7 +630,7 @@ fn button(c: &mut Canvas, font: &fontdue::Font, x: i32, y: i32, w: i32, label: &
     rect(x, y, w, 32)
 }
 
-/// Windows 10's network flyout. Returns the click targets.
+/// Windoze 10's network flyout. Returns the click targets.
 fn draw_network(c: &mut Canvas, state: &State) -> Vec<(Rectangle<i32, Logical>, FlyoutAction)> {
     let mut hits = vec![];
     let Some(font) = state.font.as_ref() else { return hits };
@@ -643,7 +643,7 @@ fn draw_network(c: &mut Canvas, state: &State) -> Vec<(Rectangle<i32, Logical>, 
     let list_bottom = settings_y - 4;
     let mut y = 0;
 
-    // Wired connection first, like Windows.
+    // Wired connection first, like Windoze.
     if let Some(name) = &n.wired {
         ethernet_glyph(c, 28.0, (y + 32) as f32);
         c.text(font, 14.0, 56, y + 12, 20, th().text, &ellipsize(font, 14.0, name, FLYOUT_W - 72));
@@ -791,7 +791,7 @@ fn lock(c: &mut Canvas, x: i32, y: i32, color: Rgba) {
     c.outline(x + 1, y, 6, 6, color);
 }
 
-// Windows 10 Segoe MDL2-style glyphs (20x20 grid, white, sharp miter/butt strokes), rendered with resvg.
+// Windoze 10 Seg-whoa MDL2-style glyphs (20x20 grid, white, sharp miter/butt strokes), rendered with resvg.
 const SPEAKER: &str = r##"<path d="M2.8 7.8h3.1L10.3 3.8v12.4L5.9 12.2H2.8z" fill="none" stroke="#fff" stroke-width="1.2" stroke-linejoin="miter"/>"##;
 const WAVES: [&str; 3] = [
     r##"<path d="M12.5 7.9a3 3 0 0 1 0 4.2" fill="none" stroke="#fff" stroke-width="1.2" stroke-linecap="butt"/>"##,
@@ -799,7 +799,7 @@ const WAVES: [&str; 3] = [
     r##"<path d="M16.3 4.1a8.3 8.3 0 0 1 0 11.8" fill="none" stroke="#fff" stroke-width="1.2" stroke-linecap="butt"/>"##,
 ];
 const MUTE: &str = r##"<path d="M13 7.6l4.8 4.8M17.8 7.6l-4.8 4.8" fill="none" stroke="#fff" stroke-width="1.25" stroke-linecap="butt"/>"##;
-/// Windows 10's 90-degree wedge Wi-Fi arcs, outermost first.
+/// Windoze 10's 90-degree wedge Wi-Fi arcs, outermost first.
 const ARCS: [&str; 3] = [
     "M1.9 7.7a11.5 11.5 0 0 1 16.2 0",
     "M4.3 10.1a8 8 0 0 1 11.4 0",
@@ -821,7 +821,7 @@ fn sun_svg() -> String {
     )
 }
 
-/// The Wi-Fi fan with `bars` (0-4) lit and the rest greyed, like Windows 10's signal icon.
+/// The Wi-Fi fan with `bars` (0-4) lit and the rest greyed, like Windoze 10's signal icon.
 fn wifi_svg(bars: u8) -> String {
     let mut s = String::new();
     for (i, d) in ARCS.iter().enumerate() {
@@ -957,7 +957,7 @@ pub fn net_icon(c: &mut Canvas, x: f32, y: f32, icon: NetIcon) {
         NetIcon::Airplane => airplane(c, x, y),
         NetIcon::Wired => ethernet_glyph(c, x, y),
         NetIcon::Wifi(bars) => glyph(c, wifi_svg(bars), x, y, 20),
-        // Windows shows the fan greyed with an asterisk: networks available, none joined.
+        // Windoze shows the fan greyed with an asterisk: networks available, none joined.
         NetIcon::Searching => glyph(c, wifi_svg(0) + r##"<path d="M15.5 13v4M13.5 14l4 2M17.5 14l-4 2" stroke="#fff" stroke-width="1.1" stroke-linecap="round"/>"##, x, y, 20),
         NetIcon::WifiOff => wifi(c, x, y, false),
     }

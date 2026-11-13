@@ -1,6 +1,6 @@
 //! vide-desktop: the VIDE-DE desktop as its own program. One full-screen surface on
 //! the wlr-layer-shell *background* layer: the wallpaper, and the ~/Desktop items on
-//! a Windows-style grid.
+//! a Windoze-style grid.
 //!
 //! Icons sit in grid cells you can drag them to (positions are remembered), or are
 //! auto-arranged. Rubber-band and Ctrl/Shift-click selection; drop on a folder to move
@@ -245,7 +245,7 @@ enum MenuAction {
     Sort(SortBy),
 }
 
-/// What sits in a menu row's left gutter, like Windows: a check for on/off options,
+/// What sits in a menu row's left gutter, like Windoze: a check for on/off options,
 /// a dot for the one picked out of several.
 #[derive(Clone, Copy, PartialEq)]
 enum Mark {
@@ -496,7 +496,7 @@ impl Desktop {
         })
     }
 
-    /// Track the pointer over the menu: hover rows, and open a row's submenu (Windows keeps
+    /// Track the pointer over the menu: hover rows, and open a row's submenu (Windoze keeps
     /// a submenu open until another row of its parent is hovered).
     fn menu_motion(&mut self, x: f64, y: f64) -> bool {
         let (sw, sh) = (self.size.0 as i32, self.size.1 as i32 - TASKBAR_H);
@@ -650,7 +650,7 @@ impl Desktop {
             taken.insert(cell);
             self.items[i].cell = cell;
         }
-        // Placing icons by hand turns auto-arrange off, like Windows.
+        // Placing icons by hand turns auto-arrange off, like Windoze.
         self.prefs.auto_arrange = false;
         self.remember_positions();
     }
@@ -700,7 +700,7 @@ impl Desktop {
                 }
                 let _ = std::fs::create_dir_all(dir.join(&name));
                 self.rescan();
-                // Straight into renaming it, like Windows.
+                // Straight into renaming it, like Windoze.
                 if let Some(i) = self.items.iter().position(|it| it.real && it.path.file_name().is_some_and(|f| f == name.as_str())) {
                     self.selected = vec![i];
                     self.start_rename();
@@ -825,7 +825,7 @@ impl Desktop {
                     (BTN_RIGHT, None) => {
                         self.selected.clear();
                         let p = &self.prefs;
-                        // Windows 10's desktop menu.
+                        // Windoze 10's desktop menu.
                         let items = vec![
                             MenuItem::sub(
                                 "View",
@@ -933,7 +933,7 @@ impl Desktop {
     fn open_menu(&mut self, x: f64, y: f64, items: Vec<MenuItem>) {
         let h = Menu::height(&items);
         let mx = (x as i32).min(self.size.0 as i32 - MENU_W - 2).max(0);
-        // Above the taskbar, which covers the bottom of our layer: flip up like Windows does.
+        // Above the taskbar, which covers the bottom of our layer: flip up like Windoze does.
         let bottom = self.size.1 as i32 - TASKBAR_H;
         let my = if y as i32 + h > bottom { (y as i32 - h).max(0) } else { y as i32 };
         self.menu = Some(Menu { x: mx, y: my, items, hover: None, child: None });
@@ -1142,7 +1142,7 @@ impl ProvidesRegistryState for Desktop {
 delegate_registry!(Desktop);
 smithay_client_toolkit::delegate_dispatch2!(Desktop);
 
-/// A context menu in Windows 10's dark or light style. Colours are BGRA.
+/// A context menu in Windoze 10's dark or light style. Colours are BGRA.
 fn draw_menu(c: &mut Canvas, font: Option<&fontdue::Font>, m: &Menu, light: bool) {
     let (bg, border, hover, text) = if light {
         ([0xf2, 0xf2, 0xf2, 0xff], [0xcc, 0xcc, 0xcc, 0xff], [0xda, 0xda, 0xda, 0xff], [0x00, 0x00, 0x00, 0xff])

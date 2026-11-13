@@ -36,7 +36,7 @@ impl WorkspaceManager {
 
 ## Task View (Win+Tab)
 
-Full screen above the taskbar, like Windows 10's:
+Full screen above the taskbar, like Windoze 10's:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -55,7 +55,7 @@ Full screen above the taskbar, like Windows 10's:
 - **Desktops strip**: desktops that have windows, the current one, and ones added with **New desktop**
   (which adds a desktop to the strip; click it to go there). There are 10 desktops at most.
 - Clicking empty space, pressing Esc, or the Task View button again closes it.
-- The background is a tint over the desktop, dark or light with the Windows mode.
+- The background is a tint over the desktop, dark or light with the Windoze mode.
 
 ## Related Files
 

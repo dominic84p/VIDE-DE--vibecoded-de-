@@ -64,13 +64,13 @@ Writes to `~/.config/vide-de/settings.conf`. Compositor reloads within 1 second.
 
 **Crate:** `powerslop/`
 
-Terminal emulator styled like Windows Terminal / PowerShell.
+Terminal emulator styled like Windoze Terminal / PowerSlop.
 
 ### Features
 
 - **Blue theme** (#0078D7 background)
 - **Banner** on startup
-- **PS> prompt** (PowerShell style)
+- **PS> prompt** (PowerSlop style)
 - **Tabs** (Ctrl+Shift+T)
 - **Split panes** (Ctrl+Shift+D)
 - **Configurable** font, size, opacity
@@ -85,8 +85,8 @@ Terminal emulator styled like Windows Terminal / PowerShell.
 │ PowerSlop  [+] [□] [×]    Tab1  Tab2  [+]     │
 ├────────────────────────────────────────────────┤
 │                                                │
-│  Windows PowerShell                            │
-│  Copyright (C) Microsoft Corporation.         │
+│  Windoze PowerSlop                            │
+│  Copyright (C) Microslop Corporation.         │
 │                                                │
 │  PS C:\Users\user> _                           │
 │                                                │
@@ -103,7 +103,7 @@ Terminal emulator styled like Windows Terminal / PowerShell.
 
 **Crate:** `exploder/`
 
-File manager styled like Windows File Explorer.
+File manager styled like Windoze File Explorer.
 
 ### Features
 
@@ -150,7 +150,7 @@ File manager styled like Windows File Explorer.
 
 **Crate:** `mangler/`
 
-Process/performance monitor styled like Windows Task Manager.
+Process/performance monitor styled like Windoze Task Manager.
 
 ### Features
 

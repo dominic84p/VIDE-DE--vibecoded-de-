@@ -8,7 +8,7 @@ use vide_config::Config;
 
 use system::{RefreshKind, System};
 use ui::{
-    ACCENT, BG, BORDER, CARD_HOVER, DIM, SIDEBAR, TEXT, apply_win10_style, draw_category_icon,
+    ACCENT, BG, BORDER, CARD_HOVER, DIM, SIDEBAR, TEXT, apply_doze_style, draw_category_icon,
     draw_home_icon, draw_search_icon,
 };
 
@@ -270,7 +270,7 @@ const SEARCH_INDEX: &[SearchItem] = &[
     SearchItem { label: "Ethernet adapters", keywords: "ethernet wired lan", cat: Category::Network, page: SubPage::Ethernet },
     SearchItem { label: "Background wallpaper", keywords: "background wallpaper picture desktop", cat: Category::Personalization, page: SubPage::Background },
     SearchItem { label: "Start menu settings", keywords: "start menu hide kde apps", cat: Category::Personalization, page: SubPage::Start },
-    SearchItem { label: "Choose your default Windows mode", keywords: "colors dark light mode theme taskbar", cat: Category::Personalization, page: SubPage::Colors },
+    SearchItem { label: "Choose your default Windoze mode", keywords: "colors dark light mode theme taskbar", cat: Category::Personalization, page: SubPage::Colors },
     SearchItem { label: "Taskbar info", keywords: "taskbar pins tray", cat: Category::Personalization, page: SubPage::Taskbar },
     SearchItem { label: "Apps & features", keywords: "apps programs installed launch", cat: Category::Apps, page: SubPage::AppsFeatures },
     SearchItem { label: "Default apps", keywords: "default apps browser file manager", cat: Category::Apps, page: SubPage::DefaultApps },
@@ -429,7 +429,7 @@ impl Settings {
     fn render_category(&mut self, ui: &mut egui::Ui, cat: Category, sub: SubPage) {
         self.system.refresh(sub.refresh_kind());
 
-        egui::Panel::left("win10_sidebar")
+        egui::Panel::left("doze_sidebar")
             .exact_size(240.0)
             .frame(egui::Frame::new().fill(SIDEBAR).inner_margin(egui::Margin::symmetric(10, 14)))
             .show(ui, |ui| {
@@ -517,7 +517,7 @@ impl Settings {
 
 impl eframe::App for Settings {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        apply_win10_style(ui.ctx());
+        apply_doze_style(ui.ctx());
         match self.page {
             None => self.render_home(ui),
             Some((cat, sub)) => self.render_category(ui, cat, sub),

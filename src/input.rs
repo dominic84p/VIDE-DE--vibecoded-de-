@@ -114,7 +114,7 @@ fn bind(super_mod: bool, mods: &ModifiersState, sym: Keysym) -> Option<Action> {
         Keysym::XF86_MonBrightnessDown => return Some(Action::Brightness(-0.1)),
         _ => {}
     }
-    // Windows-style keys that don't use our modifier.
+    // Windoze-style keys that don't use our modifier.
     if mods.ctrl && mods.shift && sym == Keysym::Escape {
         return Some(Action::TaskManager);
     }
@@ -240,7 +240,7 @@ impl State {
                 }
 
                 // A game holding a lock keeps the cursor still; a confine keeps it in its region.
-                // While any Windows/shell overlay is open, the shell automatically takes the mouse.
+                // While any Windoze/shell overlay is open, the shell automatically takes the mouse.
                 let constraint = if overlay_open {
                     None
                 } else {
@@ -629,7 +629,7 @@ impl State {
         Rectangle::new((0, self.output_size.h - TASKBAR_H - h).into(), (w, h).into())
     }
 
-    /// Right-click on a Start tile, as on Windows: unpin, or pin to the taskbar.
+    /// Right-click on a Start tile, as on Windoze: unpin, or pin to the taskbar.
     fn open_tile_menu(&mut self, t: usize, at: Point<i32, Logical>) {
         let Some(&(idx, group)) = self.start_tiles().get(t) else { return };
         let id = self.apps[idx].id.clone();

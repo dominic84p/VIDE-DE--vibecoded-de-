@@ -124,8 +124,8 @@ impl MemoryRenderBuffer {
 
 ## Theme Integration (light and dark)
 
-Every shell colour comes from `theme.rs`: two palettes, Windows 10's dark (the default) and light
-"Windows mode", picked by `light_mode` in `settings.conf` (Settings > Personalization > Colors).
+Every shell colour comes from `theme.rs`: two palettes, Windoze 10's dark (the default) and light
+"Windoze mode", picked by `light_mode` in `settings.conf` (Settings > Personalization > Colors).
 
 ```rust
 use crate::theme::{th, ACCENT, ON_ACCENT};
@@ -137,7 +137,7 @@ c.text(f, 12.0, x, y, h, ON_ACCENT, "Tile");    // text on the accent colour sta
   the theme's text colour; `tray::with_ink` draws them in another colour, e.g. white on a lit tile.
 - None of the picture cache keys include the mode, so a switch calls `State::repaint_shell`, which
   drops every cached picture. It applies live; no logout.
-- Titlebars stay white in both modes, as in Windows 10. `vide-desktop` reads `light_mode` itself for
+- Titlebars stay white in both modes, as in Windoze 10. `vide-desktop` reads `light_mode` itself for
   its right-click menu.
 
 ## Related Files

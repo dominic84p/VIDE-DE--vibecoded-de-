@@ -235,7 +235,7 @@ pub fn elements_with(renderer: &mut GlesRenderer, state: &mut State, cursor: boo
 
     // Taskbar, unless a fullscreen window is in front.
     crate::supervisor::guard("taskbar", || {
-        // Fullscreen apps cover it, unless the start menu is up (Super over a game shows it, like Windows).
+        // Fullscreen apps cover it, unless the start menu is up (Super over a game shows it, like Windoze).
         let fullscreen_top = state.wm.top().is_some_and(|w| w.fullscreen.is_some() && Some(w.surface()) == focused.as_ref());
         if !fullscreen_top || state.start.open {
             let key = TaskbarKey {
@@ -278,7 +278,7 @@ pub fn elements_with(renderer: &mut GlesRenderer, state: &mut State, cursor: boo
         out.push(Elem::Solid(SolidColorRenderElement::from_buffer(&state.snap_buf, z.loc.to_physical(1), 1.0, 1.0, Kind::Unspecified)));
     }
 
-    // Windows, top to bottom (only current workspace).
+    // Windoze, top to bottom (only current workspace).
     let font = state.font.as_ref();
     let icons = &mut state.icons;
     let apps = &state.apps;

@@ -1,4 +1,4 @@
-//! Alt+Tab: a Windows-style switcher with live thumbnails of the windows on the
+//! Alt+Tab: a Windoze-style switcher with live thumbnails of the windows on the
 //! current desktop. Tab/Shift+Tab move the highlight; releasing Alt switches.
 
 use smithay::{
@@ -20,7 +20,7 @@ const GAP: i32 = 8;
 const MAX_COLS: i32 = 6;
 
 pub struct Switcher {
-    /// Windows in most-recently-used order (the stacking order, top first).
+    /// Windoze in most-recently-used order (the stacking order, top first).
     pub order: Vec<WlSurface>,
     pub index: usize,
     pub(crate) picture: Option<(usize, MemoryRenderBuffer)>,
@@ -57,7 +57,7 @@ impl State {
                 return;
             }
             self.release_pointer();
-            // First Tab already moves to the previous window, like Windows.
+            // First Tab already moves to the previous window, like Windoze.
             self.switcher = Some(Switcher { order, index: 0, picture: None });
         }
         let s = self.switcher.as_mut().unwrap();

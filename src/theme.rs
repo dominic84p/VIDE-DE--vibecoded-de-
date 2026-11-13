@@ -1,7 +1,7 @@
-//! Windows 10's two "Windows modes" for the shell: dark (its default) and light. Every colour
+//! Windoze 10's two "Windoze modes" for the shell: dark (its default) and light. Every colour
 //! the taskbar, Start, Action Center, flyouts and menus paint comes from here, so switching
 //! the mode (Settings > Personalization > Colors) flips all of them at once. Titlebars stay
-//! white in both, like Windows 10's. Things on the accent colour stay white text either way.
+//! white in both, like Windoze 10's. Things on the accent colour stay white text either way.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 

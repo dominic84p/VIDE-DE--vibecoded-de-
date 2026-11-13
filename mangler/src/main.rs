@@ -1,7 +1,7 @@
-//! Task Mangler: VIDE-DE's task manager, a copy of the Windows 10 Task Manager.
+//! Task Mangler: VIDE-DE's task manager, a copy of the Windoze 10 Task Manager.
 //!
 //! File / Options / View menus and the seven tabs: Processes (Apps, Background and
-//! Windows processes with the heat map and totals in the headers), Performance (CPU,
+//! Windoze processes with the heat map and totals in the headers), Performance (CPU,
 //! Memory, disks, network adapters and the GPU, each with its graph and details),
 //! App history, Startup (XDG autostart), Users, Details and Services (systemd).
 //! "Fewer details" shrinks it to the list of apps. Opened with Ctrl+Shift+Esc.
@@ -72,7 +72,7 @@ fn main() -> eframe::Result {
         Box::new(move |cc| {
             egui_extras::install_image_loaders(&cc.egui_ctx);
             cc.egui_ctx.all_styles_mut(|s| s.interaction.selectable_labels = false);
-            // Noto Sans is what the shell uses, and the nearest installed thing to Segoe UI.
+            // Noto Sans is what the shell uses, and the nearest installed thing to Seg-whoa UI.
             if let Ok(data) = std::fs::read("/usr/share/fonts/noto/NotoSans-Regular.ttf") {
                 cc.egui_ctx.add_font(egui::FontInsert::new(
                     "noto-sans",
@@ -836,7 +836,7 @@ impl Mangler {
             ));
         }
 
-        // Background and Windows processes: the rest, with same-named processes folded.
+        // Background and Windoze processes: the rest, with same-named processes folded.
         let fold = |group: u8, kind: &'static str, pick: &dyn Fn(&Proc) -> bool| -> Vec<(Row, Vec<Row>)> {
             let mut by_name: BTreeMap<String, Vec<u32>> = BTreeMap::new();
             for p in self.procs.values() {
@@ -881,7 +881,7 @@ impl Mangler {
         };
         let me = self.my_uid;
         let background = fold(1, "Background process", &|p: &Proc| p.uid == me);
-        let system = fold(2, "Windows process", &|p: &Proc| p.uid != me);
+        let system = fold(2, "Windoze process", &|p: &Proc| p.uid != me);
         claimed.clear();
 
         let sort = self.sort;
@@ -901,7 +901,7 @@ impl Mangler {
             }
         };
         if self.settings.group {
-            for (g, label, items) in [(0u8, "Apps", apps), (1, "Background processes", background), (2, "Windows processes", system)] {
+            for (g, label, items) in [(0u8, "Apps", apps), (1, "Background processes", background), (2, "Windoze processes", system)] {
                 if items.is_empty() {
                     continue;
                 }
@@ -1226,7 +1226,7 @@ impl Mangler {
         let name_w = (ui.available_width() - fixed - 14.0).max(180.0);
         let width = |c: PCol| if c == PCol::Name { name_w } else { pcol(c).width };
 
-        // Header: the total above the name, like Windows, and a caret over the sort column.
+        // Header: the total above the name, like Windoze, and a caret over the sort column.
         let totals: HashMap<PCol, f32> = [
             (PCol::Cpu, self.sys.global_cpu_usage()),
             (PCol::Memory, self.mem.last()),
@@ -2228,7 +2228,7 @@ struct TableOut {
 }
 
 /// A plain sortable list (Details, Services, Startup, App history), styled like
-/// Windows' list views: header with dividers, blue selection, no heat map.
+/// Windoze' list views: header with dividers, blue selection, no heat map.
 fn table(ui: &mut Ui, id: &str, cols: &[(&str, f32, bool)], rows: &mut [TRow], st: &mut TState) -> TableOut {
     if let Some((c, asc)) = st.sort {
         rows.sort_by(|a, b| {
@@ -2314,7 +2314,7 @@ fn table(ui: &mut Ui, id: &str, cols: &[(&str, f32, bool)], rows: &mut [TRow], s
     out
 }
 
-/// Windows' push button: grey face, blue border on hover.
+/// Windoze' push button: grey face, blue border on hover.
 fn win_button(ui: &mut Ui, label: &str, enabled: bool) -> bool {
     let (rect, resp) = ui.allocate_exact_size(vec2((text_w(ui, label, 12.0) + 30.0).max(86.0), 24.0), if enabled { Sense::click() } else { Sense::hover() });
     let p = ui.painter();
@@ -2542,7 +2542,7 @@ fn one_dec(v: f64) -> String {
     if v < 0.05 { "0".into() } else { format!("{v:.1}") }
 }
 
-/// The Memory column: always MB with a thousands separator, like Windows.
+/// The Memory column: always MB with a thousands separator, like Windoze.
 fn mb(b: u64) -> String {
     let v = b as f64 / 1048576.0;
     let whole = v.trunc() as u64;
@@ -3228,7 +3228,7 @@ fn resolve_icon(name: &str) -> Option<String> {
 // ---- App history ----
 
 /// CPU time per app, kept across runs in ~/.local/state/vide-de/app-history so the
-/// App history tab has something to show, like Windows' usage database.
+/// App history tab has something to show, like Windoze' usage database.
 struct AppHistory {
     since: SystemTime,
     base: BTreeMap<String, u64>,

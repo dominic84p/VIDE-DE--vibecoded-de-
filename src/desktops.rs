@@ -1,4 +1,4 @@
-//! Task View (Win+Tab or the taskbar button), like Windows 10's: the whole screen above the
+//! Task View (Win+Tab or the taskbar button), like Windoze 10's: the whole screen above the
 //! taskbar shows this desktop's windows as big live thumbnails to pick or close, with the
 //! desktops in a strip along the top and "New desktop" after them. The live thumbnails are
 //! drawn by `render` over the picture painted here.
@@ -192,7 +192,7 @@ impl State {
     pub fn task_view_click(&mut self, hit: TaskViewHit) {
         match hit {
             TaskViewHit::Desktop(ws) => self.switch_desktop(ws),
-            // Like Windows: the new desktop joins the strip; click it to go there.
+            // Like Windoze: the new desktop joins the strip; click it to go there.
             TaskViewHit::NewDesktop => {
                 let shown = self.shown_desktops();
                 if let Some(ws) = (0..WORKSPACE_COUNT).find(|ws| !shown.contains(ws)) {
@@ -245,7 +245,7 @@ impl State {
 fn draw(font: Option<&fontdue::Font>, icons: &mut crate::icons::Icons, key: &Key) -> MemoryRenderBuffer {
     let (w, h) = (key.size.w, key.size.h - TASKBAR_H);
     let mut c = Canvas::new(w, h);
-    // Windows 10 blurs the desktop behind Task View; we tint it.
+    // Windoze 10 blurs the desktop behind Task View; we tint it.
     let veil = if crate::theme::light() { Rgba(0xe6, 0xe6, 0xe6, 0xf2) } else { Rgba(0x1a, 0x1a, 0x1a, 0xf2) };
     c.fill(veil);
 

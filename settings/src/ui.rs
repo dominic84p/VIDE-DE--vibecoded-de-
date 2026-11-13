@@ -16,7 +16,7 @@ pub const BORDER: Color32 = Color32::from_rgb(0xd4, 0xd4, 0xd4);
 pub const TEXT: Color32 = Color32::from_rgb(0x11, 0x11, 0x11);
 pub const DIM: Color32 = Color32::from_rgb(0x60, 0x60, 0x60);
 
-pub fn apply_win10_style(ctx: &egui::Context) {
+pub fn apply_doze_style(ctx: &egui::Context) {
     let mut visuals = egui::Visuals::light();
     visuals.window_fill = BG;
     visuals.panel_fill = BG;
@@ -37,7 +37,7 @@ pub fn apply_win10_style(ctx: &egui::Context) {
     ctx.set_visuals(visuals);
 }
 
-/// Windows 10 pill toggle switch with "On" / "Off" label.
+/// Windoze 10 pill toggle switch with "On" / "Off" label.
 /// "io.github.astralvixen.geforce-infinity" -> "Geforce Infinity": the last part, spaced and capitalised.
 fn humanize_app_id(id: &str) -> String {
     let last = id.rsplit('.').next().unwrap_or(id);
@@ -60,7 +60,7 @@ fn set_xkb_option(options: &mut String, opt: &str, on: bool) {
     *options = list.join(",");
 }
 
-pub fn win10_toggle(ui: &mut egui::Ui, value: &mut bool) -> bool {
+pub fn doze_toggle(ui: &mut egui::Ui, value: &mut bool) -> bool {
     let mut changed = false;
     ui.horizontal(|ui| {
         let size = Vec2::new(44.0, 20.0);
@@ -350,7 +350,7 @@ impl Settings {
         let mut changed = false;
         section_title(ui, "Color");
         changed |= setting_block(ui, "Night light", "Use warmer colors to help block blue light.", |ui| {
-            win10_toggle(ui, &mut self.config.night_light)
+            doze_toggle(ui, &mut self.config.night_light)
         });
         changed |= setting_block(ui, "Night light strength", "Adjust color temperature warmth when Night light is on.", |ui| {
             let mut pct = (self.config.night_light_strength * 100.0).round() as i32;
@@ -526,7 +526,7 @@ impl Settings {
         let mut changed = false;
         section_title(ui, "Notifications");
         changed |= setting_block(ui, "Show notification popups", "Notifications always go to the Action Center. This is the popup in the corner.", |ui| {
-            win10_toggle(ui, &mut self.config.toasts)
+            doze_toggle(ui, &mut self.config.toasts)
         });
         changed |= setting_block(ui, "How long popups stay", "Apps can ask for longer, and urgent notifications stay until you close them.", |ui| {
             let mut c = false;
@@ -550,7 +550,7 @@ impl Settings {
         });
         ui.add_space(12.0);
         changed |= setting_block(ui, "Hide KDE apps in Start search", "Keeps KDE utility entries out of Start menu search.", |ui| {
-            win10_toggle(ui, &mut self.config.hide_kde_apps)
+            doze_toggle(ui, &mut self.config.hide_kde_apps)
         });
         changed
     }
@@ -560,12 +560,12 @@ impl Settings {
         section_title(ui, "Touchpad");
         ui.label(RichText::new("These apply to touchpads on real hardware, as soon as you change them.").color(DIM).size(12.5));
         ui.add_space(6.0);
-        changed |= setting_block(ui, "Tap to click", "Tap the touchpad to click; two fingers to right-click.", |ui| win10_toggle(ui, &mut self.config.tap_to_click));
+        changed |= setting_block(ui, "Tap to click", "Tap the touchpad to click; two fingers to right-click.", |ui| doze_toggle(ui, &mut self.config.tap_to_click));
         changed |= setting_block(ui, "Natural scrolling", "Content follows your fingers, like a phone: swipe up and the page moves up.", |ui| {
-            win10_toggle(ui, &mut self.config.natural_scroll)
+            doze_toggle(ui, &mut self.config.natural_scroll)
         });
         changed |= setting_block(ui, "Ignore the touchpad while typing", "Stops your palm from moving the cursor mid-sentence.", |ui| {
-            win10_toggle(ui, &mut self.config.disable_while_typing)
+            doze_toggle(ui, &mut self.config.disable_while_typing)
         });
         changed
     }
@@ -687,7 +687,7 @@ impl Settings {
     fn page_bluetooth(&mut self, ui: &mut egui::Ui) {
         section_title(ui, "Bluetooth");
         let mut on = self.system.bt_on;
-        if setting_block(ui, "Bluetooth", "Discoverable as your PC and connect to audio, mice, and keyboards.", |ui| win10_toggle(ui, &mut on)) {
+        if setting_block(ui, "Bluetooth", "Discoverable as your PC and connect to audio, mice, and keyboards.", |ui| doze_toggle(ui, &mut on)) {
             spawn("bluetoothctl", &["power", if on { "on" } else { "off" }]);
             self.system.invalidate();
         }
@@ -734,7 +734,7 @@ impl Settings {
         section_title(ui, "Cursor & pointer");
         let mut accel = !self.config.mouse_flat;
         changed |= setting_block(ui, "Enhance pointer precision", "Mouse acceleration. Turn off for games and 1:1 raw aim.", |ui| {
-            win10_toggle(ui, &mut accel)
+            doze_toggle(ui, &mut accel)
         });
         self.config.mouse_flat = !accel;
 
@@ -861,7 +861,7 @@ impl Settings {
         let on = |ui: &mut egui::Ui, opts: &mut String, title: &str, desc: &str, opt: &str| -> bool {
             let mut v = opts.split(',').any(|o| o == opt);
             let was = v;
-            let c = setting_block(ui, title, desc, |ui| win10_toggle(ui, &mut v));
+            let c = setting_block(ui, title, desc, |ui| doze_toggle(ui, &mut v));
             if c && v != was {
                 set_xkb_option(opts, opt, v);
             }
@@ -932,7 +932,7 @@ impl Settings {
     fn page_wifi(&mut self, ui: &mut egui::Ui) {
         section_title(ui, "Wi-Fi");
         let mut on = self.system.wifi_on;
-        if setting_block(ui, "Wi-Fi", "Connect to wireless networks.", |ui| win10_toggle(ui, &mut on)) {
+        if setting_block(ui, "Wi-Fi", "Connect to wireless networks.", |ui| doze_toggle(ui, &mut on)) {
             spawn("nmcli", &["radio", "wifi", if on { "on" } else { "off" }]);
             self.system.invalidate();
         }
@@ -1112,7 +1112,7 @@ impl Settings {
 
     fn page_colors(&mut self, ui: &mut egui::Ui) -> bool {
         section_title(ui, "Colors");
-        setting_block(ui, "Choose your default Windows mode", "The taskbar, Start, Action Center and menus.", |ui| {
+        setting_block(ui, "Choose your default Windoze mode", "The taskbar, Start, Action Center and menus.", |ui| {
             let mut changed = false;
             for (light, label) in [(true, "Light"), (false, "Dark")] {
                 if ui.radio(self.config.light_mode == light, label).clicked() && self.config.light_mode != light {
@@ -1127,7 +1127,7 @@ impl Settings {
     fn page_start(&mut self, ui: &mut egui::Ui) -> bool {
         section_title(ui, "Start");
         setting_block(ui, "Hide KDE apps in Start search", "Keeps KDE's own apps out of the Start list and search.", |ui| {
-            win10_toggle(ui, &mut self.config.hide_kde_apps)
+            doze_toggle(ui, &mut self.config.hide_kde_apps)
         })
     }
 
@@ -1221,10 +1221,10 @@ impl Settings {
         let ntp = self.system.specs.ntp_enabled;
 
         section_title(ui, "Date & time");
-        changed |= setting_block(ui, "24-hour clock", "Show the taskbar clock as 14:30 instead of 2:30 PM.", |ui| win10_toggle(ui, &mut self.config.clock_24h));
+        changed |= setting_block(ui, "24-hour clock", "Show the taskbar clock as 14:30 instead of 2:30 PM.", |ui| doze_toggle(ui, &mut self.config.clock_24h));
 
         let mut ntp_on = ntp;
-        if setting_block(ui, "Set time automatically", "Sync the clock with internet time servers (may ask for your password).", |ui| win10_toggle(ui, &mut ntp_on)) {
+        if setting_block(ui, "Set time automatically", "Sync the clock with internet time servers (may ask for your password).", |ui| doze_toggle(ui, &mut ntp_on)) {
             spawn("timedatectl", &["set-ntp", if ntp_on { "true" } else { "false" }]);
             self.system.invalidate();
         }
@@ -1278,7 +1278,7 @@ impl Settings {
             ui,
             "Ultra Performance Mode (Direct Scanout)",
             "Fullscreen games bypass compositing for lower latency. May flicker on some NVIDIA setups.",
-            |ui| win10_toggle(ui, &mut self.config.direct_scanout),
+            |ui| doze_toggle(ui, &mut self.config.direct_scanout),
         );
         card_frame().show(ui, |ui| {
             ui.set_width(ui.available_width());
@@ -1319,7 +1319,7 @@ impl Settings {
             });
             c
         });
-        changed |= setting_block(ui, "Night light", "Reduce blue light strain.", |ui| win10_toggle(ui, &mut self.config.night_light));
+        changed |= setting_block(ui, "Night light", "Reduce blue light strain.", |ui| doze_toggle(ui, &mut self.config.night_light));
         changed
     }
 

@@ -1,5 +1,5 @@
 //! Screenshots: PrtSc grabs the whole screen, Win+Shift+S (or Shift+PrtSc) lets you
-//! drag out a region first, like the Windows snipping tool. Saved to
+//! drag out a region first, like the Windoze snipping tool. Saved to
 //! ~/Pictures/Screenshots and put on the clipboard as a PNG.
 
 use std::{io::Write, path::PathBuf, sync::Arc};
@@ -70,7 +70,7 @@ impl Snip {
 }
 
 impl State {
-    /// Start, the search pane, flyouts and menus stay open, as on Windows, so they
+    /// Start, the search pane, flyouts and menus stay open, as on Windoze, so they
     /// can be captured.
     pub fn start_screenshot(&mut self, region: bool) {
         if region {
@@ -94,7 +94,7 @@ pub fn take(renderer: &mut GlesRenderer, state: &mut State, region: Option<Recta
     match capture(renderer, state, region) {
         Ok((w, h, rgba)) => {
             let path = save(state, w, h, rgba);
-            // A region snip opens in Snip & Sketchy for marking up, like Windows does.
+            // A region snip opens in Snip & Sketchy for marking up, like Windoze does.
             if let (true, Some(path), Some(app)) = (region.is_some(), path, crate::input::own_app("snip-and-sketchy")) {
                 state.spawn(&format!("{app} '{}'", path.display()));
             }

@@ -1,4 +1,4 @@
-//! Snip & Sketchy: VIDE-DE's screenshot markup app, modelled on Windows 10's
+//! Snip & Sketchy: VIDE-DE's screenshot markup app, modelled on Windoze 10's
 //! Snip & Sketch. The compositor captures (only it can see the screen) and opens
 //! the snip here; drawing, cropping, saving and copying happen in this app.
 //!
@@ -331,7 +331,7 @@ impl eframe::App for App {
                     btn = btn.fill(if active { ACTIVE } else { BAR });
                     let r = ui.add(btn).on_hover_text(tip);
                     if active && matches!(t, Tool::Ballpoint | Tool::Pencil | Tool::Highlighter) {
-                        // Colour bar under the active pen, like Windows.
+                        // Colour bar under the active pen, like Windoze.
                         let c = self.colors[self.tool_index()];
                         ui.painter().rect_filled(Rect::from_min_size(r.rect.left_bottom() - Vec2::new(-6.0, 4.0), Vec2::new(r.rect.width() - 12.0, 3.0)), 1.0, c.to_opaque());
                     }

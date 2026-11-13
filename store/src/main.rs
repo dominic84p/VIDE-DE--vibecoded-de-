@@ -1,4 +1,4 @@
-//! Window Shopping: VIDE-DE's app store, in the spirit of the Microsoft Store. Browse
+//! Window Shopping: VIDE-DE's app store, in the spirit of the Microslop Store. Browse
 //! Flathub's apps, read about them, install them with one click. Real apps only, and no
 //! package names or terminal output anywhere in the window.
 

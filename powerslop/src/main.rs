@@ -1,14 +1,14 @@
-//! PowerSlop 2.0: VIDE-DE's shell window, styled after Windows PowerShell 2.0.
+//! PowerSlop 2.0: VIDE-DE's shell window, styled after Windoze PowerSlop 2.0.
 //!
-//! Classic PowerShell 2.0 deep blue console (`#012456`), 2009 startup banner,
-//! `PS /path>` prompt, built-in PowerShell 2.0 cmdlet/alias shims for bash/zsh,
-//! Windows 7 light scrollbar, QuickEdit copy/paste (`Ctrl+C` copies when text
+//! Classic PowerSlop 2.0 deep blue console (`#012456`), 2009 startup banner,
+//! `PS /path>` prompt, built-in PowerSlop 2.0 cmdlet/alias shims for bash/zsh,
+//! Windoze 7 light scrollbar, QuickEdit copy/paste (`Ctrl+C` copies when text
 //! is selected or sends SIGINT otherwise, right-click copies or pastes), the mouse wheel
 //! sent to apps that track the mouse (Shift+wheel scrolls history), and
 //! `Ctrl+=`/`-`/`0` or `Ctrl+Scroll` font zoom.
 //!
 //! `powerslop -e PROGRAM [ARGS...]` runs a program directly and waits for Enter
-//! on exit so output can be read, like a Windows console host.
+//! on exit so output can be read, like a Windoze console host.
 
 use std::sync::mpsc::{self, Receiver, Sender};
 
@@ -21,9 +21,9 @@ use egui_term::{
     TerminalView,
 };
 
-/// Classic PowerShell 2.0 deep blue background.
+/// Classic PowerSlop 2.0 deep blue background.
 const PS_BLUE: Color32 = Color32::from_rgb(0x01, 0x24, 0x56);
-/// Windows 7 / Server 2008 R2 classic light scrollbar.
+/// Windoze 7 / Server 2008 R2 classic light scrollbar.
 const SB_W: f32 = 17.0;
 const SB_TRACK: Color32 = Color32::from_rgb(0xf0, 0xf0, 0xf0);
 const SB_BORDER: Color32 = Color32::from_rgb(0xc8, 0xc8, 0xc8);
@@ -45,8 +45,8 @@ fn main() -> eframe::Result {
     };
     let title = run
         .as_ref()
-        .map(|r| format!("Windows PowerSlop 2.0 - {}", r[0]))
-        .unwrap_or_else(|| "Windows PowerSlop 2.0".into());
+        .map(|r| format!("Windoze PowerSlop 2.0 - {}", r[0]))
+        .unwrap_or_else(|| "Windoze PowerSlop 2.0".into());
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title(&title)
@@ -57,13 +57,13 @@ fn main() -> eframe::Result {
         ..Default::default()
     };
     eframe::run_native(
-        "Windows PowerSlop 2.0",
+        "Windoze PowerSlop 2.0",
         options,
         Box::new(move |cc| Ok(Box::new(App::new(&cc.egui_ctx, run, title)))),
     )
 }
 
-/// 32x32 PowerShell 2.0 blue icon with a crisp white `>_` glyph.
+/// 32x32 PowerSlop 2.0 blue icon with a crisp white `>_` glyph.
 fn ps_icon() -> egui::IconData {
     let (w, h) = (32usize, 32usize);
     let mut rgba = vec![0u8; w * h * 4];
@@ -112,7 +112,7 @@ struct App {
     scroll_acc: f32,
 }
 
-/// Classic Windows PowerShell 2.0 console palette on `#012456`.
+/// Classic Windoze PowerSlop 2.0 console palette on `#012456`.
 fn powershell2_palette() -> TerminalTheme {
     let c = |s: &str| s.to_string();
     TerminalTheme::new(Box::new(ColorPalette {
@@ -138,12 +138,12 @@ fn powershell2_palette() -> TerminalTheme {
     }))
 }
 
-/// PowerShell 2.0 cmdlet & alias shims shared by bash and zsh.
+/// PowerSlop 2.0 cmdlet & alias shims shared by bash and zsh.
 const PS2_SHIM: &str = r#"
 export PSVersionTable="Name: PSVersion = 2.0 (PowerSlop)"
 Get-Host() { printf 'Name             : ConsoleHost\nVersion          : 2.0.0.0 (PowerSlop)\nCurrentCulture   : en-US\n'; }
 Get-Help() {
-    printf 'TOPIC\n    Windows PowerSlop 2.0 Help\n\nBUILT-IN CMDLETS\n'
+    printf 'TOPIC\n    Windoze PowerSlop 2.0 Help\n\nBUILT-IN CMDLETS\n'
     printf '    Get-Location (gl)      Print current directory\n'
     printf '    Set-Location (sl)      Change directory\n'
     printf '    Get-ChildItem (gci)    List directory contents\n'
@@ -205,7 +205,7 @@ fn config_dir() -> Option<std::path::PathBuf> {
 
 /// Write bashrc / zshrc init files and return the shell launch command.
 fn launcher(shell: &str) -> String {
-    let banner = "Windows PowerSlop 2.0\\nCopyright (C) 2009 Microsoft Corporation (vibecoded). All rights reserved.\\n\\n";
+    let banner = "Windoze PowerSlop 2.0\\nCopyright (C) 2009 Microslop Corporation (vibecoded). All rights reserved.\\n\\n";
     let Some(dir) = config_dir() else {
         return format!("printf '{banner}'; exec '{shell}'");
     };
@@ -284,7 +284,7 @@ impl App {
         true
     }
 
-    /// Windows QuickEdit copy: copy the selection and drop it, so the next right-click pastes
+    /// Windoze QuickEdit copy: copy the selection and drop it, so the next right-click pastes
     /// and the next Ctrl+C interrupts instead of copying the same text again.
     fn quick_copy(&mut self, ctx: &egui::Context) -> bool {
         if !self.copy(ctx) {
@@ -308,7 +308,7 @@ impl App {
         }
     }
 
-    /// Classic Windows 7 / PowerShell 2.0 light-themed vertical scrollbar.
+    /// Classic Windoze 7 / PowerSlop 2.0 light-themed vertical scrollbar.
     fn scrollbar(&mut self, ui: &mut egui::Ui, rect: Rect) {
         let Some(b) = self.backend.as_mut() else { return };
         let grid = &b.last_content().grid;
@@ -453,7 +453,7 @@ impl eframe::App for App {
                     return;
                 }
                 PtyEvent::Title(t) => {
-                    let title = if t.is_empty() { "Windows PowerSlop 2.0".into() } else { format!("Windows PowerSlop 2.0 - {t}") };
+                    let title = if t.is_empty() { "Windoze PowerSlop 2.0".into() } else { format!("Windoze PowerSlop 2.0 - {t}") };
                     ctx.send_viewport_cmd(egui::ViewportCommand::Title(title));
                 }
                 _ => {}
@@ -473,7 +473,7 @@ impl eframe::App for App {
         if ctrl_shift(Key::V) || ctrl(Key::V) || ctx.input_mut(|i| i.consume_key(Modifiers::SHIFT, Key::Insert)) {
             self.paste();
         }
-        // Windows QuickEdit: Ctrl+C copies when a selection exists, otherwise sends ^C (SIGINT).
+        // Windoze QuickEdit: Ctrl+C copies when a selection exists, otherwise sends ^C (SIGINT).
         if ctrl(Key::C) {
             if !self.quick_copy(ctx) && let Some(b) = self.backend.as_mut() {
                 b.process_command(BackendCommand::Write(vec![0x03]));

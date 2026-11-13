@@ -67,7 +67,7 @@ if toplevel.requested_decorations() == DecorationMode::Client {
 
 ## Stacking Order
 
-Windows stored in `Vec<Window>` — **last = top** (front).
+Windoze stored in `Vec<Window>` — **last = top** (front).
 
 ```rust
 impl State {

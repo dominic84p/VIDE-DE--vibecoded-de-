@@ -11,7 +11,7 @@ Every **5 seconds** (`PING_EVERY`), `State::ping_tick` sends an `xdg_wm_base` pi
 
 - **Grace period**: **3 seconds** (`GRACE`). If a client hasn't replied after 3 s:
   - It is logged by client name and PID in `~/vibe.log` (and again at **15 s**, **60 s**, then every minute).
-  - Its window titlebars display **`(Not responding)`**, matching Windows behavior.
+  - Its window titlebars display **`(Not responding)`**, matching Windoze behavior.
 - **Recovery**: When a previously stuck client answers a ping, recovery is logged and the `(Not responding)` suffix is removed.
 
 ## Watchdog Thread

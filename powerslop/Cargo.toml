@@ -2,7 +2,7 @@
 name = "powerslop"
 version = "0.1.0"
 edition = "2024"
-description = "PowerSlop: the VIDE-DE shell window. Like PowerShell, but vibecoded."
+description = "PowerSlop: the VIDE-DE shell window. A shell, but vibecoded."
 
 [dependencies]
 egui_term = "0.1.0"

@@ -1,4 +1,4 @@
-//! Our chrome, styled after Windows 10: bottom taskbar, start menu, light
+//! Our chrome, styled after Windoze 10: bottom taskbar, start menu, light
 //! titlebars with min/max/close. Layout and look live here; painting goes
 //! through `canvas`. Every picture is keyed on what it shows and only
 //! repainted when that key changes.
@@ -20,7 +20,7 @@ const fn rgba(c: u32, a: u8) -> Rgba {
     Rgba(h.0, h.1, h.2, a)
 }
 
-// Palette (the shell's dark/light colours live in `theme`; titlebars are white in both, like Windows 10)
+// Palette (the shell's dark/light colours live in `theme`; titlebars are white in both, like Windoze 10)
 pub use crate::theme::ACCENT;
 use crate::theme::{th, ON_ACCENT};
 const TITLE_BG: Rgba = hex(0xffffff);
@@ -75,7 +75,7 @@ pub enum TaskbarHit {
 
 #[derive(Clone, PartialEq)]
 pub struct TaskItem {
-    /// Windows behind this button, oldest first. None: a pinned app that isn't running.
+    /// Windoze behind this button, oldest first. None: a pinned app that isn't running.
     pub windows: Vec<WlSurface>,
     pub title: String,
     /// Icon name (an app_id we look up variations of).
@@ -171,7 +171,7 @@ pub fn draw_taskbar(
     }
     hits.push((rect(sx, 0, SEARCH_W, TASKBAR_H), TaskbarHit::Search));
 
-    // Task View: Windows 10 overlapping desktop frames with the current workspace badge.
+    // Task View: Windoze 10 overlapping desktop frames with the current workspace badge.
     let tv_x = SEARCH_END;
     let tv_bg = if key.taskview_open { th().active } else if hovered(&TaskbarHit::TaskView) { th().hover } else { th().taskbar };
     c.rect(tv_x, 0, TASK_W, TASKBAR_H, tv_bg);
@@ -224,7 +224,7 @@ pub fn draw_taskbar(
         } else if !item.windows.is_empty() {
             c.rect(x + 6, TASKBAR_H - 2, TASK_W - 12, 2, th().accent_light);
         }
-        // Several windows: a second, offset line, like Windows' stacked-button edge.
+        // Several windows: a second, offset line, like Windoze' stacked-button edge.
         if item.windows.len() > 1 {
             c.rect(x + TASK_W - 3, 4, 1, TASKBAR_H - 8, th().divider);
         }
@@ -248,7 +248,7 @@ pub fn draw_taskbar(
     let tray_x = apps_x + TRAY_W * key.tray_apps.len() as i32;
 
     // Tray: network, brightness, volume, just left of the clock. Bluetooth lives in
-    // the Action Center's quick actions, as in Windows 10.
+    // the Action Center's quick actions, as in Windoze 10.
     use crate::tray::{net_icon, speaker, sun, Flyout};
     for (i, (hit, open)) in [
         (TaskbarHit::Network, key.flyout == Some(Flyout::Network)),
@@ -487,7 +487,7 @@ pub struct StartKey {
     pub hover: Option<StartHit>,
     /// The power button's Sign out / Restart / Shut down list is showing.
     pub power_open: bool,
-    /// Windows' search pane instead of the app list.
+    /// Windoze' search pane instead of the app list.
     pub searching: bool,
     pub filter: usize,
     /// Per item, what kind of thing it is ("App"...), for the search pane.
@@ -541,7 +541,7 @@ pub fn draw_start_menu(font: Option<&Font>, icons: &mut Icons, key: StartKey) ->
         let y = MENU_TOP + row as i32 * MENU_ROW;
         let (name, icon) = match item {
             StartRow::Header(t) => {
-                // Single letters sit on the left like Windows' jump headers; others are titles.
+                // Single letters sit on the left like Windoze' jump headers; others are titles.
                 let size = if t.chars().count() == 1 { 15.0 } else { 13.0 };
                 c.text(f, size, lx + 14, y + 4, MENU_ROW - 4, th().text, t);
                 continue;
@@ -664,7 +664,7 @@ pub fn draw_start_menu(font: Option<&Font>, icons: &mut Icons, key: StartKey) ->
 
 // ---------------------------------------------------------------- search pane
 
-/// Windows 10's search pane: tabs across the top, results on the left with the top
+/// Windoze 10's search pane: tabs across the top, results on the left with the top
 /// one under "Best match", and the highlighted result previewed on the right.
 fn draw_search(font: Option<&Font>, icons: &mut Icons, key: StartKey) -> StartMenu {
     let (w, h) = (SEARCH_PANEL_W, key.height);
@@ -802,7 +802,7 @@ fn draw_search(font: Option<&Font>, icons: &mut Icons, key: StartKey) -> StartMe
     StartMenu { key, buffer: c.into_buffer(), hits }
 }
 
-/// White line icons for the preview's actions, like Windows' MDL2 glyphs.
+/// White line icons for the preview's actions, like Windoze' MDL2 glyphs.
 fn action_glyph(c: &mut Canvas, icon: &str, x: f32, y: f32) {
     const S: &str = r##"fill="none" stroke="#fff" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round""##;
     let body = match icon {

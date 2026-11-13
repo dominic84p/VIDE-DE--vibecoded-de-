@@ -120,7 +120,7 @@ pub struct Start {
 }
 
 impl Start {
-    /// Typing in Start, or opening search, turns it into Windows' search pane.
+    /// Typing in Start, or opening search, turns it into Windoze' search pane.
     pub fn searching(&self) -> bool {
         self.search_mode || !self.query.trim().is_empty()
     }
@@ -495,7 +495,7 @@ impl State {
         self.focus(None, SERIAL_COUNTER.next_serial());
     }
 
-    /// Dragging a maximized window off its titlebar restores it under the pointer, like Windows.
+    /// Dragging a maximized window off its titlebar restores it under the pointer, like Windoze.
     pub fn begin_move(&mut self, surface: &WlSurface) {
         let pos = self.pointer_loc;
         if let Some(w) = self.wm.find(surface) {

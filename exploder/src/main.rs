@@ -1,4 +1,4 @@
-//! File Exploder: VIDE-DE's file manager, a copy of Windows 10 File Explorer.
+//! File Exploder: VIDE-DE's file manager, a copy of Windoze 10 File Explorer.
 //! Ribbon (File / Home / Share / View, plus Manage in the Recycle Bin), back/forward/up
 //! and a breadcrumb address bar, a navigation tree (Quick access, This PC, Recycle Bin),
 //! icon / list / details / tiles views with image thumbnails, a This PC page with drive
@@ -68,7 +68,7 @@ fn main() -> eframe::Result {
             egui_extras::install_image_loaders(&cc.egui_ctx);
             // A file manager, not a document: dragging over names shouldn't highlight text.
             cc.egui_ctx.all_styles_mut(|s| s.interaction.selectable_labels = false);
-            // Noto Sans is what the shell uses, and the nearest installed thing to Segoe UI.
+            // Noto Sans is what the shell uses, and the nearest installed thing to Seg-whoa UI.
             if let Ok(data) = std::fs::read("/usr/share/fonts/noto/NotoSans-Regular.ttf") {
                 cc.egui_ctx.add_font(egui::FontInsert::new(
                     "noto-sans",

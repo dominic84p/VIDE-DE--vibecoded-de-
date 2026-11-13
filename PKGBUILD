@@ -2,7 +2,7 @@
 pkgname=vide-de-git
 pkgver=0.1.0
 pkgrel=1
-pkgdesc="A Wayland compositor and Windows 10-style desktop environment written in Rust"
+pkgdesc="A Wayland compositor and Windoze 10-style desktop environment written in Rust"
 arch=('x86_64')
 url="https://github.com/dominic84p/vide-de"
 license=('MIT')

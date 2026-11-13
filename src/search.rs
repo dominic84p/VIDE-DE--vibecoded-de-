@@ -1,5 +1,5 @@
 //! What the start menu lists. Empty query: pinned apps, most used, then every app
-//! under A–Z headers, like Windows 10. Typing: a calculator answer, apps (fuzzy,
+//! under A–Z headers, like Windoze 10. Typing: a calculator answer, apps (fuzzy,
 //! ranked by how often you launch them), Settings pages, commands, then files.
 
 use std::{
@@ -24,10 +24,10 @@ pub enum Entry {
     Web(String),
 }
 
-/// The search pane's tabs, as in Windows 10.
+/// The search pane's tabs, as in Windoze 10.
 pub const FILTERS: [&str; 5] = ["All", "Apps", "Documents", "Settings", "Web"];
 
-/// Windows' search layout: the top hit under "Best match", then the rest by kind,
+/// Windoze' search layout: the top hit under "Best match", then the rest by kind,
 /// limited to one kind when a tab other than All is picked.
 pub fn arrange(entries: Vec<Entry>, filter: usize) -> Vec<Entry> {
     let keep = |e: &Entry| match filter {
@@ -147,7 +147,7 @@ pub fn results(query: &str, apps: &[App], hide_kde: bool, pins: &Pins, files: &F
     let q = query.trim();
 
     if q.is_empty() {
-        // Pinned apps are Start's tiles, as in Windows 10, so the list leaves them in A-Z only.
+        // Pinned apps are Start's tiles, as in Windoze 10, so the list leaves them in A-Z only.
         let pinned: Vec<usize> = Vec::new();
         let mut used: Vec<(usize, u32)> = pins
             .launches

@@ -50,7 +50,7 @@ pub struct Config {
     pub toast_seconds: u32,
     /// Taskbar clock in 24-hour time.
     pub clock_24h: bool,
-    /// Windows 10's "default Windows mode": light taskbar, Start, Action Center and menus
+    /// Windoze 10's "default Windoze mode": light taskbar, Start, Action Center and menus
     /// instead of dark. Apps stay light either way.
     pub light_mode: bool,
 }

@@ -86,7 +86,7 @@ dbus-run-session -- ./target/release/vibe-comp --tty 2> ~/vibe.log
 | `src/wm.rs` | The window manager: stacking, move, resize, maximize, fullscreen |
 | `src/input.rs` | Keybinds and pointer/keyboard routing |
 | `src/render.rs` | Builds each frame from windows, chrome, cursor |
-| `src/ui.rs` | Taskbar, start menu, titlebars, wallpaper (Windows 10 style) |
+| `src/ui.rs` | Taskbar, start menu, titlebars, wallpaper (Windoze 10 style) |
 | `src/canvas.rs` | Tiny CPU 2D painter the UI is drawn with |
 | `src/xwayland.rs` | Xwayland and X11 window management |
 | `src/focus.rs` | Keyboard focus for Wayland and X11 windows |

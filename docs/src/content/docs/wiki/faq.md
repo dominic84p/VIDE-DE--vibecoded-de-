@@ -50,7 +50,7 @@ Yes! `vibe-comp --nested` runs as a window inside your current desktop.
 
 ### How do I open the Start menu?
 
-Press `Super` (Windows key).
+Press `Super` (Super key).
 
 ### How do I take a screenshot?
 

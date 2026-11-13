@@ -2,7 +2,7 @@
 //!
 //! We run the D-Bus notification service on its own thread so client notifications
 //! don't block compositor frames. The Action Center panel opens from the taskbar clock:
-//! Windows 10's full-height panel with notifications on top and the quick action tiles
+//! Windoze 10's full-height panel with notifications on top and the quick action tiles
 //! (Network, All settings, Bluetooth, Night light...) at the bottom.
 
 use std::{
@@ -38,7 +38,7 @@ const HEADER_H: i32 = 44;
 const TILE_W: i32 = (ACTION_CENTER_W - 24 - 12) / 4;
 const TILE_H: i32 = 58;
 
-/// Windows 10's quick action tiles, in its default order. The first row shows
+/// Windoze 10's quick action tiles, in its default order. The first row shows
 /// collapsed; Expand shows the rest.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum QuickAction {
@@ -121,7 +121,7 @@ pub struct ActionCenter {
     pub expanded: bool,
     pub focus_assist: bool,
     /// Notifications that arrived since the Action Center was last opened: the taskbar
-    /// button shows them as a badge, like Windows 10's.
+    /// button shows them as a badge, like Windoze 10's.
     pub unseen: usize,
 }
 
@@ -574,7 +574,7 @@ fn draw_action_center(
         return ActionCenterPanel { key, buffer: c.into_buffer(), hits };
     }
 
-    // Notifications, grouped under their app's name like Windows.
+    // Notifications, grouped under their app's name like Windoze.
     let (card_x, card_w) = (12, w - 24);
     let mut y = HEADER_H;
     let mut last_app: Option<&str> = None;
@@ -835,7 +835,7 @@ fn draw_toasts(font: Option<&fontdue::Font>, icons: &mut crate::icons::Icons, ke
     let Some(f) = font else { return ToastPanel { key, buffer: c.into_buffer(), hits, size: (TOAST_W, h) } };
     let hover = |x: &ToastHit| key.hover == *x;
 
-    // Windows 10's look: a flat dark card, the app's small icon and name on top, the
+    // Windoze 10's look: a flat dark card, the app's small icon and name on top, the
     // title and text under it, and the X only while the pointer is over the toast.
     let mut y = 0;
     for n in &key.items {

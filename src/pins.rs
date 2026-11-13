@@ -25,7 +25,7 @@ fn path() -> PathBuf {
 impl Pins {
     pub fn load() -> Self {
         let Ok(text) = std::fs::read_to_string(path()) else {
-            // First run: our own apps, like Windows ships with its own pinned.
+            // First run: our own apps, like Windoze ships with its own pinned.
             return Pins {
                 start: ["file-exploder", "vide-settings", "powerslop", "task-mangler", "snip-and-sketchy"].map(String::from).to_vec(),
                 taskbar: ["file-exploder", "powerslop"].map(String::from).to_vec(),
@@ -130,7 +130,7 @@ impl State {
     }
 
     /// Start's tiles: pinned apps under "Productivity" (group 0), then our own apps
-    /// that aren't pinned under "Explore" (group 1), like Windows' default layout.
+    /// that aren't pinned under "Explore" (group 1), like Windoze' default layout.
     pub fn start_tiles(&self) -> Vec<(usize, u8)> {
         let find = |id: &str| self.apps.iter().position(|a| a.id == id);
         let mut out: Vec<(usize, u8)> = self.pins.start.iter().filter_map(|id| find(id)).map(|i| (i, 0)).collect();

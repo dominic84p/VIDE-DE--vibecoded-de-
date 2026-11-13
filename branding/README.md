@@ -13,8 +13,8 @@ compositor uses for icons).
 ## The idea
 
 - **A V** for VIDE, as before.
-- **Four panes** with a cross-shaped gap: the Windows 10 logo, since the
-  desktop is a Windows 10 copy.
+- **Four panes** with a cross-shaped gap: the Windoze 10 logo, since the
+  desktop is a Windoze 10 copy.
 - **A spark** rising out of the V: the usual sign for "an AI made this".
 - **Blue to cyan to green**, the gradient of the original logo.
 

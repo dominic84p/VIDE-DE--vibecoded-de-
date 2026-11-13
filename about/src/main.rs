@@ -1,4 +1,4 @@
-//! About VIDE-DE: a standalone app (not part of the compositor), laid out like Windows 10's
+//! About VIDE-DE: a standalone app (not part of the compositor), laid out like Windoze 10's
 //! Settings → About. Facts come from fastfetch, with uptime and memory read live, and it's
 //! rendered by a real GUI toolkit so text stays sharp at any scale.
 

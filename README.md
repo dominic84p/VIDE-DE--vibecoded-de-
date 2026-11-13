@@ -15,7 +15,7 @@ taskbar, start menu and titlebars are all our own code.
 
 - **Runs on real hardware** from a TTY (DRM/KMS, libinput, libseat), or
   **nested** as a window inside another desktop for development
-- **Windows 10-style desktop**: bottom taskbar with a start button, search box,
+- **Windoze 10-style desktop**: bottom taskbar with a start button, search box,
   a button per window and a clock; light titlebars with minimize, maximize and close
 - **Start menu** with every installed app (from `.desktop` files) and their
   real icons; type to search
@@ -33,20 +33,20 @@ taskbar, start menu and titlebars are all our own code.
 - **Right-click menus** on taskbar buttons, titlebars and the desktop
 - **Tray** with volume (PipeWire) and brightness sliders, plus app tray icons
   (Discord, Steam, ...): click to open, right-click for the app's menu
-- **Screenshots** and a Windows-style snipping tool
+- **Screenshots** and a Windoze-style snipping tool
 - **Keyring**: starts KWallet's Secret Service so browsers and Electron apps can save logins
 - **Desktop** (`vide-desktop`): its own program on the background layer (wlr-layer-shell):
-  wallpaper plus your ~/Desktop items in a Windows-style grid, Recycle Bin, right-click menu
+  wallpaper plus your ~/Desktop items in a Windoze-style grid, Recycle Bin, right-click menu
 - **Wallpapers**: six originals (Bloom, Aurora, Sunset, Midnight, Ember, Vibe); pick one,
   or your own picture, in Settings → Personalization
 - **Our own apps**, installed into the start menu automatically:
   - **Settings** (`vide-settings`): mouse acceleration and speed, hide KDE apps from Start search
-  - **PowerSlop** (`powerslop`): the terminal. Like PowerShell, but vibecoded (blue, banner, `PS>` prompt, tabs)
+  - **PowerSlop** (`powerslop`): the terminal. A shell, but vibecoded (blue, banner, `PS>` prompt, tabs)
   - **File Exploder** (`file-exploder`): the file manager, like File Explorer. Win+E
   - **Task Mangler** (`task-mangler`): processes and performance, like Task Manager. Ctrl+Shift+Esc
   - **Snip & Sketchy** (`snip-and-sketchy`): mark up screenshots (pens, highlighter, eraser,
     crop, undo), like Snip & Sketch. Win+Shift+S snips straight into it
-  - **About VIDE-DE** (`vide-about`): your device and system specs, laid out like Windows 10's About page
+  - **About VIDE-DE** (`vide-about`): your device and system specs, laid out like Windoze 10's About page
 - **End process** in window right-click menus, for apps that won't close
 - **Smooth**: damage-tracked rendering, paced to vsync, zero-copy GPU buffers, and optional
   direct scanout for fullscreen games (Settings → Gaming → Ultra Performance Mode)

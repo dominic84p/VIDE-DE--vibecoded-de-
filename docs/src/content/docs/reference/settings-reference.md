@@ -26,7 +26,7 @@ Complete reference for `~/.config/vide-de/settings.conf` as defined in `config/s
 | `toasts` | bool | `true` | Show a popup for new notifications (notifications always land in Action Center) |
 | `toast_seconds` | int | `5` | How long a notification popup stays (seconds), unless the app requests its own timeout |
 | `clock_24h` | bool | `false` | Display the taskbar clock in 24-hour time (`14:30` instead of `2:30 PM`) |
-| `light_mode` | bool | `false` | Windows 10's "default Windows mode": light taskbar, Start, Action Center, flyouts and menus instead of dark. Applies live |
+| `light_mode` | bool | `false` | Windoze 10's "default Windoze mode": light taskbar, Start, Action Center, flyouts and menus instead of dark. Applies live |
 
 ## Mouse & Touchpad
 

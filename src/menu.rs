@@ -82,7 +82,7 @@ impl Menu {
                     c.rect(1, y, self.size.w - 2, ROW, th().menu_hover);
                 }
                 if let Some(f) = font {
-                    // "Label\tShortcut": shortcut right-aligned and dimmed, like Windows menus.
+                    // "Label\tShortcut": shortcut right-aligned and dimmed, like Windoze menus.
                     let (text, shortcut) = label.split_once('\t').unwrap_or((label, ""));
                     let color = if *action == Action::Inert { th().disabled } else { th().text };
                     c.text(f, 13.0, 16, y, ROW, color, text);
@@ -127,7 +127,7 @@ impl State {
     pub fn open_window_menu(&mut self, surface: &WlSurface, at: Point<i32, Logical>) {
         let Some(w) = self.wm.find(surface) else { return };
         let s = surface.clone();
-        // Windows 10's window menu: entries that don't apply are greyed, not hidden.
+        // Windoze 10's window menu: entries that don't apply are greyed, not hidden.
         let resized = w.maximized.is_some() || w.fullscreen.is_some();
         let mut items = vec![
             ("Restore".into(), if resized { Action::Restore(s.clone()) } else { Action::Inert }),
@@ -136,14 +136,14 @@ impl State {
             (String::new(), Action::Separator),
             ("Close\tAlt+F4".into(), Action::Close(s.clone())),
         ];
-        // A hung app won't answer Close; Windows offers to end it then, so do we.
+        // A hung app won't answer Close; Windoze offers to end it then, so do we.
         if w.unresponsive {
             items.push(("End process".into(), Action::Kill(s)));
         }
         self.open_menu(at, items);
     }
 
-    /// Right-click on a taskbar button: Windows-style jump list, anchored above the taskbar.
+    /// Right-click on a taskbar button: Windoze-style jump list, anchored above the taskbar.
     pub fn open_taskbar_menu(&mut self, surface: &WlSurface, x: i32) {
         let Some(w) = self.wm.find(surface) else { return };
         let s = surface.clone();

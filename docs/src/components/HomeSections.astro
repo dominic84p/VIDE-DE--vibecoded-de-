@@ -327,32 +327,21 @@ const pokedex = [
 </style>
 
 <style is:global>
+  .hero {
+    flex-direction: column !important;
+    align-items: center !important;
+  }
+
   .hero-image {
-    position: relative;
+    order: -1 !important;
     display: flex;
-    align-items: center;
     justify-content: center;
   }
 
-  .hero-image::before {
-    content: '';
-    position: absolute;
-    width: 115%;
-    height: 115%;
-    border-radius: 50%;
-    background: radial-gradient(
-      circle,
-      rgba(0, 120, 215, 0.38) 0%,
-      rgba(56, 189, 248, 0.16) 42%,
-      transparent 70%
-    );
-    filter: blur(28px);
-    z-index: 0;
-    pointer-events: none;
-  }
-
-  .hero-image img {
-    position: relative;
-    z-index: 1;
+  .hero-info,
+  .hero-title-container,
+  .hero-content-container {
+    align-items: center !important;
+    text-align: center !important;
   }
 </style>

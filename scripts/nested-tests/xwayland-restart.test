@@ -1,0 +1,13 @@
+# Regression: when Xwayland dies the compositor must start a new one, or no X11 app can open
+# until the next login. Kills only this test's Xwayland (scoped to the test's session id).
+wait 4
+expect-log "Xwayland ready" 20
+run sh -c 'echo "DISPLAY=$DISPLAY"; xdpyinfo | head -1'
+wait 1
+run sh -c 'pkill -KILL -s "$(ps -o sid= -p $$ | tr -d " ")" -x Xwayland'
+expect-log "Xwayland died" 10
+expect-log "restarting Xwayland" 10
+wait 3
+ipc pointer-pos
+run sh -c 'echo "DISPLAY=$DISPLAY"; xdpyinfo | head -1'
+wait 2

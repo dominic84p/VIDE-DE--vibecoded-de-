@@ -1,7 +1,11 @@
 //! Xwayland: runs an X server so X11-only apps (Steam, many games, older
 //! toolkits) work. Their windows go through the same WM as Wayland ones.
 
-use std::{os::unix::io::OwnedFd, process::Stdio};
+use std::{
+    os::unix::io::OwnedFd,
+    process::Stdio,
+    time::{Duration, Instant},
+};
 
 use smithay::{
     delegate_xwayland_shell,
@@ -17,7 +21,10 @@ use smithay::{
     },
 };
 
-use smithay::reexports::calloop::channel::Sender;
+use smithay::reexports::calloop::{
+    channel::Sender,
+    timer::{TimeoutAction, Timer},
+};
 
 use crate::{
     icons::Icon,
@@ -26,6 +33,17 @@ use crate::{
 };
 
 pub fn start(handle: &LoopHandle<'static, State>, state: &mut State) {
+    spawn(handle, state, true);
+}
+
+/// Start Xwayland. The first start also runs session startup once X is up (or failed),
+/// so startup apps get a DISPLAY; a restart after a crash doesn't run it again.
+fn spawn(handle: &LoopHandle<'static, State>, state: &mut State, first: bool) {
+    let startup = move |state: &mut State| {
+        if first {
+            state.run_startup();
+        }
+    };
     let (xwayland, client) = match XWayland::spawn(
         &state.dh,
         None,
@@ -38,7 +56,7 @@ pub fn start(handle: &LoopHandle<'static, State>, state: &mut State) {
         Ok(x) => x,
         Err(e) => {
             tracing::warn!("Xwayland not started ({e}); X11 apps won't run");
-            state.run_startup();
+            startup(state);
             return;
         }
     };
@@ -50,21 +68,25 @@ pub fn start(handle: &LoopHandle<'static, State>, state: &mut State) {
                 tracing::info!("Xwayland ready on :{display_number}");
                 state.xwm = Some(wm);
                 state.xdisplay = Some(display_number);
-                state.run_startup();
+                if !first {
+                    // A new server may have a new display number; D-Bus-activated apps need it too.
+                    state.spawn("dbus-update-activation-environment --systemd DISPLAY 2>/dev/null || dbus-update-activation-environment DISPLAY");
+                }
+                startup(state);
             }
             Err(e) => {
                 tracing::error!("failed to start X11 window manager: {e}");
-                state.run_startup();
+                startup(state);
             }
         },
         XWaylandEvent::Error => {
             tracing::error!("Xwayland failed to start");
-            state.run_startup();
+            startup(state);
         }
     });
     if let Err(e) = res {
         tracing::error!("failed to watch Xwayland: {e}");
-        state.run_startup();
+        startup(state);
     }
 }
 
@@ -170,6 +192,37 @@ impl XwmHandler for State {
     }
 
     fn new_window(&mut self, _xwm: XwmId, _window: X11Surface) {}
+
+    /// Xwayland died. Its windows are gone with it; without a new server no X11 app
+    /// (Steam, games, Electron apps on X11) can start until the next login.
+    fn disconnected(&mut self, _xwm: XwmId) {
+        tracing::warn!("Xwayland died");
+        self.xwm = None;
+        self.xdisplay = None;
+        for w in std::mem::take(&mut self.x11_overrides).into_iter().chain(std::mem::take(&mut self.x11_pending)) {
+            self.forget_x11(&w);
+        }
+        let dead: Vec<X11Surface> = self.wm.windows.iter().filter_map(|w| w.x11().cloned()).collect();
+        for w in &dead {
+            self.forget_x11(w);
+        }
+
+        let now = Instant::now();
+        self.xwayland_crashes.push_back(now);
+        while self.xwayland_crashes.front().is_some_and(|t| now.duration_since(*t) > Duration::from_secs(60)) {
+            self.xwayland_crashes.pop_front();
+        }
+        if self.xwayland_crashes.len() > 5 {
+            return tracing::error!("Xwayland keeps crashing; not restarting it");
+        }
+        let delay = Duration::from_secs(self.xwayland_crashes.len() as u64);
+        let handle = self.loop_handle.clone();
+        let _ = self.loop_handle.insert_source(Timer::from_duration(delay), move |_, _, state| {
+            tracing::info!("restarting Xwayland");
+            spawn(&handle, state, false);
+            TimeoutAction::Drop
+        });
+    }
     fn new_override_redirect_window(&mut self, _xwm: XwmId, _window: X11Surface) {}
 
     fn map_window_request(&mut self, _xwm: XwmId, window: X11Surface) {

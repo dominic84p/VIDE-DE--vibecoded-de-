@@ -224,6 +224,8 @@ pub struct State {
     pub x11_pending: Vec<X11Surface>,
     /// X11 menus/tooltips: they position themselves and sit above everything.
     pub x11_overrides: Vec<X11Surface>,
+    /// When Xwayland last died, so a server that crashes on every start isn't restarted forever.
+    pub xwayland_crashes: std::collections::VecDeque<std::time::Instant>,
     /// Where background threads deliver X11 window icons (class, icon).
     pub x11_icon_tx: Option<smithay::reexports::calloop::channel::Sender<(String, crate::icons::Icon)>>,
     pub socket_name: String,
@@ -343,6 +345,7 @@ impl State {
             xdisplay: None,
             x11_pending: Vec::new(),
             x11_overrides: Vec::new(),
+            xwayland_crashes: Default::default(),
             x11_icon_tx: None,
             socket_name,
             ipc_path: None,

@@ -151,6 +151,13 @@ fn set_keyboard_focus(&mut self, focus: KeyboardFocus) {
 }
 ```
 
+## When Xwayland Dies
+
+If the X server crashes or is killed, the compositor keeps running: its X11 windows are dropped and
+a new Xwayland starts after a second (longer after repeated crashes; after more than 5 in a minute
+it stops trying). The new server may get a new display number; apps started afterwards, and D-Bus
+activated ones, get the new `DISPLAY`. `scripts/nested-tests/xwayland-restart.test` checks this.
+
 ## Configuration
 
 ```ini

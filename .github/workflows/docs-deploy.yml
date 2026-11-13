@@ -34,6 +34,9 @@ jobs:
           cache: 'npm'
           cache-dependency-path: docs/package-lock.json
 
+      - name: Verify Node version
+        run: node --version && npm --version
+
       - name: Install dependencies
         working-directory: docs
         run: npm ci
@@ -41,6 +44,9 @@ jobs:
       - name: Build Astro Starlight site
         working-directory: docs
         run: npm run build
+
+      - name: Verify dist folder
+        run: ls -la docs/dist/
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

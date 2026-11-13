@@ -132,10 +132,11 @@ Humans who pointed the AI, and the models that wrote the code.
 | Who | What |
 |---|---|
 | [dominic84p](https://github.com/dominic84p) | Project owner, chief prompt engineer |
-| **NVIDIA Nemotron 3 Ultra** | Documentation site (Astro Starlight), GitHub Actions workflow, Task Mangler refactor |
 | [notamitgamer](https://github.com/notamitgamer) | Virtual desktops ([#1](https://github.com/dominic84p/vide-de/pull/1)); prompted Nemotron 3 Ultra for docs site, workflow, Task Mangler |
-| Claude Opus 5.5 (Anthropic) | The compositor, shell and apps |
-| Gemini (Google) | Notifications and Action Center, Wi-Fi and Bluetooth tray, Settings system pages |
+| Clove Twilight ([doughmination](https://github.com/doughmination)) | Vector branding & logo set ([#2](https://github.com/dominic84p/vide-de/pull/2)); prompted Claude Fable 5.2 |
+| **NVIDIA Nemotron 3 Ultra** | Documentation site (Astro Starlight), GitHub Actions workflow, Task Mangler refactor |
+| Claude Opus / Sonnet / Fable (Anthropic) | The compositor, shell, apps, branding SVGs, health watchdogs, and nested tests |
+| Gemini (Google) | Notifications and Action Center, Wi-Fi and Bluetooth tray, Settings system/privacy pages, docs polish |
 
 ## AI Agent Pokédex
 

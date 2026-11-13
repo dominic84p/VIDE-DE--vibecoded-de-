@@ -141,6 +141,8 @@ pub struct State {
     pub data_control_state: DataControlState,
     pub xdg_activation_state: XdgActivationState,
     pub _output_manager_state: OutputManagerState,
+    _fractional_scale_state: smithay::wayland::fractional_scale::FractionalScaleManagerState,
+    _viewporter_state: smithay::wayland::viewporter::ViewporterState,
     pub popups: PopupManager,
     pub layer_shell_state: smithay::wayland::shell::wlr_layer::WlrLayerShellState,
     /// The (single) output; layer surfaces are laid out on it.
@@ -261,6 +263,8 @@ pub struct State {
     pub pending_vt: Option<i32>,
     /// Logical size of the (single, for now) output; input coords map onto this.
     pub output_size: Size<i32, Logical>,
+    /// Physical pixels per logical pixel, possibly fractional (1.25, 1.5).
+    pub output_scale: f64,
     /// Set whenever anything visible changed. Backends only draw when this is set.
     pub needs_redraw: bool,
     pub start_time: Instant,
@@ -298,6 +302,10 @@ impl State {
             data_control_state,
             xdg_activation_state: XdgActivationState::new::<Self>(&dh),
             _output_manager_state: OutputManagerState::new_with_xdg_output::<Self>(&dh),
+            // Fractional scaling: apps that support it draw at 125%/150% themselves and hand us
+            // a bigger buffer through a viewport, instead of being stretched.
+            _fractional_scale_state: smithay::wayland::fractional_scale::FractionalScaleManagerState::new::<Self>(&dh),
+            _viewporter_state: smithay::wayland::viewporter::ViewporterState::new::<Self>(&dh),
             popups: PopupManager::default(),
             layer_shell_state: smithay::wayland::shell::wlr_layer::WlrLayerShellState::new::<Self>(&dh),
             output: None,
@@ -378,6 +386,7 @@ impl State {
             tty: false,
             pending_vt: None,
             output_size: (1280, 800).into(),
+            output_scale: 1.0,
             needs_redraw: true,
             start_time: Instant::now(),
             dh,
@@ -848,6 +857,8 @@ impl CompositorHandler for State {
             }
             self.wm.on_commit(&root);
             self.layer_commit(&root);
+            // Before the first configure goes out, so the app's first buffer is already sharp.
+            self.send_scale(&root);
         }
 
         // xdg-shell: the first commit of a toplevel or popup is answered with a configure.
@@ -1266,3 +1277,83 @@ delegate_dmabuf!(State);
 delegate_drm_syncobj!(State);
 delegate_relative_pointer!(State);
 delegate_pointer_constraints!(State);
+smithay::delegate_fractional_scale!(State);
+smithay::delegate_viewporter!(State);
+
+impl smithay::wayland::fractional_scale::FractionalScaleHandler for State {
+    fn new_fractional_scale(&mut self, surface: WlSurface) {
+        self.send_scale(&surface);
+    }
+}
+
+impl State {
+    /// Tell a surface (and its subsurfaces) the output's scale: the fractional one for apps
+    /// that speak wp-fractional-scale, the rounded-up whole one for the rest, and that it is
+    /// on our output at all, which is what older GTK and Qt read the scale from.
+    pub fn send_scale(&self, surface: &WlSurface) {
+        let scale = self.output_scale;
+        if let Some(output) = &self.output {
+            output.enter(surface);
+        }
+        use smithay::wayland::compositor::{with_surface_tree_downward, TraversalAction};
+        with_surface_tree_downward(
+            surface,
+            (),
+            |_, _, &()| TraversalAction::DoChildren(()),
+            |s, states, &()| {
+                smithay::wayland::fractional_scale::with_fractional_scale(states, |fs| fs.set_preferred_scale(scale));
+                smithay::wayland::compositor::send_surface_state(s, states, scale.ceil() as i32, smithay::utils::Transform::Normal);
+            },
+            |_, _, &()| true,
+        );
+    }
+
+    /// The display scale from Settings, in the 1/120 steps wp-fractional-scale speaks.
+    pub fn display_scale(&self) -> f64 {
+        (self.config.display_scale.clamp(1.0, 3.0) * 120.0).round() / 120.0
+    }
+
+    /// Put the output in `mode` at the Settings scale: tell clients, re-fit the windows to the
+    /// new logical size and drop chrome painted for the old one.
+    pub fn set_output_mode(&mut self, output: &smithay::output::Output, mode: smithay::output::Mode) {
+        let scale = self.display_scale();
+        output.change_current_state(Some(mode), None, Some(smithay::output::Scale::Fractional(scale)), None);
+        output.set_preferred(mode);
+        let changed = scale != self.output_scale;
+        self.output_scale = scale;
+        self.output_size = mode.size.to_f64().to_logical(scale).to_i32_round();
+        self.pointer_loc.x = self.pointer_loc.x.clamp(0.0, self.output_size.w as f64 - 1.0);
+        self.pointer_loc.y = self.pointer_loc.y.clamp(0.0, self.output_size.h as f64 - 1.0);
+        self.arrange_layers();
+        let (work, full) = (self.work_area(), self.output_rect());
+        self.wm.refit(work, full);
+        // Cached chrome was painted for the old size.
+        self.taskbar = None;
+        self.start.menu = None;
+        self.wallpaper = None;
+        if changed {
+            tracing::info!("display scale: {:.0}%", scale * 100.0);
+            crate::canvas::set_scale(scale);
+            self.repaint_shell();
+            for w in &mut self.wm.windows {
+                w.titlebar = None;
+            }
+            self.rescale_surfaces();
+        }
+        self.needs_redraw = true;
+    }
+
+    /// The output's scale changed: re-tell every client surface.
+    pub fn rescale_surfaces(&self) {
+        let mut all: Vec<WlSurface> = Vec::new();
+        for w in &self.wm.windows {
+            all.push(w.surface().clone());
+            all.extend(PopupManager::popups_for_surface(w.surface()).map(|(p, _)| p.wl_surface().clone()));
+        }
+        all.extend(self.x11_overrides.iter().filter_map(|x| x.wl_surface()));
+        all.extend(self.layer_surfaces(&[smithay::wayland::shell::wlr_layer::Layer::Overlay, smithay::wayland::shell::wlr_layer::Layer::Top, smithay::wayland::shell::wlr_layer::Layer::Bottom, smithay::wayland::shell::wlr_layer::Layer::Background]).into_iter().map(|(s, _)| s));
+        for s in &all {
+            self.send_scale(s);
+        }
+    }
+}

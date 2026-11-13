@@ -6,6 +6,9 @@ use vide_config::Config;
 use crate::system::{display_modes, fmt_bytes, fmt_res, launch_desktop_exec, run, spawn};
 use crate::{Category, Settings, SubPage};
 
+/// Display scales offered, in percent (Windoze's list).
+const SCALES: [i32; 7] = [100, 125, 150, 175, 200, 250, 300];
+
 pub const ACCENT: Color32 = Color32::from_rgb(0x00, 0x78, 0xd7);
 pub const ACCENT_HOVER: Color32 = Color32::from_rgb(0x10, 0x6e, 0xbe);
 pub const BG: Color32 = Color32::WHITE;
@@ -360,11 +363,11 @@ impl Settings {
         });
 
         section_title(ui, "Scale and layout");
-        changed |= setting_block(ui, "Change the size of text, apps, and other items", "Whole-number scaling: 100% is native size, 200% doubles everything. In-between sizes aren't supported yet.", |ui| {
+        changed |= setting_block(ui, "Change the size of text, apps, and other items", "100% is native size. Apps that support fractional scaling stay sharp at 125% and 150%; older ones are stretched.", |ui| {
             let mut c = false;
             ui.horizontal(|ui| {
-                let cur = self.config.display_scale.round().max(1.0) as i32 * 100;
-                for pct in [100, 200] {
+                let cur = (self.config.display_scale * 100.0).round() as i32;
+                for pct in SCALES {
                     if ui.selectable_label(cur == pct, format!("{pct}%")).clicked() {
                         self.config.display_scale = pct as f64 / 100.0;
                         c = true;
@@ -1326,11 +1329,11 @@ impl Settings {
     fn page_ease_display(&mut self, ui: &mut egui::Ui) -> bool {
         let mut changed = false;
         section_title(ui, "Make everything bigger");
-        changed |= setting_block(ui, "Display scaling", "Whole-number scaling: 100% is native size, 200% doubles everything.", |ui| {
+        changed |= setting_block(ui, "Display scaling", "100% is native size; 150% makes everything half as big again.", |ui| {
             let mut c = false;
             ui.horizontal(|ui| {
-                let cur = self.config.display_scale.round().max(1.0) as i32 * 100;
-                for pct in [100, 200] {
+                let cur = (self.config.display_scale * 100.0).round() as i32;
+                for pct in SCALES {
                     if ui.selectable_label(cur == pct, format!("{pct}%")).clicked() {
                         self.config.display_scale = pct as f64 / 100.0;
                         c = true;

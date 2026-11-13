@@ -81,7 +81,7 @@ pub struct Window {
     anchor: Option<(u32, Rectangle<i32, Logical>)>,
     pub mapped: bool,
     border: [SolidColorBuffer; 4],
-    titlebar: Option<(TitleKey, MemoryRenderBuffer)>,
+    pub titlebar: Option<(TitleKey, MemoryRenderBuffer)>,
     /// The app stopped answering pings (see health.rs); the titlebar says so.
     pub unresponsive: bool,
 }

@@ -26,6 +26,8 @@ VIDE-DE implements and uses these Wayland protocols via Smithay 0.7.
 | `xdg_decoration` | 1 | Server-side decorations | `DecorationState` |
 | `zxdg_exporter_v2` / `zxdg_importer_v2` | 1 | xdg-foreign: portal dialogs attach to the app that opened them | `XdgForeignState` |
 | `wlr_layer_shell` | 1 | Desktop, panels, overlays | `LayerShellState` |
+| `wp_fractional_scale_v1` | 1 | Tells apps the exact display scale (125%, 150%) so they draw sharp at it; others get the rounded-up `preferred_buffer_scale` | `FractionalScaleManagerState` |
+| `wp_viewporter` | 1 | Lets fractionally scaled apps hand over a bigger buffer for their logical size | `ViewporterState` |
 | `wlr_foreign_toplevel` | 2 | Window management for external tools | (Not implemented) |
 
 ## Input Protocols
@@ -149,8 +151,6 @@ fn screencopy_frame(&mut self, output: WlOutput, cursor: bool) -> ScreencopyFram
 | Protocol | Reason |
 |----------|--------|
 | `xdg_activation_v1` | Not needed yet |
-| `fractional_scale_v1` | Not needed |
-| `viewporter` | Not needed |
 | `wp_presentation` | Not needed |
 | `linux_dmabuf_v1` | Used via Smithay internal |
 | `wlr_foreign_toplevel` | For external tools (task switchers) |

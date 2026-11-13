@@ -13,7 +13,7 @@ Complete reference for `~/.config/vide-de/settings.conf` as defined in `config/s
 |---|---|---|---|
 | `wallpaper` | path | `~/.local/share/vide-de/wallpapers/bloom.png` | Desktop wallpaper image (drawn by `vide-desktop`) |
 | `display_mode` | string | `""` | Monitor mode as `WIDTHxHEIGHT@HZ` (e.g. `2560x1440@144`); empty = monitor's preferred mode. Applied live in TTY mode |
-| `display_scale` | float | `1.0` | UI scale (`1.0` = 100%, `2.0` = 200%). Applied live in TTY mode |
+| `display_scale` | float | `1.0` | UI scale, fractional allowed (`1.0` = 100%, `1.5` = 150%; 1.0–3.0). Applied live |
 | `night_light` | bool | `false` | Warm the screen to cut blue light |
 | `night_light_strength` | float | `0.5` | Night light warmth (`0.0` to `1.0`) |
 | `direct_scanout` | bool | `false` | Ultra Performance Mode: bypass compositing for fullscreen apps (off by default for NVIDIA stability) |

@@ -205,6 +205,12 @@ struct Drive {
     path: PathBuf,
     fs: String,
     removable: bool,
+    /// Device node, for udisks.
+    dev: PathBuf,
+    /// Not mounted yet: `path` is the device node and opening it mounts it.
+    mounted: bool,
+    /// Partition size, for unmounted drives (no statvfs without a mount).
+    size: u64,
     /// Free and total bytes.
     usage: Option<(u64, u64)>,
 }
@@ -241,6 +247,7 @@ enum Act {
     PinSelected,
     Pin(PathBuf),
     Unpin(PathBuf),
+    Eject(PathBuf),
     Restore(bool),
     EmptyTrash,
     Zip,
@@ -294,6 +301,8 @@ struct Exploder {
     /// Background work finished and the folder should be re-read.
     dirty: Arc<AtomicBool>,
     notice: Arc<Mutex<Option<String>>>,
+    /// Where a drive we just mounted ended up, to open it.
+    mounted_at: Arc<Mutex<Option<PathBuf>>>,
     dir_mtime: Option<SystemTime>,
     last_poll: f64,
     /// Items per row (grid views) or per column (list view), for arrow keys.
@@ -346,6 +355,7 @@ impl Exploder {
             search_rx: None,
             dirty: Arc::new(AtomicBool::new(false)),
             notice: Arc::new(Mutex::new(None)),
+            mounted_at: Arc::new(Mutex::new(None)),
             dir_mtime: None,
             last_poll: 0.0,
             stride: 1,
@@ -483,6 +493,12 @@ impl Exploder {
 
     fn go(&mut self, loc: Loc) {
         if loc == self.loc {
+            return;
+        }
+        if let Loc::Dir(p) = &loc
+            && let Some(d) = self.drives.iter().find(|d| !d.mounted && d.path == *p)
+        {
+            self.mount(d.dev.clone());
             return;
         }
         if !matches!(loc, Loc::Search(..)) {
@@ -843,6 +859,45 @@ impl Exploder {
         });
     }
 
+    /// Mounts an unmounted drive through udisks (the session's polkit agent asks for a
+    /// password if the disk needs one) and opens it once it's there.
+    fn mount(&mut self, dev: PathBuf) {
+        self.status = Some(format!("Mounting {}…", dev.display()));
+        let (notice, at) = (self.notice.clone(), self.mounted_at.clone());
+        std::thread::spawn(move || {
+            let out = std::process::Command::new("udisksctl").arg("mount").arg("-b").arg(&dev).output();
+            let mnt = drives().into_iter().find(|d| d.mounted && d.dev == dev).map(|d| d.path);
+            match (mnt, out) {
+                (Some(m), _) => *at.lock().unwrap() = Some(m),
+                (None, Ok(o)) => {
+                    let err = String::from_utf8_lossy(&o.stderr);
+                    let why = err.lines().rev().find(|l| !l.trim().is_empty()).unwrap_or("unknown error").trim();
+                    *notice.lock().unwrap() = Some(format!("Couldn't mount {}: {why}", dev.display()));
+                }
+                (None, Err(_)) => *notice.lock().unwrap() = Some("Couldn't mount the drive (is udisks2 installed?)".into()),
+            }
+        });
+    }
+
+    /// Unmounts a drive, and powers it off when it's removable so it's safe to pull out.
+    fn eject(&mut self, d: &Drive) {
+        if self.here().is_some_and(|h| h.starts_with(&d.path)) {
+            self.go(Loc::ThisPc);
+        }
+        let (dev, removable) = (d.dev.clone(), d.removable);
+        let (notice, dirty) = (self.notice.clone(), self.dirty.clone());
+        std::thread::spawn(move || {
+            let ok = std::process::Command::new("udisksctl").arg("unmount").arg("-b").arg(&dev).status().is_ok_and(|s| s.success());
+            if !ok {
+                *notice.lock().unwrap() = Some(format!("Couldn't unmount {}: something is still using it", dev.display()));
+            } else if removable {
+                let _ = std::process::Command::new("udisksctl").arg("power-off").arg("-b").arg(&dev).status();
+                *notice.lock().unwrap() = Some("Safe to remove hardware".into());
+            }
+            dirty.store(true, Ordering::Relaxed);
+        });
+    }
+
     fn show_props(&mut self) {
         let paths = self.targets();
         if paths.is_empty() {
@@ -1025,6 +1080,11 @@ impl Exploder {
                         self.select_paths(&[from]);
                         self.scroll_to = self.selected.first().copied();
                     }
+                }
+            }
+            Act::Eject(p) => {
+                if let Some(d) = self.drives.iter().find(|d| d.path == p).cloned() {
+                    self.eject(&d);
                 }
             }
             Act::Refresh => {
@@ -2216,7 +2276,9 @@ impl Exploder {
                 }
                 Some(d) => {
                     paint_text(ui, pos2(x, rect.top() + 14.0), Align2::LEFT_CENTER, &name, 12.5, TEXT, w, 1);
-                    if let Some((free, total)) = d.usage {
+                    if !d.mounted {
+                        paint_text(ui, pos2(x, rect.top() + 34.0), Align2::LEFT_CENTER, &format!("{} · not mounted", disk_size(d.size)), 12.0, DIM, w, 1);
+                    } else if let Some((free, total)) = d.usage {
                         let bar = Rect::from_min_size(pos2(x, rect.top() + 25.0), vec2(w.min(190.0), 14.0));
                         let used = if total > 0 { 1.0 - free as f32 / total as f32 } else { 0.0 };
                         p.rect_filled(bar, 0.0, BAR_BG);
@@ -2247,6 +2309,13 @@ impl Exploder {
                 if ui.button("Pin to Quick access").clicked() {
                     acts.push(Act::Pin(path.clone()));
                     ui.close();
+                }
+                if let Some(d) = drive.as_ref().filter(|d| d.mounted && !d.dev.as_os_str().is_empty() && !is_system_mount(&d.path)) {
+                    ui.separator();
+                    if ui.button(if d.removable { "Eject" } else { "Unmount" }).clicked() {
+                        acts.push(Act::Eject(path.clone()));
+                        ui.close();
+                    }
                 }
                 ui.separator();
                 if ui.button("Copy").clicked() {
@@ -2511,6 +2580,12 @@ impl eframe::App for Exploder {
         if let Some(n) = self.notice.lock().unwrap().take() {
             self.status = Some(n);
         }
+        let mounted_at = self.mounted_at.lock().unwrap().take();
+        if let Some(m) = mounted_at {
+            self.drives = drives();
+            self.status = None;
+            self.go(Loc::Dir(m));
+        }
         if let Some(rx) = &self.search_rx {
             let new: Vec<Entry> = rx.try_iter().collect();
             if !new.is_empty() {
@@ -2530,6 +2605,10 @@ impl eframe::App for Exploder {
         let now = ctx.input(|i| i.time);
         if now - self.last_poll > 1.0 && self.renaming.is_none() {
             self.last_poll = now;
+            // Drives come and go (USB sticks, mounts from elsewhere).
+            if self.loc == Loc::ThisPc || self.pc_open {
+                self.drives = drives();
+            }
             let m = match &self.loc {
                 Loc::Dir(d) => Some(mtime(d)),
                 Loc::Trash => Some(mtime(&trash_dir().join("files"))),
@@ -3208,33 +3287,130 @@ fn user_folders() -> Vec<(String, PathBuf, &'static str)> {
     .collect()
 }
 
-/// Real disks from /proc/mounts: the root, a separate /home, and removable media.
+/// Every disk with a filesystem, mounted or not, like Explorer's drive letters. A filesystem
+/// mounted in several places (btrfs subvolumes) is one drive. Unmounted ones have their
+/// device node as `path` and are mounted through udisks when opened.
 fn drives() -> Vec<Drive> {
     let mounts = std::fs::read_to_string("/proc/mounts").unwrap_or_default();
-    let mut out = Vec::new();
+    // Device -> (mount point, fs type), keeping the mount Explorer would call the drive.
+    let mut mounted: Vec<(PathBuf, String, String)> = Vec::new();
+    let rank = |m: &str| match m {
+        "/" => 0,
+        "/home" => 1,
+        _ => 2,
+    };
     for line in mounts.lines() {
         let f: Vec<&str> = line.split_whitespace().collect();
         if f.len() < 3 || !f[0].starts_with("/dev/") {
             continue;
         }
-        let mnt = f[1].replace("\\040", " ");
-        let removable = mnt.starts_with("/run/media") || mnt.starts_with("/media") || mnt.starts_with("/mnt");
-        let label = match mnt.as_str() {
-            "/" | "/home" => format!("Local Disk ({mnt})"),
-            _ if removable => mnt.rsplit('/').next().unwrap_or(&mnt).to_string(),
-            _ => continue,
-        };
-        if out.iter().any(|d: &Drive| d.path == Path::new(&mnt)) {
+        let mnt = unescape_mount(f[1]);
+        if matches!(mnt.as_str(), "/boot" | "/efi" | "/boot/efi" | "/swap") {
             continue;
         }
-        let path = PathBuf::from(&mnt);
-        out.push(Drive { label, usage: disk_usage(&path), path, fs: f[2].to_string(), removable });
+        let dev = std::fs::canonicalize(f[0]).unwrap_or_else(|_| PathBuf::from(f[0]));
+        match mounted.iter_mut().find(|(d, _, _)| *d == dev) {
+            Some(m) if rank(&mnt) < rank(&m.1) => m.1 = mnt,
+            Some(_) => {}
+            None => mounted.push((dev, mnt, f[2].to_string())),
+        }
+    }
+    let mut out = Vec::new();
+    for (dev, mnt, fs) in &mounted {
+        let info = BlockInfo::of(dev);
+        if info.as_ref().is_some_and(|i| i.ignore) {
+            continue;
+        }
+        let removable = info.as_ref().is_some_and(|i| i.removable) || mnt.starts_with("/run/media") || mnt.starts_with("/media");
+        let label = match (mnt.as_str(), info.as_ref().and_then(|i| i.label.clone())) {
+            ("/" | "/home", _) => format!("Local Disk ({mnt})"),
+            (_, Some(l)) => format!("{l} ({mnt})"),
+            _ if removable => mnt.rsplit('/').next().unwrap_or(mnt).to_string(),
+            _ => format!("Local Disk ({mnt})"),
+        };
+        let path = PathBuf::from(mnt);
+        out.push(Drive { label, usage: disk_usage(&path), path, dev: dev.clone(), fs: fs.clone(), removable, mounted: true, size: 0 });
     }
     if !out.iter().any(|d| d.path == Path::new("/")) {
-        out.insert(0, Drive { label: "Local Disk (/)".into(), path: "/".into(), fs: String::new(), removable: false, usage: disk_usage(Path::new("/")) });
+        out.insert(0, Drive { label: "Local Disk (/)".into(), path: "/".into(), dev: PathBuf::new(), fs: String::new(), removable: false, mounted: true, size: 0, usage: disk_usage(Path::new("/")) });
     }
-    out.sort_by_key(|d| (d.removable, d.path.clone()));
+    for e in std::fs::read_dir("/sys/class/block").into_iter().flatten().flatten() {
+        let name = e.file_name().to_string_lossy().into_owned();
+        if ["loop", "zram", "ram", "nbd"].iter().any(|p| name.starts_with(p)) {
+            continue;
+        }
+        let dev = PathBuf::from("/dev").join(&name);
+        if mounted.iter().any(|(d, _, _)| *d == dev) {
+            continue;
+        }
+        let Some(info) = BlockInfo::of(&dev) else { continue };
+        if info.ignore || !info.filesystem {
+            continue;
+        }
+        let size = std::fs::read_to_string(e.path().join("size")).ok().and_then(|s| s.trim().parse::<u64>().ok()).unwrap_or(0) * 512;
+        let label = info.label.clone().unwrap_or_else(|| format!("{} Volume", disk_size(size)));
+        out.push(Drive { label, path: dev.clone(), dev, fs: info.fs, removable: info.removable, mounted: false, size, usage: None });
+    }
+    out.sort_by_key(|d| (d.removable, !d.mounted, d.path != Path::new("/"), d.label.to_lowercase()));
     out
+}
+
+/// Mounts the system runs from; unmounting them isn't something Explorer offers either.
+fn is_system_mount(p: &Path) -> bool {
+    ["/", "/home", "/usr", "/var", "/boot", "/opt", "/srv", "/nix"].iter().any(|s| p == Path::new(s)) || p.starts_with("/var")
+}
+
+/// What udev knows about a block device (the same database lsblk reads, no root needed).
+struct BlockInfo {
+    fs: String,
+    label: Option<String>,
+    filesystem: bool,
+    removable: bool,
+    /// udisks' own rules hide it (EFI and recovery partitions).
+    ignore: bool,
+}
+
+impl BlockInfo {
+    fn of(dev: &Path) -> Option<BlockInfo> {
+        use std::os::unix::fs::MetadataExt;
+        let rdev = std::fs::metadata(dev).ok()?.rdev();
+        let (major, minor) = (libc::major(rdev), libc::minor(rdev));
+        let data = std::fs::read_to_string(format!("/run/udev/data/b{major}:{minor}")).ok()?;
+        let get = |k: &str| data.lines().find_map(|l| l.strip_prefix("E:")?.strip_prefix(k)?.strip_prefix('=')).map(str::to_string);
+        // A partition's removable flag lives on its disk.
+        let sys = std::fs::canonicalize(format!("/sys/dev/block/{major}:{minor}")).ok()?;
+        let disk = if sys.join("partition").exists() { sys.parent()?.to_path_buf() } else { sys };
+        let removable = get("ID_BUS").as_deref() == Some("usb") || std::fs::read_to_string(disk.join("removable")).is_ok_and(|r| r.trim() == "1");
+        Some(BlockInfo {
+            fs: get("ID_FS_TYPE").unwrap_or_default(),
+            label: get("ID_FS_LABEL_ENC").map(|l| unescape_mount(&l)).filter(|l| !l.is_empty()),
+            filesystem: get("ID_FS_USAGE").as_deref() == Some("filesystem"),
+            removable,
+            ignore: get("UDISKS_IGNORE").as_deref() == Some("1"),
+        })
+    }
+}
+
+/// Undoes the octal (`\040`) and hex (`\x20`) escapes in /proc/mounts and udev labels.
+fn unescape_mount(s: &str) -> String {
+    let b = s.as_bytes();
+    let mut out = Vec::with_capacity(b.len());
+    let mut i = 0;
+    while i < b.len() {
+        let hex = |r: &[u8]| std::str::from_utf8(r).ok().and_then(|t| u8::from_str_radix(t, 16).ok());
+        let oct = |r: &[u8]| std::str::from_utf8(r).ok().and_then(|t| u8::from_str_radix(t, 8).ok());
+        if b[i] == b'\\' && b.get(i + 1) == Some(&b'x') && let Some(c) = b.get(i + 2..i + 4).and_then(hex) {
+            out.push(c);
+            i += 4;
+        } else if b[i] == b'\\' && let Some(c) = b.get(i + 1..i + 4).and_then(oct) {
+            out.push(c);
+            i += 4;
+        } else {
+            out.push(b[i]);
+            i += 1;
+        }
+    }
+    String::from_utf8_lossy(&out).into_owned()
 }
 
 /// Free and total bytes on the filesystem holding `p`.

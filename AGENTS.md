@@ -78,6 +78,18 @@ the WM in `src/wm.rs` is deliberately our own.
   On the host's bus our tray watcher would collide with the host desktop's. And never
   request a D-Bus name with `ReplaceExisting`: zbus's builder `.name()` does by default,
   and that once stole and killed Plasma's tray.
+- **Give nested tests their own `XDG_RUNTIME_DIR` too, set before the bus starts**:
+  `XDG_RUNTIME_DIR=/tmp/vt WAYLAND_DISPLAY=/run/user/$UID/wayland-1 dbus-run-session -- ...`
+  (the dir must be mode 700 and its path short: Unix sockets cap at about 108 characters).
+  Our apps make D-Bus start portals, and an activated service inherits the *bus's*
+  environment, not your script's. If that is the real runtime dir, a second
+  `xdg-document-portal` remounts `/run/user/$UID/doc` and the human's Flatpak apps stop
+  launching (`bwrap: Can't find source path .../doc/by-app/...`). Repair:
+  `systemctl --user restart xdg-document-portal`. Check `mount | grep /run/user/$UID/doc`
+  before and after a run.
+- **Never `pkill` a test by name.** It matches the human's own session, which is the
+  compositor they are using right now. Start the run with `setsid` so it has its own
+  process group, and signal only that group (`kill -TERM -- -$PGID`).
 - `VIBE_DEBUG_SHOT=1` makes the compositor screenshot itself after 6 s, so you can check
   a nested run without capturing the user's screen.
 - If you screenshot the screen to check the nested window, the user's own

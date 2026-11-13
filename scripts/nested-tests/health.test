@@ -1,0 +1,14 @@
+# A hung app is noticed, named and marked; a wedged compositor loop is reported. Both used to
+# be invisible: a freeze left nothing in the log.
+run exec ./target/release/vide-about
+expect-window vide-about 20
+wait 1
+stop 1
+expect-log "isn't answering pings" 25
+wait 1
+shot hung
+cont 1
+expect-log "is answering again" 20
+ipc stall 4
+expect-log "main loop stuck" 10
+expect-log "main loop is moving again" 10

@@ -35,6 +35,10 @@ the WM in `src/wm.rs` is deliberately our own.
   (`vide-about`, `vide-settings`, `powerslop`, `file-exploder`, `task-mangler`), separate egui programs. `apps::install_builtin` registers them as
   .desktop entries on startup. PowerSlop uses egui 0.31 (egui_term's version).
   Our apps are Windows puns styled like their Windows originals.
+- `health.rs`: why a freeze leaves a trace. Pings every app's xdg client and logs the ones that stop
+  answering (and puts "(Not responding)" in their titlebar); a watchdog thread logs when our own main
+  loop or a TTY page flip stalls. Grep `~/vibe.log` for `answering pings`, `main loop stuck`, `page flip`,
+  `protocol error`.
 - `layers.rs`: wlr-layer-shell, so separate programs can be the desktop, panels or
   overlays. `desktop/` is `vide-desktop`, our desktop (wallpaper + icons) as an SCTK
   client on the background layer; the compositor starts it. Keep desktop features

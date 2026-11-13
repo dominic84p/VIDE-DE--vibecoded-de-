@@ -279,6 +279,7 @@ pub fn run(event_loop: &mut EventLoop<'static, State>, state: &mut State) -> Res
                 tracing::warn!("frame_submitted: {e:?}");
             }
             t.frame_pending = false;
+            crate::health::flip_done();
             render::send_frames(state, state.start_time.elapsed().as_millis() as u32);
         }
         DrmEvent::Error(e) => tracing::error!("drm: {e}"),
@@ -311,7 +312,9 @@ pub fn run(event_loop: &mut EventLoop<'static, State>, state: &mut State) -> Res
     })?;
 
     while state.running {
+        crate::health::enter(crate::health::Phase::Dispatch);
         event_loop.dispatch(None, state)?;
+        crate::health::enter(crate::health::Phase::Render);
 
         if std::mem::take(&mut state.mouse_config_dirty) {
             for d in devices.borrow_mut().iter_mut() {
@@ -349,6 +352,7 @@ pub fn run(event_loop: &mut EventLoop<'static, State>, state: &mut State) -> Res
                 Ok(res) if !res.is_empty => match t.output.queue_frame(()) {
                     Ok(()) => {
                         t.frame_pending = true;
+                        crate::health::flip_queued();
                         crate::screenshot::screencast_tick(&mut t.renderer, state);
                     }
                     Err(e) => tracing::warn!("queue_frame: {e:?}"),
@@ -359,6 +363,7 @@ pub fn run(event_loop: &mut EventLoop<'static, State>, state: &mut State) -> Res
         }
         drop(t);
 
+        crate::health::enter(crate::health::Phase::Flush);
         state.dh.flush_clients()?;
     }
     Ok(())

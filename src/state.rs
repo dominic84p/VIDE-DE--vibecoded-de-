@@ -230,6 +230,7 @@ pub struct State {
     /// Our control socket, handed to apps as $VIDE_IPC.
     pub ipc_path: Option<std::path::PathBuf>,
     pub supervisor: crate::supervisor::Supervisor,
+    pub pings: crate::health::Pings,
     /// Settings changed the monitor mode or scale; the backend applies it when idle.
     pub display_dirty: bool,
     /// `VIBE_TEST_INPUT=1`: the control socket may inject input and write screenshots to a path.
@@ -346,6 +347,7 @@ impl State {
             socket_name,
             ipc_path: None,
             supervisor: Default::default(),
+            pings: Default::default(),
             display_dirty: false,
             test_control: std::env::var_os("VIBE_TEST_INPUT").is_some(),
             screenshot_path: None,
@@ -809,6 +811,10 @@ impl XdgShellHandler for State {
         self.needs_redraw = true;
     }
 
+    fn client_pong(&mut self, client: smithay::wayland::shell::xdg::ShellClient) {
+        self.pong(&client);
+    }
+
     fn new_popup(&mut self, surface: PopupSurface, positioner: PositionerState) {
         surface.with_pending_state(|s| {
             s.geometry = positioner.get_geometry();
@@ -1099,11 +1105,26 @@ impl State {
 #[derive(Default)]
 pub struct ClientState {
     pub compositor_state: CompositorClientState,
+    /// "firefox (pid 1234)", set when the client connects, so we can say who left.
+    pub who: std::sync::OnceLock<String>,
 }
 
 impl ClientData for ClientState {
     fn initialized(&self, _client_id: ClientId) {}
-    fn disconnected(&self, _client_id: ClientId, _reason: DisconnectReason) {}
+    fn disconnected(&self, _client_id: ClientId, reason: DisconnectReason) {
+        let who = self.who.get().map(String::as_str).unwrap_or("a client");
+        match reason {
+            DisconnectReason::ConnectionClosed => tracing::info!("{who} disconnected"),
+            // We (or smithay, on a client's bad request) killed it: say exactly why.
+            DisconnectReason::ProtocolError(e) => tracing::warn!(
+                "{who} was disconnected by a protocol error: {} on {}@{} (code {})",
+                e.message,
+                e.object_interface,
+                e.object_id,
+                e.code
+            ),
+        }
+    }
 }
 
 delegate_compositor!(State);

@@ -82,6 +82,8 @@ pub struct Window {
     pub mapped: bool,
     border: [SolidColorBuffer; 4],
     titlebar: Option<(TitleKey, MemoryRenderBuffer)>,
+    /// The app stopped answering pings (see health.rs); the titlebar says so.
+    pub unresponsive: bool,
 }
 
 impl Window {
@@ -234,7 +236,7 @@ impl Window {
     ) -> Option<(&MemoryRenderBuffer, Point<i32, Logical>)> {
         let rect = self.titlebar_rect()?;
         let key = TitleKey {
-            title: self.title(),
+            title: if self.unresponsive { format!("{} (Not responding)", self.title()) } else { self.title() },
             app_id: crate::apps::icon_for_app_id(apps, &self.app_id()),
             width: rect.size.w,
             active,
@@ -330,6 +332,7 @@ impl Wm {
             mapped: false,
             border: Default::default(),
             titlebar: None,
+            unresponsive: false,
         });
     }
 

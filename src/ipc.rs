@@ -72,6 +72,13 @@ fn handle_client(state: &mut State, stream: UnixStream) {
             }
             state.start_screenshot(false)
         }
+        "stall" => {
+            if !state.test_control {
+                return tracing::warn!("control socket: stall needs VIBE_TEST_INPUT");
+            }
+            // Wedge the main loop on purpose, to prove the watchdog notices.
+            std::thread::sleep(Duration::from_secs(arg.parse().unwrap_or(4)));
+        }
         "popups" => {
             if !state.test_control {
                 return tracing::warn!("control socket: popups needs VIBE_TEST_INPUT");

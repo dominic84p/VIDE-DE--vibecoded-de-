@@ -27,6 +27,8 @@
 #   key NAME[+NAME...]           e.g. key enter, key ctrl+l   (a-z 0-9 esc tab enter space arrows ...)
 #   type TEXT                    lowercase letters, digits, space and . / - , (capitals use shift)
 #   shot NAME                    save OUT/NAME.png
+#   stop N | cont N              SIGSTOP / SIGCONT the Nth `run` program (to fake a hang)
+#   expect-log TEXT [SECS]       wait for TEXT in the compositor's log, else fail
 #   windows                      print the window list
 #   ipc COMMAND...               send any control-socket command and print the reply
 set -euo pipefail
@@ -172,6 +174,20 @@ for n, raw in enumerate(open(os.environ["NT_TEST"]), 1):
             time.sleep(0.1)
         else:
             P(f"FAIL: no screenshot {path}"); failed = True
+    elif cmd in ("stop", "cont"):
+        import signal
+        idx = int(rest) - 1                      # the Nth `run` command, counting from 1
+        kids[idx].send_signal(signal.SIGSTOP if cmd == "stop" else signal.SIGCONT)
+    elif cmd == "expect-log":
+        import shlex
+        words = shlex.split(rest)
+        needle, secs = words[0], (words[1] if len(words) > 1 else "")
+        deadline = time.time() + float(secs or 10)
+        def logged(): return needle in open(os.path.join(OUT, "compositor.log"), errors="replace").read()
+        while time.time() < deadline and not logged():
+            time.sleep(0.4)
+        if not logged():
+            P(f"FAIL: never logged {needle!r}"); failed = True
     elif cmd == "windows":
         P(ipc("windows"), end="")
     elif cmd == "ipc":

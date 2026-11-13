@@ -3,6 +3,7 @@ mod canvas;
 mod cursor;
 mod desktops;
 mod focus;
+mod health;
 mod icons;
 mod input;
 mod ipc;
@@ -57,8 +58,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let socket = ListeningSocketSource::new_auto()?;
     let socket_name = socket.socket_name().to_string_lossy().into_owned();
     event_loop.handle().insert_source(socket, |stream, _, state| {
-        if let Err(e) = state.dh.insert_client(stream, Arc::new(ClientState::default())) {
-            tracing::warn!("rejected client: {e}");
+        let data = Arc::new(ClientState::default());
+        match state.dh.insert_client(stream, data.clone()) {
+            Ok(client) => {
+                if let Ok(c) = client.get_credentials(&state.dh) {
+                    let name = std::fs::read_to_string(format!("/proc/{}/comm", c.pid)).map(|n| n.trim().to_string()).unwrap_or_else(|_| "?".into());
+                    let _ = data.who.set(format!("{name} (pid {})", c.pid));
+                }
+            }
+            Err(e) => tracing::warn!("rejected client: {e}"),
         }
     })?;
 
@@ -86,9 +94,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         });
         supervisor::guard("supervisor", || state.supervisor_tick());
         supervisor::guard("toasts", || state.toast_tick());
+        supervisor::guard("pings", || state.ping_tick());
         TimeoutAction::ToDuration(Duration::from_secs(1))
     })?;
 
+    health::start();
     tracing::info!("listening on {socket_name}");
     apps::install_builtin();
     let mut state = State::new(dh, event_loop.handle(), socket_name);

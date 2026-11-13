@@ -53,7 +53,9 @@ pub fn run(event_loop: &mut EventLoop<'static, State>, state: &mut State) -> Res
     })?;
 
     while state.running {
+        crate::health::enter(crate::health::Phase::Dispatch);
         event_loop.dispatch(None, state)?;
+        crate::health::enter(crate::health::Phase::Render);
 
         if let Some(region) = state.screenshot_requested.take() {
             crate::screenshot::take(backend.renderer(), state, region);
@@ -75,6 +77,7 @@ pub fn run(event_loop: &mut EventLoop<'static, State>, state: &mut State) -> Res
             render::send_frames(state, state.start_time.elapsed().as_millis() as u32);
         }
 
+        crate::health::enter(crate::health::Phase::Flush);
         state.dh.flush_clients()?;
     }
     Ok(())

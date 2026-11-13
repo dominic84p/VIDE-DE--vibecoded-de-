@@ -175,6 +175,8 @@ pub struct State {
     pub start: Start,
     pub pins: crate::pins::Pins,
     pub task_drag: Option<crate::pins::TaskDrag>,
+    /// Taskbar buttons in the order they were dragged into; empty until the first drag.
+    pub task_order: Vec<crate::pins::TaskKey>,
     pub start_drag: Option<crate::pins::StartDrag>,
     pub file_index: crate::search::FileIndex,
     pub menu: Option<crate::menu::Menu>,
@@ -323,6 +325,7 @@ impl State {
             start: Start::default(),
             pins: crate::pins::Pins::load(),
             task_drag: None,
+            task_order: Vec::new(),
             start_drag: None,
             file_index: Default::default(),
             menu: None,

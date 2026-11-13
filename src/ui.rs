@@ -83,6 +83,8 @@ pub struct TaskItem {
     /// Desktop-file id, when pinned.
     pub pinned: Option<String>,
     pub focused: bool,
+    /// What the button is, for keeping it where it was dragged.
+    pub key: crate::pins::TaskKey,
 }
 
 #[derive(Clone, PartialEq)]

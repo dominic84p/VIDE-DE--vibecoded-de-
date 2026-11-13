@@ -219,6 +219,7 @@ impl State {
                 icon: app.icon.clone(),
                 pinned: Some(id.clone()),
                 focused: mine.iter().any(|w| is_focused(w)),
+                key: TaskKey::App(id.clone()),
             });
         }
         for w in &windows {
@@ -239,9 +240,31 @@ impl State {
                 icon,
                 pinned: None,
                 focused: is_focused(w),
+                key: TaskKey::Window(w.id),
             });
         }
+        // Where buttons were dragged to; anything new (a window just opened) goes at the end.
+        out.sort_by_key(|it| self.task_order.iter().position(|k| *k == it.key).unwrap_or(usize::MAX));
         out
+    }
+
+    /// Put a taskbar button at position `slot`, and keep the pinned list (which outlives the
+    /// session) in the same order.
+    pub fn place_task(&mut self, key: TaskKey, slot: usize) {
+        let mut order: Vec<TaskKey> = self.taskbar_items(None).into_iter().map(|i| i.key).collect();
+        order.retain(|k| *k != key);
+        order.insert(slot.min(order.len()), key);
+        let pinned: Vec<String> = order
+            .iter()
+            .filter_map(|k| match k {
+                TaskKey::App(id) if self.pins.taskbar.contains(id) => Some(id.clone()),
+                _ => None,
+            })
+            .collect();
+        self.pins.taskbar = pinned;
+        self.task_order = order;
+        self.taskbar = None;
+        self.needs_redraw = true;
     }
 
     fn client_proc_name(&self, surface: &WlSurface) -> Option<String> {
@@ -258,10 +281,9 @@ impl State {
     /// Left press on a taskbar button. Pinned buttons wait for the release, since
     /// the press may turn into a drag that reorders them.
     pub fn press_task_button(&mut self, i: usize, x: f64) {
-        let pinned = self.taskbar.as_ref().and_then(|t| t.key.items.get(i)).and_then(|it| it.pinned.clone());
-        match pinned {
-            Some(id) => self.task_drag = Some(TaskDrag { id, start_x: x, moved: false, index: i }),
-            None => self.click_task_button(i),
+        // Any button can be dragged along the taskbar; a press that doesn't move is a click.
+        if let Some(key) = self.taskbar.as_ref().and_then(|t| t.key.items.get(i)).map(|it| it.key.clone()) {
+            self.task_drag = Some(TaskDrag { key, start_x: x, moved: false, index: i });
         }
     }
 
@@ -272,14 +294,12 @@ impl State {
             return;
         }
         d.moved = true;
+        let key = d.key.clone();
         let slot = ((x as i32 - crate::ui::TASK_BUTTONS_X) / crate::ui::TASK_W).max(0) as usize;
-        let slot = slot.min(self.pins.taskbar.len().saturating_sub(1));
-        if let Some(from) = self.pins.taskbar.iter().position(|p| *p == d.id) {
-            if from != slot {
-                let id = self.pins.taskbar.remove(from);
-                self.pins.taskbar.insert(slot, id);
-                self.needs_redraw = true;
-            }
+        let items = self.taskbar_items(None);
+        let slot = slot.min(items.len().saturating_sub(1));
+        if items.iter().position(|it| it.key == key).is_some_and(|from| from != slot) {
+            self.place_task(key, slot);
         }
     }
 
@@ -409,9 +429,10 @@ impl State {
         }
         let id = self.apps[d.app].id.clone();
         let slot = ((at.x as i32 - crate::ui::TASK_BUTTONS_X + crate::ui::TASK_W / 2) / crate::ui::TASK_W).max(0) as usize;
-        self.pins.taskbar.retain(|p| *p != id);
-        let slot = slot.min(self.pins.taskbar.len());
-        self.pins.taskbar.insert(slot, id);
+        if !self.pins.taskbar.contains(&id) {
+            self.pins.taskbar.push(id.clone());
+        }
+        self.place_task(TaskKey::App(id), slot);
         self.pins.save();
         self.taskbar = None;
         if self.start.open {
@@ -428,9 +449,16 @@ impl State {
     }
 }
 
-/// A pinned taskbar button being held (maybe dragged).
+/// What a taskbar button stands for: a pinned app, or one window of an app that isn't pinned.
+#[derive(Clone, PartialEq, Debug)]
+pub enum TaskKey {
+    App(String),
+    Window(u64),
+}
+
+/// A taskbar button being held (maybe dragged).
 pub struct TaskDrag {
-    pub id: String,
+    pub key: TaskKey,
     pub start_x: f64,
     pub moved: bool,
     /// Its button index when pressed, for a plain click.

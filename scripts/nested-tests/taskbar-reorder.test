@@ -1,0 +1,29 @@
+# Every taskbar button can be dragged left and right, running apps that aren't pinned included;
+# pinned apps keep their new order in pins.conf.
+run target/release/vide-settings
+expect-window Settings 30
+wait 1
+run target/release/vide-about
+expect-window "About VIDE-DE" 30
+wait 1.5
+shot 1-before
+move 568 780
+down
+move 545 780
+move 480 780
+move 424 780
+wait 0.4
+up
+wait 0.8
+shot 2-about-first
+move 520 780
+down
+move 500 780
+move 450 780
+move 424 780
+wait 0.4
+up
+wait 0.8
+shot 3-powerslop-first
+run sh -c 'grep taskbar= "$XDG_CONFIG_HOME/vide-de/pins.conf"'
+wait 1

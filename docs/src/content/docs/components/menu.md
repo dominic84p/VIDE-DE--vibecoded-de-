@@ -51,7 +51,8 @@ enum MenuAction {
 
 Drag an app out of Start (the list or a tile) onto the taskbar to pin it where you drop it, as in
 Windoze 10; its icon follows the pointer with "Pin to taskbar" over the taskbar. A plain click on an
-app in Start launches it on release. Pinned taskbar buttons can be dragged to reorder them.
+app in Start launches it on release. Any taskbar button, pinned or just running, can be dragged left or
+right; pinned apps keep their new order across sessions (`pins.conf`), running ones for the session.
 
 ## Keyboard Navigation
 

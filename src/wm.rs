@@ -353,10 +353,43 @@ impl Wm {
         self.windows.iter().rev().find(|w| !w.minimized && w.mapped && w.workspace == self.current_workspace)
     }
 
+    /// The parent surface of a dialog/transient window, if any.
+    pub fn parent_surface(&self, w: &Window) -> Option<WlSurface> {
+        match &w.kind {
+            WinKind::Wayland(t) => t.parent(),
+            WinKind::X11(x) => x.is_transient_for().and_then(|id| {
+                self.windows
+                    .iter()
+                    .find(|p| p.x11().is_some_and(|px| px.window_id() == id))
+                    .map(|p| p.surface().clone())
+            }),
+        }
+    }
+
     pub fn raise(&mut self, surface: &WlSurface) {
         if let Some(i) = self.windows.iter().position(|w| w.surface() == surface) {
             let w = self.windows.remove(i);
             self.windows.push(w);
+        }
+        // Keep transient/modal children stacked above their parent.
+        let mut raised = vec![surface.clone()];
+        let mut idx = 0;
+        while idx < raised.len() {
+            let parent = raised[idx].clone();
+            let children: Vec<WlSurface> = self
+                .windows
+                .iter()
+                .filter(|w| self.parent_surface(w).as_ref() == Some(&parent) && !raised.contains(w.surface()))
+                .map(|w| w.surface().clone())
+                .collect();
+            for c in children {
+                if let Some(pos) = self.windows.iter().position(|w| w.surface() == &c) {
+                    let child = self.windows.remove(pos);
+                    self.windows.push(child);
+                }
+                raised.push(c);
+            }
+            idx += 1;
         }
     }
 
@@ -391,8 +424,26 @@ impl Wm {
 
     /// Called on every commit of a toplevel's root surface.
     pub fn on_commit(&mut self, surface: &WlSurface) {
+        let first_map = self.find(surface).is_some_and(|w| !w.mapped);
+        let parent_info = if first_map {
+            self.find(surface)
+                .and_then(|w| self.parent_surface(w))
+                .and_then(|ps| self.find(&ps).map(|p| (p.workspace, p.geometry())))
+        } else {
+            None
+        };
         let Some(w) = self.find_mut(surface) else { return };
         w.mapped = true;
+        if let Some((ws, pgeom)) = parent_info {
+            w.workspace = ws;
+            let sz = w.geometry().size;
+            if sz.w > 0 && sz.h > 0 {
+                w.pos = Point::from((
+                    pgeom.loc.x + (pgeom.size.w - sz.w) / 2,
+                    pgeom.loc.y + (pgeom.size.h - sz.h) / 2,
+                ));
+            }
+        }
         if let Some((edges, start)) = w.anchor {
             let size = w.geometry().size;
             if edges & edge::LEFT != 0 {

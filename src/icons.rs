@@ -162,10 +162,43 @@ impl Icons {
         if p.is_absolute() {
             return p.exists().then(|| p.to_path_buf());
         }
-        self.index.get(name).cloned().or_else(|| {
-            let k = norm_key(name);
-            (!k.is_empty()).then(|| self.norm_index.get(&k).cloned()).flatten()
-        })
+        let lookup = |candidate: &str| -> Option<PathBuf> {
+            self.index.get(candidate).cloned().or_else(|| {
+                let k = norm_key(candidate);
+                (!k.is_empty()).then(|| self.norm_index.get(&k).cloned()).flatten()
+            })
+        };
+        if let Some(hit) = lookup(name) {
+            return Some(hit);
+        }
+        // Reverse-DNS app IDs (e.g. com.valvesoftware.Steam, org.gimp.GIMP) -> last segment.
+        if let Some(last) = name.rsplit('.').next().filter(|s| !s.is_empty() && *s != name) {
+            if let Some(hit) = lookup(last) {
+                return Some(hit);
+            }
+        }
+        // Steam app IDs (steam_app_12345 -> steam_icon_12345) and Wine/Electron suffixes.
+        if let Some(id) = name.strip_prefix("steam_app_") {
+            if let Some(hit) = lookup(&format!("steam_icon_{id}")) {
+                return Some(hit);
+            }
+        }
+        for suffix in [".exe", "-bin", "-desktop", ".desktop"] {
+            if let Some(stripped) = name.strip_suffix(suffix) {
+                if let Some(hit) = lookup(stripped) {
+                    return Some(hit);
+                }
+            }
+        }
+        // Hyphenated fallback (e.g. foo-bar-baz -> foo-bar -> foo).
+        let mut cur = name;
+        while let Some((prefix, _)) = cur.rsplit_once('-') {
+            if let Some(hit) = lookup(prefix) {
+                return Some(hit);
+            }
+            cur = prefix;
+        }
+        None
     }
 }
 

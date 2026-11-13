@@ -23,6 +23,7 @@ export default defineConfig({
 				{
 					label: 'Getting Started',
 					items: [
+						{ label: 'Overview', slug: 'index' },
 						{ label: 'Installation', slug: 'getting-started/installation' },
 					],
 				},
@@ -95,14 +96,6 @@ export default defineConfig({
 						{ label: 'Multi-Monitor Setup', slug: 'wiki/multi-monitor' },
 						{ label: 'Gaming Guide', slug: 'wiki/gaming-guide' },
 						{ label: 'Built-in Apps', slug: 'wiki/built-in-apps' },
-					],
-				},
-				{
-					label: 'Extras',
-					items: [
-						{ label: 'Git Browser', link: '/git-browser/' },
-						{ label: 'Changelog', link: '/changelog/' },
-						{ label: 'Contributors', link: '/contributors/' },
 					],
 				},
 			],

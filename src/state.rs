@@ -503,7 +503,9 @@ impl State {
     // ------------------------------------------------------------ launching
 
     pub fn spawn(&self, cmd: &str) {
-        self.spawn_child(cmd);
+        if let Some(child) = self.spawn_child(cmd) {
+            crate::supervisor::reap(child);
+        }
     }
 
     /// Like `spawn`, but hands back the process so the supervisor can watch it.

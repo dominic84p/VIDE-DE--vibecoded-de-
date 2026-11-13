@@ -73,6 +73,14 @@ pub fn spawn_service(name: &'static str, mut run: impl FnMut() + Send + 'static)
     }
 }
 
+/// Collect a launched program's exit status once it ends. Without this every program we
+/// start, once it exits, stays in the process table as a zombie until we do.
+pub fn reap(mut child: Child) {
+    let _ = std::thread::Builder::new().name("reap".into()).spawn(move || {
+        let _ = child.wait();
+    });
+}
+
 struct Watched {
     name: &'static str,
     cmd: String,

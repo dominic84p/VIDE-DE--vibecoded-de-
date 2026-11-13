@@ -225,8 +225,9 @@ impl State {
             return;
         };
         tracing::info!("end process: SIGKILL {pid}");
-        if let Err(e) = std::process::Command::new("kill").args(["-9", &pid.to_string()]).spawn() {
-            tracing::warn!("end process: {e}");
+        match std::process::Command::new("kill").args(["-9", &pid.to_string()]).spawn() {
+            Ok(child) => crate::supervisor::reap(child),
+            Err(e) => tracing::warn!("end process: {e}"),
         }
     }
 

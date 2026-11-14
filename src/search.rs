@@ -68,7 +68,8 @@ pub fn arrange(entries: Vec<Entry>, filter: usize) -> Vec<Entry> {
 
 /// "Top apps" when the search pane opens empty: the most launched, else pinned.
 pub fn top_apps(apps: &[App], pins: &Pins) -> Vec<Entry> {
-    let mut used: Vec<(usize, u32)> = pins.launches.iter().filter_map(|(id, &n)| apps.iter().position(|a| a.id == *id).map(|i| (i, n))).collect();
+    let mut used: Vec<(usize, u32)> =
+        pins.launches.iter().filter_map(|(id, &n)| apps.iter().position(|a| a.id == *id && !a.hidden).map(|i| (i, n))).collect();
     used.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
     let mut out: Vec<usize> = used.into_iter().map(|(i, _)| i).collect();
     for id in &pins.start {
@@ -141,7 +142,7 @@ pub fn fuzzy(hay: &str, query: &str) -> Option<i32> {
 }
 
 pub fn results(query: &str, apps: &[App], hide_kde: bool, pins: &Pins, files: &FileIndex) -> Vec<Entry> {
-    let visible = |a: &&App| !(hide_kde && a.kde);
+    let visible = |a: &&App| !a.hidden && !(hide_kde && a.kde);
     let find = |id: &str| apps.iter().position(|a| a.id == id);
     let mut out = Vec::new();
     let q = query.trim();

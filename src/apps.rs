@@ -13,6 +13,9 @@ pub struct App {
     pub terminal: bool,
     /// Part of KDE (org.kde.* or Categories has KDE), for the "hide KDE apps" setting.
     pub kde: bool,
+    /// NoDisplay / Hidden / not for this desktop: never listed in Start or search, but kept so
+    /// a window of the app still gets its name and icon on the taskbar.
+    pub hidden: bool,
 }
 
 pub fn scan() -> Vec<App> {
@@ -24,7 +27,8 @@ pub fn scan() -> Vec<App> {
     for dir in dirs {
         scan_dir(&dir, 0, &dir, &mut seen, &mut apps);
     }
-    apps.sort_by_key(|a| a.name.to_lowercase());
+    // Visible entries first, so a window matches its listed app before a hidden duplicate.
+    apps.sort_by_key(|a| (a.hidden, a.name.to_lowercase()));
     tracing::info!("found {} apps", apps.len());
     apps
 }
@@ -84,10 +88,10 @@ fn parse(text: &str) -> Option<App> {
             _ => {}
         }
     }
-    if hidden || !is_app {
+    if !is_app {
         return None;
     }
-    Some(App { id: String::new(), wm_class, name: name?, exec: strip_field_codes(&exec?), icon, terminal, kde })
+    Some(App { id: String::new(), wm_class, name: name?, exec: strip_field_codes(&exec?), icon, terminal, kde, hidden })
 }
 
 /// `firefox %u` → `firefox`. We launch apps without file arguments.
@@ -227,5 +231,20 @@ pub fn install_builtin() {
             exe.display()
         );
         write(&share.join(format!("applications/{id}.desktop")), entry.as_bytes());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn hidden_apps_still_match_windows() {
+        let text = "[Desktop Entry]\nType=Application\nName=PhotoHub\nExec=/opt/electron /opt/photohub\nIcon=/opt/photohub/icon.png\nStartupWMClass=PhotoHub\nNoDisplay=true\n";
+        let mut app = parse(text).expect("a NoDisplay app is still an app");
+        app.id = "photohub".into();
+        assert!(app.hidden);
+        let apps = vec![app];
+        assert_eq!(icon_for_app_id(&apps, "PhotoHub"), "/opt/photohub/icon.png");
     }
 }

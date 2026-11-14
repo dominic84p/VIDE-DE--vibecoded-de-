@@ -856,7 +856,7 @@ impl State {
     pub(crate) fn pointer_to(&mut self, pos: Point<f64, Logical>, time: u32) {
         self.pointer_loc = pos;
         self.wm.spawn_at = self.monitor_at(pos).loc;
-        self.needs_redraw = true;
+        self.cursor_moved = true;
 
         // Snipping: the screen is ours until a region is picked.
         if self.snip.is_some() {

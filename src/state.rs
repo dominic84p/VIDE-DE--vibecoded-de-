@@ -273,6 +273,9 @@ pub struct State {
     pub output_scale: f64,
     /// Set whenever anything visible changed. Backends only draw when this is set.
     pub needs_redraw: bool,
+    /// Only the pointer moved. The TTY backend draws that just before the next vblank
+    /// instead of at once, so it doesn't take the flip a game's next frame needs.
+    pub cursor_moved: bool,
     pub start_time: Instant,
 }
 
@@ -396,6 +399,7 @@ impl State {
             output_size: (1280, 800).into(),
             output_scale: 1.0,
             needs_redraw: true,
+            cursor_moved: false,
             start_time: Instant::now(),
             dh,
         }

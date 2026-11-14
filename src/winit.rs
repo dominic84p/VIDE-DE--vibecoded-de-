@@ -65,6 +65,8 @@ pub fn run(event_loop: &mut EventLoop<'static, State>, state: &mut State) -> Res
 
     while state.running {
         crate::health::enter(crate::health::Phase::Dispatch);
+        // Nested, the host paces us; a moved cursor is just another redraw.
+        state.needs_redraw |= std::mem::take(&mut state.cursor_moved);
         // Mid-animation there's already a frame to draw: don't wait for an event first.
         let wait = if state.needs_redraw { Some(std::time::Duration::ZERO) } else { None };
         event_loop.dispatch(wait, state)?;
@@ -78,6 +80,7 @@ pub fn run(event_loop: &mut EventLoop<'static, State>, state: &mut State) -> Res
             crate::screenshot::take(backend.renderer(), state, region);
         }
 
+        state.needs_redraw |= std::mem::take(&mut state.cursor_moved);
         if state.needs_redraw {
             state.needs_redraw = false;
             if tracked != (backend.window_size(), state.output_scale) {

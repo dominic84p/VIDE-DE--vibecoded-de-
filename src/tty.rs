@@ -4,7 +4,11 @@
 //! One GPU, every connected monitor (each on its own CRTC), with hotplug: udev tells us
 //! when a connector changes and we rescan.
 
-use std::{cell::RefCell, rc::Rc};
+use std::{
+    cell::RefCell,
+    rc::Rc,
+    time::{Duration, Instant},
+};
 
 use smithay::{
     backend::{
@@ -101,6 +105,24 @@ struct Screen {
     frame_pending: bool,
     /// Something changed since its last frame.
     dirty: bool,
+    /// Only the cursor moved; draw it at `cursor_deadline`.
+    cursor_dirty: bool,
+    last_vblank: Option<Instant>,
+}
+
+impl Screen {
+    /// When to draw a cursor-only frame. Drawing it right after a vblank queues a flip
+    /// that the game's next frame then has to wait behind, a whole refresh late (every
+    /// frame, while the mouse moves). Waiting until just before the next vblank shows the
+    /// cursor on the same refresh and leaves the slot open for the game until then.
+    fn cursor_deadline(&self, now: Instant) -> Instant {
+        let period = Duration::from_secs_f64(1.0 / self.mode.vrefresh().max(1) as f64);
+        match self.last_vblank {
+            // Not flipping every refresh: we don't know the phase, and nothing's waiting.
+            Some(last) if now < last + period => last + period - (period / 2).min(Duration::from_millis(4)),
+            _ => now,
+        }
+    }
 }
 
 struct Tty {
@@ -193,7 +215,7 @@ fn scan_connectors(t: &mut Tty, state: &mut State) {
         if primary {
             state.pointer_loc = (state.output_size.w as f64 / 2.0, state.output_size.h as f64 / 2.0).into();
         }
-        t.screens.push(Screen { connector: conn.handle(), output: drm_output, wl_output: output, modes, mode, frame_pending: false, dirty: true });
+        t.screens.push(Screen { connector: conn.handle(), output: drm_output, wl_output: output, modes, mode, frame_pending: false, dirty: true, cursor_dirty: false, last_vblank: None });
     }
     state.needs_redraw = true;
 }
@@ -298,6 +320,7 @@ pub fn run(event_loop: &mut EventLoop<'static, State>, state: &mut State) -> Res
                     tracing::warn!("frame_submitted: {e:?}");
                 }
                 sc.frame_pending = false;
+                sc.last_vblank = Some(Instant::now());
             }
             crate::health::flip_done();
             render::send_frames(state, state.start_time.elapsed().as_millis() as u32);
@@ -339,8 +362,19 @@ pub fn run(event_loop: &mut EventLoop<'static, State>, state: &mut State) -> Res
         crate::health::enter(crate::health::Phase::Dispatch);
         // Mid-animation with a monitor free to draw: don't wait for an event. A monitor
         // with a flip in flight wakes us with its vblank anyway.
-        let ready = { let t = tty.borrow(); t.active && t.screens.iter().any(|s| !s.frame_pending) };
-        let wait = if state.needs_redraw && ready { Some(std::time::Duration::ZERO) } else { None };
+        if std::mem::take(&mut state.cursor_moved) {
+            for sc in &mut tty.borrow_mut().screens {
+                sc.cursor_dirty = true;
+            }
+        }
+        let (ready, cursor_wait) = {
+            let t = tty.borrow();
+            let now = Instant::now();
+            let free = || t.screens.iter().filter(|s| !s.frame_pending);
+            let cursor_wait = free().filter(|s| s.cursor_dirty).map(|s| s.cursor_deadline(now).saturating_duration_since(now)).min();
+            (t.active && free().next().is_some(), cursor_wait.filter(|_| t.active))
+        };
+        let wait = if state.needs_redraw && ready { Some(Duration::ZERO) } else { cursor_wait };
         event_loop.dispatch(wait, state)?;
         crate::health::enter(crate::health::Phase::Render);
 
@@ -367,9 +401,17 @@ pub fn run(event_loop: &mut EventLoop<'static, State>, state: &mut State) -> Res
             }
         }
 
-        if std::mem::take(&mut state.needs_redraw) {
+        if std::mem::take(&mut state.cursor_moved) {
             for sc in &mut t.screens {
+                sc.cursor_dirty = true;
+            }
+        }
+        let redraw = std::mem::take(&mut state.needs_redraw);
+        let now = Instant::now();
+        for sc in &mut t.screens {
+            if redraw || (sc.cursor_dirty && !sc.frame_pending && sc.cursor_deadline(now) <= now) {
                 sc.dirty = true;
+                sc.cursor_dirty = false;
             }
         }
         if t.active {

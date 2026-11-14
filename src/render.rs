@@ -33,6 +33,8 @@ use crate::{
 pub const CLEAR: Color32F = Color32F::new(0.0, 0.1, 0.24, 1.0);
 pub const BORDER_ACTIVE: Color32F = Color32F::new(0.0, 0.47, 0.84, 1.0);
 pub const BORDER_IDLE: Color32F = Color32F::new(0.6, 0.6, 0.6, 1.0);
+/// Windoze's yellow accent (`switcher::PIN_COLOR`).
+pub const BORDER_PINNED: Color32F = Color32F::new(1.0, 0.725, 0.0, 1.0);
 
 render_elements! {
     pub Elem<=GlesRenderer>;
@@ -303,8 +305,16 @@ pub fn elements_with(renderer: &mut GlesRenderer, state: &mut State, cursor: boo
         if let Some((buf, at)) = w.titlebar(font, icons, apps, active, hover) {
             out.extend(image(renderer, buf, at, Kind::Unspecified));
         }
-        if w.decorated() && w.maximized.is_none() {
-            for (buf, at) in w.border(if active { BORDER_ACTIVE } else { BORDER_IDLE }) {
+        // Pinned on top: a yellow outline, so it's clear why it won't go behind things.
+        let border = if w.on_top {
+            Some(BORDER_PINNED)
+        } else if w.decorated() && w.maximized.is_none() {
+            Some(if active { BORDER_ACTIVE } else { BORDER_IDLE })
+        } else {
+            None
+        };
+        if let Some(color) = border {
+            for (buf, at) in w.border(color) {
                 out.push(Elem::Solid(SolidColorRenderElement::from_buffer(buf, at.to_physical(1), 1.0, 1.0, Kind::Unspecified)));
             }
         }

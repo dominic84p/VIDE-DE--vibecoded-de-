@@ -18,6 +18,7 @@ description: 'Complete keyboard shortcut list'
 | `Super+Shift+Up` | Snap up |
 | `Super+Shift+Down` | Snap down |
 | `Super+Shift+M` | Toggle maximize (alternate) |
+| `Super+Shift+P` | Pin a window on top: opens a picker of this desktop's windows; click one (or arrows + `Enter`) to keep it above everything, fullscreen apps included. Pick a pinned one to unpin. `Esc` closes. Nested: `Alt+Shift+P` |
 
 ## Workspace (Virtual Desktops)
 

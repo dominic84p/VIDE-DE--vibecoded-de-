@@ -48,6 +48,8 @@ pub enum Action {
     PinTaskbar(String),
     /// Start's account button: Sign out.
     SignOut,
+    /// Keep a window above all others, or stop.
+    OnTop(WlSurface),
 }
 
 /// A row's icon in a jump list: the app's own, or one of our glyphs (SVG drawn in white).
@@ -218,6 +220,8 @@ impl State {
             ("Minimize".into(), Action::Minimize(s.clone())),
             ("Maximize".into(), if w.maximized.is_none() { Action::Maximize(s.clone()) } else { Action::Inert }),
             (String::new(), Action::Separator),
+            (if w.on_top { "Unpin from top" } else { "Always on top\tWin+Shift+P" }.into(), Action::OnTop(s.clone())),
+            (String::new(), Action::Separator),
             ("Close\tAlt+F4".into(), Action::Close(s.clone())),
         ];
         // A hung app won't answer Close; Windoze offers to end it then, so do we.
@@ -232,6 +236,7 @@ impl State {
     pub fn open_taskbar_menu(&mut self, windows: &[WlSurface], x: i32) {
         let Some(last) = windows.last().cloned() else { return };
         let Some(w) = self.wm.find(&last) else { return };
+        let pinned = w.on_top;
         let app = crate::apps::match_app(&self.apps, &w.app_id()).and_then(|a| self.apps.iter().position(|b| b.id == a.id));
         let mut rows = match app {
             Some(i) => self.jump_app_rows(i),
@@ -246,6 +251,8 @@ impl State {
         } else {
             rows.push(("Close window".into(), Action::Close(last.clone()), Some(MenuIcon::Glyph(CLOSE))));
         }
+        let on_top = if pinned { "Unpin from top" } else { "Always on top" };
+        rows.push((on_top.into(), Action::OnTop(last.clone()), None));
         rows.push(("End process".into(), Action::Kill(last), Some(MenuIcon::Glyph(END))));
         self.open_jump_list(x, rows);
     }
@@ -356,6 +363,7 @@ impl State {
                 self.wm.unmaximize(&s);
                 self.focus(Some(s), serial);
             }
+            Action::OnTop(s) => self.toggle_on_top(&s),
             Action::Maximize(s) => {
                 let area = self.work_area();
                 self.wm.maximize(&s, area);

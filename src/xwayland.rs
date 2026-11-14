@@ -332,7 +332,7 @@ impl XwmHandler for State {
 
     fn maximize_request(&mut self, _xwm: XwmId, window: X11Surface) {
         if let Some(s) = self.x11_surface(&window) {
-            let area = self.work_area();
+            let area = self.work_area_of(&s);
             self.wm.maximize(&s, area);
         }
     }
@@ -345,7 +345,7 @@ impl XwmHandler for State {
 
     fn fullscreen_request(&mut self, _xwm: XwmId, window: X11Surface) {
         if let Some(s) = self.x11_surface(&window) {
-            let rect = self.output_rect();
+            let rect = self.screen_of(&s);
             self.wm.fullscreen(&s, rect);
         }
     }

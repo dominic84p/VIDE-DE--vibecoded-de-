@@ -16,8 +16,13 @@ the WM in `src/wm.rs` is deliberately our own.
 
 - `main.rs`: event loop (calloop), client socket, clock timer, picks backend.
 - `winit.rs` / `tty.rs`: nested and real-hardware backends. Both just call
-  `render::elements()` and present the result. `tty.rs` is behind the `tty`
-  cargo feature (needs libseat).
+  `render::elements(view)` for a rectangle of the global layout and present the result.
+  `tty.rs` drives every connected monitor (one CRTC each, rescanned on udev hotplug) and
+  is behind the `tty` cargo feature (needs libseat). Nested, `VIBE_NESTED_MONITORS=2`
+  splits the window into side-by-side monitors.
+- `monitors.rs`: the monitor layout. The primary sits at (0, 0) and carries the shell, so
+  `output_size` / `work_area()` mean the primary; per-window placement uses `screen_of` /
+  `work_area_of`. Others line up to its right (no negative coordinates, which X11 can't have).
 - `state.rs`: `State` plus Wayland protocol handlers (compositor, xdg-shell,
   decorations, seat, selection, popups).
 - `wm.rs`: windows (`WinKind::Wayland` or `WinKind::X11`), stacking,

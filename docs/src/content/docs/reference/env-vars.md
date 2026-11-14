@@ -16,6 +16,7 @@ description: 'All environment variables used by VIDE-DE'
 | `VIBE_DEBUG_DESKTOPS` | — | `1` = open Task View at launch |
 | `VIBE_DEBUG_SWITCHER` | — | `1` = step Alt+Tab after 5s |
 | `VIBE_DEBUG_SHOT` | — | `1` = screenshot after 6s |
+| `VIBE_NESTED_MONITORS` | `1` | Nested only: split the window into this many side-by-side monitors (1–4), to test multi-monitor without the hardware |
 | `VIBE_TEST_INPUT` | — | `1` = enable test-only input injection & diagnostic commands on `$VIDE_IPC` (used by `scripts/nested-test.sh`) |
 | `RUST_LOG` | `info` | Logging level (trace/debug/info/warn/error) |
 | `XDG_RUNTIME_DIR` | `/run/user/$UID` | Runtime directory (Wayland socket, D-Bus) |

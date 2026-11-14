@@ -19,7 +19,7 @@ use smithay::{
     desktop::PopupManager,
     input::pointer::{CursorImageAttributes, CursorImageStatus},
     reexports::wayland_server::protocol::wl_surface::WlSurface,
-    utils::{Logical, Point, Rectangle},
+    utils::{Logical, Physical, Point, Rectangle},
     wayland::compositor::{with_states, with_surface_tree_downward, SurfaceAttributes, TraversalAction},
 };
 
@@ -46,22 +46,35 @@ render_elements! {
 
 pub type BorderPiece<'a> = (&'a SolidColorBuffer, Point<i32, Logical>);
 
-fn image(renderer: &mut GlesRenderer, scale: f64, buf: &MemoryRenderBuffer, at: Point<i32, Logical>, kind: Kind) -> Option<Elem> {
-    MemoryRenderBufferRenderElement::from_buffer(renderer, at.to_f64().to_physical(scale), buf, None, None, None, kind)
+/// The part of the global layout a frame shows (one monitor, or all of them nested) and
+/// at what scale. Elements are placed relative to its corner.
+#[derive(Clone, Copy)]
+pub struct View {
+    pub loc: Point<i32, Logical>,
+    pub scale: f64,
+}
+
+impl View {
+    fn px(&self, at: Point<i32, Logical>) -> Point<i32, Physical> {
+        (at - self.loc).to_physical_precise_round(self.scale)
+    }
+}
+
+fn image(renderer: &mut GlesRenderer, v: &View, buf: &MemoryRenderBuffer, at: Point<i32, Logical>, kind: Kind) -> Option<Elem> {
+    MemoryRenderBufferRenderElement::from_buffer(renderer, (at - v.loc).to_f64().to_physical(v.scale), buf, None, None, None, kind)
         .ok()
         .map(Elem::Image)
 }
 
-fn surface_tree(renderer: &mut GlesRenderer, scale: f64, s: &WlSurface, at: Point<i32, Logical>, kind: Kind) -> Vec<Elem> {
-    render_elements_from_surface_tree(renderer, s, at.to_physical_precise_round(scale), scale, 1.0, kind)
+fn surface_tree(renderer: &mut GlesRenderer, v: &View, s: &WlSurface, at: Point<i32, Logical>, kind: Kind) -> Vec<Elem> {
+    render_elements_from_surface_tree(renderer, s, v.px(at), v.scale, 1.0, kind)
         .into_iter()
         .map(Elem::Surface)
         .collect()
 }
 
 /// A window drawn live, shrunk to fit `area` (never enlarged) and centred in it.
-fn live_thumbnail(renderer: &mut GlesRenderer, state: &State, s: &WlSurface, area: Rectangle<i32, Logical>) -> Vec<Elem> {
-    let out_scale = state.output_scale;
+fn live_thumbnail(renderer: &mut GlesRenderer, v: &View, state: &State, s: &WlSurface, area: Rectangle<i32, Logical>) -> Vec<Elem> {
     let Some(w) = state.wm.find(s) else { return Vec::new() };
     let g = w.geometry();
     if g.size.w <= 0 || g.size.h <= 0 {
@@ -73,23 +86,25 @@ fn live_thumbnail(renderer: &mut GlesRenderer, state: &State, s: &WlSurface, are
     let off = w.surface_loc() - w.pos;
     let at = area.loc + Point::from(((area.size.w - tw) / 2, (area.size.h - th) / 2));
     // Draw at full size anchored at `at`, then shrink everything around that point.
-    let origin_px = at.to_physical_precise_round(out_scale);
-    render_elements_from_surface_tree(renderer, s, (at + off).to_physical_precise_round(out_scale), out_scale, 1.0, Kind::Unspecified)
+    let origin_px = v.px(at);
+    render_elements_from_surface_tree(renderer, s, v.px(at + off), v.scale, 1.0, Kind::Unspecified)
         .into_iter()
         .map(|e| Elem::Thumb(RescaleRenderElement::from_element(e, origin_px, scale)))
         .collect()
 }
 
-/// Everything on screen, front to back.
-pub fn elements(renderer: &mut GlesRenderer, state: &mut State) -> Vec<Elem> {
-    elements_with(renderer, state, true)
+/// Everything in `view` (global logical coordinates), front to back.
+pub fn elements(renderer: &mut GlesRenderer, state: &mut State, view: Rectangle<i32, Logical>) -> Vec<Elem> {
+    elements_with(renderer, state, view, true)
 }
 
 /// Like `elements`, optionally without the cursor (screenshots leave it out).
-pub fn elements_with(renderer: &mut GlesRenderer, state: &mut State, cursor: bool) -> Vec<Elem> {
+pub fn elements_with(renderer: &mut GlesRenderer, state: &mut State, view: Rectangle<i32, Logical>, cursor: bool) -> Vec<Elem> {
     let mut out = Vec::new();
+    // The shell lives on the primary monitor, which sits at (0, 0).
     let (ow, oh) = (state.output_size.w, state.output_size.h);
-    let scale = state.output_scale;
+    let v = View { loc: view.loc, scale: state.output_scale };
+    let scale = v.scale;
     let focused = state.focused();
 
     // An app being dragged out of Start, just under the cursor.
@@ -104,15 +119,15 @@ pub fn elements_with(renderer: &mut GlesRenderer, state: &mut State, cursor: boo
             let hotspot = with_states(surface, |s| {
                 s.data_map.get::<Mutex<CursorImageAttributes>>().map(|a| a.lock().unwrap().hotspot).unwrap_or_default()
             });
-            out.extend(surface_tree(renderer, scale, surface, ptr - hotspot, Kind::Cursor));
+            out.extend(surface_tree(renderer, &v, surface, ptr - hotspot, Kind::Cursor));
         }
         CursorImageStatus::Named(icon) => {
             let (buf, hot) = state.cursors.get(*icon);
-            out.extend(image(renderer, scale, buf, ptr - *hot, Kind::Cursor));
+            out.extend(image(renderer, &v, buf, ptr - *hot, Kind::Cursor));
         }
     }
     if let Some((g, at)) = ghost {
-        out.extend(image(renderer, scale, &g, at, Kind::Unspecified));
+        out.extend(image(renderer, &v, &g, at, Kind::Unspecified));
     }
 
     // Alt+Tab: live window thumbnails on top of the panel picture.
@@ -125,28 +140,28 @@ pub fn elements_with(renderer: &mut GlesRenderer, state: &mut State, cursor: boo
                     origin + tile.loc + Point::from(((tile.size.w - (crate::switcher::TILE_W - 20)) / 2, 30)),
                     (crate::switcher::TILE_W - 20, crate::switcher::THUMB_H).into(),
                 );
-                out.extend(live_thumbnail(renderer, state, s, area));
+                out.extend(live_thumbnail(renderer, &v, state, s, area));
             }
-            out.extend(image(renderer, scale, &panel, origin, Kind::Unspecified));
+            out.extend(image(renderer, &v, &panel, origin, Kind::Unspecified));
         }
     });
 
     // Overlay-layer clients (lock screens, notifications) above all our chrome.
     for (s, at) in state.layer_surfaces(&[Layer::Overlay]) {
-        out.extend(surface_tree(renderer, scale, &s, at, Kind::Unspecified));
+        out.extend(surface_tree(renderer, &v, &s, at, Kind::Unspecified));
     }
 
     // Software brightness: everything below the cursor seen through a black veil.
     if state.tray.brightness < 0.999 {
         let alpha = (1.0 - state.tray.brightness) * 0.85;
-        state.dim.update(state.output_size, Color32F::new(0.0, 0.0, 0.0, alpha));
-        out.push(Elem::Solid(SolidColorRenderElement::from_buffer(&state.dim, (0, 0), scale, 1.0, Kind::Unspecified)));
+        state.dim.update(view.size, Color32F::new(0.0, 0.0, 0.0, alpha));
+        out.push(Elem::Solid(SolidColorRenderElement::from_buffer(&state.dim, v.px(view.loc), scale, 1.0, Kind::Unspecified)));
     }
 
     // Notification toasts, above the Action Center and flyouts.
     crate::supervisor::guard("toasts", || {
         if let Some((buf, at)) = state.toasts_picture() {
-            out.extend(image(renderer, scale, &buf, at, Kind::Unspecified));
+            out.extend(image(renderer, &v, &buf, at, Kind::Unspecified));
         }
     });
 
@@ -155,9 +170,9 @@ pub fn elements_with(renderer: &mut GlesRenderer, state: &mut State, cursor: boo
         let desktops_at = state.desktops_rect().loc;
         if let Some(buf) = state.desktops_picture() {
             for (s, area) in state.task_view_thumbs() {
-                out.extend(live_thumbnail(renderer, state, &s, area));
+                out.extend(live_thumbnail(renderer, &v, state, &s, area));
             }
-            out.extend(image(renderer, scale, &buf, desktops_at, Kind::Unspecified));
+            out.extend(image(renderer, &v, &buf, desktops_at, Kind::Unspecified));
         }
     });
 
@@ -165,7 +180,7 @@ pub fn elements_with(renderer: &mut GlesRenderer, state: &mut State, cursor: boo
     crate::supervisor::guard("action center", || {
         let action_center_at = state.action_center_rect().loc;
         if let Some(buf) = state.action_center_picture() {
-            out.extend(image(renderer, scale, &buf, action_center_at, Kind::Unspecified));
+            out.extend(image(renderer, &v, &buf, action_center_at, Kind::Unspecified));
         }
     });
 
@@ -173,15 +188,16 @@ pub fn elements_with(renderer: &mut GlesRenderer, state: &mut State, cursor: boo
     crate::supervisor::guard("tray flyout", || {
         let flyout_at = state.flyout_rect().loc;
         if let Some(buf) = state.flyout_picture().cloned() {
-            out.extend(image(renderer, scale, &buf, flyout_at, Kind::Unspecified));
+            out.extend(image(renderer, &v, &buf, flyout_at, Kind::Unspecified));
         }
     });
 
     // Snipping overlay: everything dimmed except the selection.
+    let layout = state.layout_rect();
     if let Some(snip) = state.snip.as_mut() {
         let sel = snip.selection(state.pointer_loc);
-        for (buf, at) in snip.overlay(Rectangle::from_size(state.output_size), sel) {
-            out.push(Elem::Solid(SolidColorRenderElement::from_buffer(buf, at.to_physical_precise_round(scale), scale, 1.0, Kind::Unspecified)));
+        for (buf, at) in snip.overlay(layout, sel) {
+            out.push(Elem::Solid(SolidColorRenderElement::from_buffer(buf, v.px(at), scale, 1.0, Kind::Unspecified)));
         }
     }
 
@@ -190,21 +206,21 @@ pub fn elements_with(renderer: &mut GlesRenderer, state: &mut State, cursor: boo
         if let Some(m) = state.menu.as_mut() {
             let pos = m.pos;
             let buf = m.picture(state.font.as_ref()).clone();
-            out.extend(image(renderer, scale, &buf, pos, Kind::Unspecified));
+            out.extend(image(renderer, &v, &buf, pos, Kind::Unspecified));
         }
     });
 
     // X11 menus and tooltips, above everything but the cursor.
     for x in state.x11_overrides.iter().rev() {
         if let Some(s) = x.wl_surface() {
-            out.extend(surface_tree(renderer, scale, &s, x.geometry().loc, Kind::Unspecified));
+            out.extend(surface_tree(renderer, &v, &s, x.geometry().loc, Kind::Unspecified));
         }
     }
 
     // Drag-and-drop icon following the cursor.
     if let Some(icon) = &state.dnd_icon {
         let loc = state.pointer_loc.to_i32_round() + Point::from((12, 12));
-        out.extend(surface_tree(renderer, scale, icon, loc, Kind::Unspecified));
+        out.extend(surface_tree(renderer, &v, icon, loc, Kind::Unspecified));
     }
 
     // Start menu.
@@ -236,7 +252,7 @@ pub fn elements_with(renderer: &mut GlesRenderer, state: &mut State, cursor: boo
                 state.start.menu = Some(ui::draw_start_menu(state.font.as_ref(), &mut state.icons, key));
             }
             let menu = state.start.menu.as_ref().unwrap();
-            out.extend(image(renderer, scale, &menu.buffer, (0, oh - TASKBAR_H - height).into(), Kind::Unspecified));
+            out.extend(image(renderer, &v, &menu.buffer, (0, oh - TASKBAR_H - height).into(), Kind::Unspecified));
             let _ = MENU_W;
         }
     });
@@ -269,19 +285,19 @@ pub fn elements_with(renderer: &mut GlesRenderer, state: &mut State, cursor: boo
                 state.taskbar = Some(ui::draw_taskbar(state.font.as_ref(), &mut state.icons, state.logo.as_ref(), &tray_icons, key));
             }
             let bar = state.taskbar.as_ref().unwrap();
-            out.extend(image(renderer, scale, &bar.buffer, (0, oh - TASKBAR_H).into(), Kind::Unspecified));
+            out.extend(image(renderer, &v, &bar.buffer, (0, oh - TASKBAR_H).into(), Kind::Unspecified));
         }
     });
 
     // Top-layer clients (panels, docks) above windows.
     for (s, at) in state.layer_surfaces(&[Layer::Top]) {
-        out.extend(surface_tree(renderer, scale, &s, at, Kind::Unspecified));
+        out.extend(surface_tree(renderer, &v, &s, at, Kind::Unspecified));
     }
 
     // Where a dragged window will snap.
     if let Some(z) = state.wm.snap_preview {
         state.snap_buf.update(z.size, Color32F::new(0.46, 0.73, 0.93, 0.28));
-        out.push(Elem::Solid(SolidColorRenderElement::from_buffer(&state.snap_buf, z.loc.to_physical_precise_round(scale), scale, 1.0, Kind::Unspecified)));
+        out.push(Elem::Solid(SolidColorRenderElement::from_buffer(&state.snap_buf, v.px(z.loc), scale, 1.0, Kind::Unspecified)));
     }
 
     // Windoze, top to bottom (only current workspace).
@@ -294,20 +310,20 @@ pub fn elements_with(renderer: &mut GlesRenderer, state: &mut State, cursor: boo
         for (popup, offset) in PopupManager::popups_for_surface(w.surface()) {
             // Relative to the parent's window geometry (`pos`), not its surface (`sloc`).
             let ploc = w.pos + offset - popup.geometry().loc;
-            out.extend(surface_tree(renderer, scale, popup.wl_surface(), ploc, Kind::Unspecified));
+            out.extend(surface_tree(renderer, &v, popup.wl_surface(), ploc, Kind::Unspecified));
         }
-        out.extend(surface_tree(renderer, scale, w.surface(), sloc, Kind::Unspecified));
+        out.extend(surface_tree(renderer, &v, w.surface(), sloc, Kind::Unspecified));
 
         let hover = match &state.hover {
             Hover::Title(s, b) if s == w.surface() => Some(*b),
             _ => None,
         };
         if let Some((buf, at)) = w.titlebar(font, icons, apps, active, hover) {
-            out.extend(image(renderer, scale, buf, at, Kind::Unspecified));
+            out.extend(image(renderer, &v, buf, at, Kind::Unspecified));
         }
         if w.decorated() && w.maximized.is_none() {
             for (buf, at) in w.border(if active { BORDER_ACTIVE } else { BORDER_IDLE }) {
-                out.push(Elem::Solid(SolidColorRenderElement::from_buffer(buf, at.to_physical_precise_round(scale), scale, 1.0, Kind::Unspecified)));
+                out.push(Elem::Solid(SolidColorRenderElement::from_buffer(buf, v.px(at), scale, 1.0, Kind::Unspecified)));
             }
         }
     }
@@ -315,25 +331,25 @@ pub fn elements_with(renderer: &mut GlesRenderer, state: &mut State, cursor: boo
     // Bottom and background layers: vide-desktop's icons and wallpaper live here.
     state.arrange_layers();
     for (s, at) in state.layer_surfaces(&[Layer::Bottom, Layer::Background]) {
-        out.extend(surface_tree(renderer, scale, &s, at, Kind::Unspecified));
-    }
-    if state.has_background_layer() {
-        return out;
+        out.extend(surface_tree(renderer, &v, &s, at, Kind::Unspecified));
     }
 
-    // Our own wallpaper at the very back, when no desktop program provides one.
-    if state.wallpaper.as_ref().is_none_or(|(s, _)| *s != state.output_size) {
-        state.wallpaper = Some((state.output_size, ui::draw_wallpaper(ow, oh)));
+    // Our own wallpaper at the very back, on monitors no desktop program covers.
+    let bare: Vec<_> = (0..state.monitors.len()).filter(|&i| !state.has_background_layer(i)).map(|i| state.monitors[i].geo).filter(|g| g.overlaps(view)).collect();
+    for g in bare {
+        if !state.wallpapers.iter().any(|(s, _)| *s == g.size) {
+            state.wallpapers.push((g.size, ui::draw_wallpaper(g.size.w, g.size.h)));
+        }
+        let (_, wp) = state.wallpapers.iter().find(|(s, _)| *s == g.size).unwrap();
+        out.extend(image(renderer, &v, wp, g.loc, Kind::Unspecified));
     }
-    let (_, wp) = state.wallpaper.as_ref().unwrap();
-    out.extend(image(renderer, scale, wp, (0, 0).into(), Kind::Unspecified));
 
     // Night light: a warm veil over the whole picture, cursor included, like the
     // monitor's own colour temperature (which desktop panels usually don't have).
     if state.config.night_light && state.config.night_light_strength > 0.0 {
         let alpha = (state.config.night_light_strength as f32 * 0.32).clamp(0.0, 0.4);
-        state.night.update(state.output_size, Color32F::new(1.0, 0.72, 0.42, alpha));
-        out.push(Elem::Solid(SolidColorRenderElement::from_buffer(&state.night, (0, 0), scale, 1.0, Kind::Unspecified)));
+        state.night.update(view.size, Color32F::new(1.0, 0.72, 0.42, alpha));
+        out.push(Elem::Solid(SolidColorRenderElement::from_buffer(&state.night, v.px(view.loc), scale, 1.0, Kind::Unspecified)));
     }
 
     out

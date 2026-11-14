@@ -137,15 +137,18 @@ fn capture_with_cursor(
     region: Option<Rectangle<i32, Logical>>,
     cursor: bool,
 ) -> Result<(u32, u32, Vec<u8>), Box<dyn std::error::Error>> {
-    let size = state.output_size;
-    let full = Rectangle::from_size(size);
+    // PrtSc takes every monitor, like Windoze.
+    let layout = state.layout_rect();
+    let size = layout.size;
+    let full = layout;
     let rect = region.and_then(|r| r.intersection(full)).unwrap_or(full);
 
     // At a fractional scale, capture every physical pixel rather than the logical picture.
     let scale = state.output_scale;
     let px = size.to_f64().to_physical(scale).to_i32_round::<i32>();
+    let rect = Rectangle::new(rect.loc - layout.loc, rect.size);
     let rect = rect.to_f64().to_physical(scale).to_i32_round::<i32>().intersection(Rectangle::from_size(px)).unwrap_or_default();
-    let elements = render::elements_with(renderer, state, cursor);
+    let elements = render::elements_with(renderer, state, layout, cursor);
     let mut tex: GlesTexture = renderer.create_buffer(Fourcc::Abgr8888, (px.w, px.h).into())?;
     let mut fb = renderer.bind(&mut tex)?;
     let mut tracker = OutputDamageTracker::new(px, scale, Transform::Normal);

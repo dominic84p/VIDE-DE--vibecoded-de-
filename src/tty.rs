@@ -1,7 +1,8 @@
 //! Real hardware backend: DRM/KMS for display, libinput for input, libseat
 //! (via logind) for device access and VT switching.
 //!
-//! Single GPU, single monitor for now: the first connected connector wins.
+//! One GPU, every connected monitor (each on its own CRTC), with hotplug: udev tells us
+//! when a connector changes and we rescan.
 
 use std::{cell::RefCell, rc::Rc};
 
@@ -21,7 +22,7 @@ use smithay::{
         libinput::{LibinputInputBackend, LibinputSessionInterface},
         renderer::gles::GlesRenderer,
         session::{libseat::LibSeatSession, Event as SessionEvent, Session},
-        udev::{all_gpus, primary_gpu},
+        udev::{all_gpus, primary_gpu, UdevBackend, UdevEvent},
     },
     output::{Mode as WlMode, Output, PhysicalProperties, Subpixel},
     reexports::{
@@ -88,39 +89,113 @@ use crate::{
 type Out = DrmOutput<GbmAllocator<DrmDeviceFd>, GbmFramebufferExporter<DrmDeviceFd>, (), DrmDeviceFd>;
 type Manager = DrmOutputManager<GbmAllocator<DrmDeviceFd>, GbmFramebufferExporter<DrmDeviceFd>, (), DrmDeviceFd>;
 
-struct Tty {
-    session: LibSeatSession,
-    libinput: Libinput,
-    manager: Manager,
+/// One monitor: its connector, the CRTC driving it, and its frame state.
+struct Screen {
+    connector: connector::Handle,
     output: Out,
     /// The wl_output we advertise, and the monitor's modes, for switching at runtime.
     wl_output: Output,
     modes: Vec<DrmMode>,
     mode: DrmMode,
-    renderer: GlesRenderer,
     /// A page flip is in flight; don't queue another until its vblank.
     frame_pending: bool,
+    /// Something changed since its last frame.
+    dirty: bool,
+}
+
+struct Tty {
+    session: LibSeatSession,
+    libinput: Libinput,
+    manager: Manager,
+    fd: DrmDeviceFd,
+    /// Primary first: the order monitors were found in.
+    screens: Vec<Screen>,
+    renderer: GlesRenderer,
     active: bool,
 }
 
-/// Settings → Display changed the mode or scale: switch to it, tell clients, and re-fit
-/// the windows. A mode the monitor refuses leaves the old one in place.
+/// Settings → Display changed the mode or scale: switch the primary monitor to the mode,
+/// and every monitor to the scale. A mode the monitor refuses leaves the old one in place.
 fn apply_display(t: &mut Tty, state: &mut State) {
-    let want = pick_mode(&t.modes, parse_mode(&state.config.display_mode));
-    if want != t.mode {
-        match t.output.use_mode::<_, Elem>(want, &mut t.renderer, &DrmOutputRenderElements::default()) {
-            Ok(()) => {
-                tracing::info!("display mode: {}x{}@{}", want.size().0, want.size().1, want.vrefresh());
-                t.mode = want;
-            }
-            Err(e) => {
-                tracing::warn!("couldn't switch to {}x{}@{}: {e:?}", want.size().0, want.size().1, want.vrefresh());
-                return;
+    let Tty { screens, renderer, .. } = t;
+    for (i, sc) in screens.iter_mut().enumerate() {
+        if i == 0 {
+            let want = pick_mode(&sc.modes, parse_mode(&state.config.display_mode));
+            if want != sc.mode {
+                match sc.output.use_mode::<_, Elem>(want, renderer, &DrmOutputRenderElements::default()) {
+                    Ok(()) => {
+                        tracing::info!("display mode: {}x{}@{}", want.size().0, want.size().1, want.vrefresh());
+                        sc.mode = want;
+                    }
+                    Err(e) => tracing::warn!("couldn't switch to {}x{}@{}: {e:?}", want.size().0, want.size().1, want.vrefresh()),
+                }
             }
         }
+        state.set_output_mode(&sc.wl_output.clone(), WlMode::from(sc.mode));
     }
-    let wl_mode = WlMode::from(t.mode);
-    state.set_output_mode(&t.wl_output.clone(), wl_mode);
+}
+
+/// Bring up monitors that were plugged in and let go of ones that were unplugged.
+fn scan_connectors(t: &mut Tty, state: &mut State) {
+    let Ok(res) = t.fd.resource_handles() else { return };
+    let connected: Vec<connector::Info> = res
+        .connectors()
+        .iter()
+        .filter_map(|c| t.fd.get_connector(*c, false).ok())
+        .filter(|c| c.state() == connector::State::Connected && !c.modes().is_empty())
+        .collect();
+
+    // Unplugged.
+    let gone: Vec<usize> = (0..t.screens.len()).filter(|&i| !connected.iter().any(|c| c.handle() == t.screens[i].connector)).collect();
+    for i in gone.into_iter().rev() {
+        let sc = t.screens.remove(i);
+        state.remove_monitor(&sc.wl_output);
+        // Dropping the DrmOutput frees its CRTC.
+    }
+
+    // Plugged in.
+    let known: Vec<connector::Handle> = t.screens.iter().map(|s| s.connector).collect();
+    for conn in connected.iter().filter(|c| !known.contains(&c.handle())) {
+        let used: Vec<_> = t.screens.iter().map(|s| s.output.crtc()).collect();
+        let Some(crtc) = conn
+            .encoders()
+            .iter()
+            .filter_map(|e| t.fd.get_encoder(*e).ok())
+            .flat_map(|enc| res.filter_crtcs(enc.possible_crtcs()))
+            .find(|c| !used.contains(c))
+        else {
+            tracing::warn!("no free CRTC for {:?}-{}", conn.interface(), conn.interface_id());
+            continue;
+        };
+        let primary = t.screens.is_empty();
+        // Settings → Display can pin a WIDTHxHEIGHT@HZ mode for the primary; others use their preferred one.
+        let modes: Vec<DrmMode> = conn.modes().to_vec();
+        let mode = pick_mode(&modes, if primary { parse_mode(&state.config.display_mode) } else { None });
+        let name = format!("{:?}-{}", conn.interface(), conn.interface_id());
+        tracing::info!("output {name}: {}x{}@{}", mode.size().0, mode.size().1, mode.vrefresh());
+
+        let (mm_w, mm_h) = conn.size().unwrap_or((0, 0));
+        let output = Output::new(
+            name.clone(),
+            PhysicalProperties { size: (mm_w as i32, mm_h as i32).into(), subpixel: Subpixel::Unknown, make: "unknown".into(), model: "unknown".into() },
+        );
+        let wl_mode = WlMode::from(mode);
+        output.change_current_state(Some(wl_mode), None, None, None);
+        let drm_output = match t.manager.initialize_output::<_, Elem>(crtc, mode, &[conn.handle()], &output, None, &mut t.renderer, &DrmOutputRenderElements::default()) {
+            Ok(o) => o,
+            Err(e) => {
+                tracing::warn!("initialize_output {name}: {e:?}");
+                continue;
+            }
+        };
+        let _global = output.create_global::<State>(&state.dh);
+        state.add_monitor(&output, wl_mode);
+        if primary {
+            state.pointer_loc = (state.output_size.w as f64 / 2.0, state.output_size.h as f64 / 2.0).into();
+        }
+        t.screens.push(Screen { connector: conn.handle(), output: drm_output, wl_output: output, modes, mode, frame_pending: false, dirty: true });
+    }
+    state.needs_redraw = true;
 }
 
 pub fn run(event_loop: &mut EventLoop<'static, State>, state: &mut State) -> Result<(), Box<dyn std::error::Error>> {
@@ -136,6 +211,7 @@ pub fn run(event_loop: &mut EventLoop<'static, State>, state: &mut State) -> Res
         .or_else(|| all_gpus(&seat).ok()?.into_iter().next())
         .ok_or("no GPU found")?;
     tracing::info!("using GPU {}", gpu.display());
+    let gpu_id = std::fs::metadata(&gpu).map(|m| std::os::unix::fs::MetadataExt::rdev(&m)).ok();
     let fd = session.open(&gpu, OFlags::RDWR | OFlags::CLOEXEC | OFlags::NOCTTY | OFlags::NONBLOCK)?;
     let fd = DrmDeviceFd::new(DeviceFd::from(fd));
     let (drm, drm_notifier) = DrmDevice::new(fd.clone(), true)?;
@@ -144,7 +220,7 @@ pub fn run(event_loop: &mut EventLoop<'static, State>, state: &mut State) -> Res
     let egl = unsafe { EGLDisplay::new(gbm.clone())? };
     let ctx = EGLContext::new(&egl)?;
     let render_formats = ctx.dmabuf_render_formats().clone();
-    let mut renderer = unsafe { GlesRenderer::new(ctx)? };
+    let renderer = unsafe { GlesRenderer::new(ctx)? };
     let render_node = DrmNode::from_file(&fd)
         .ok()
         .and_then(|n| n.node_with_type(NodeType::Render).and_then(|r| r.ok()).or(Some(n)));
@@ -156,7 +232,7 @@ pub fn run(event_loop: &mut EventLoop<'static, State>, state: &mut State) -> Res
         tracing::warn!("no syncobj eventfd support; NVIDIA clients may flicker");
     }
 
-    let mut manager: Manager = DrmOutputManager::new(
+    let manager: Manager = DrmOutputManager::new(
         drm,
         GbmAllocator::new(gbm.clone(), GbmBufferFlags::RENDERING | GbmBufferFlags::SCANOUT),
         GbmFramebufferExporter::new(gbm.clone(), None),
@@ -164,56 +240,6 @@ pub fn run(event_loop: &mut EventLoop<'static, State>, state: &mut State) -> Res
         [Fourcc::Argb8888, Fourcc::Xrgb8888],
         render_formats,
     );
-
-    // Monitor
-    let res = fd.resource_handles()?;
-    let conn = res
-        .connectors()
-        .iter()
-        .filter_map(|c| fd.get_connector(*c, false).ok())
-        .find(|c| c.state() == connector::State::Connected && !c.modes().is_empty())
-        .ok_or("no connected monitor")?;
-    // Settings → Display can pin a WIDTHxHEIGHT@HZ mode; otherwise use the monitor's preferred one.
-    let modes: Vec<DrmMode> = conn.modes().to_vec();
-    let mode = pick_mode(&modes, parse_mode(&state.config.display_mode));
-    let crtc = conn
-        .encoders()
-        .iter()
-        .filter_map(|e| fd.get_encoder(*e).ok())
-        .flat_map(|enc| res.filter_crtcs(enc.possible_crtcs()))
-        .next()
-        .ok_or("no CRTC for monitor")?;
-    let name = format!("{:?}-{}", conn.interface(), conn.interface_id());
-    tracing::info!("output {name}: {}x{}@{}", mode.size().0, mode.size().1, mode.vrefresh());
-
-    let (mm_w, mm_h) = conn.size().unwrap_or((0, 0));
-    let output = Output::new(
-        name,
-        PhysicalProperties {
-            size: (mm_w as i32, mm_h as i32).into(),
-            subpixel: Subpixel::Unknown,
-            make: "unknown".into(),
-            model: "unknown".into(),
-        },
-    );
-    let wl_mode = WlMode::from(mode);
-    output.change_current_state(Some(wl_mode), None, None, Some((0, 0).into()));
-    let _global = output.create_global::<State>(&state.dh);
-    crate::layers::set_output(state, &output);
-    state.set_output_mode(&output, wl_mode);
-    state.pointer_loc = (state.output_size.w as f64 / 2.0, state.output_size.h as f64 / 2.0).into();
-
-    let drm_output = manager
-        .initialize_output::<_, Elem>(
-            crtc,
-            mode,
-            &[conn.handle()],
-            &output,
-            None,
-            &mut renderer,
-            &DrmOutputRenderElements::default(),
-        )
-        .map_err(|e| format!("initialize_output: {e:?}"))?;
 
     // Input
     // Pointer devices, so mouse settings can be re-applied when they change.
@@ -237,28 +263,42 @@ pub fn run(event_loop: &mut EventLoop<'static, State>, state: &mut State) -> Res
             }
         })?;
 
-    let tty = Rc::new(RefCell::new(Tty {
-        session,
-        libinput,
-        manager,
-        output: drm_output,
-        wl_output: output.clone(),
-        modes,
-        mode,
-        renderer,
-        frame_pending: false,
-        active: true,
-    }));
+    let tty = Rc::new(RefCell::new(Tty { session, libinput, manager, fd, screens: Vec::new(), renderer, active: true }));
 
-    // Page flip finished: we may draw the next frame.
+    // Monitors
+    scan_connectors(&mut tty.borrow_mut(), state);
+    if tty.borrow().screens.is_empty() {
+        return Err("no connected monitor".into());
+    }
+
+    // A monitor plugged in or out: udev says our GPU changed.
+    match UdevBackend::new(&seat) {
+        Ok(udev) => {
+            let t = tty.clone();
+            event_loop.handle().insert_source(udev, move |event, _, state| {
+                if let UdevEvent::Changed { device_id } = event {
+                    let mut t = t.borrow_mut();
+                    if Some(device_id) == gpu_id && t.active {
+                        tracing::info!("monitors changed; rescanning");
+                        crate::supervisor::guard("monitor hotplug", || scan_connectors(&mut t, state));
+                    }
+                }
+            })?;
+        }
+        Err(e) => tracing::warn!("udev: {e}; monitors plugged in later won't be noticed"),
+    }
+
+    // Page flip finished: that monitor may draw its next frame.
     let t = tty.clone();
     event_loop.handle().insert_source(drm_notifier, move |event, _, state| match event {
-        DrmEvent::VBlank(_) => {
+        DrmEvent::VBlank(crtc) => {
             let mut t = t.borrow_mut();
-            if let Err(e) = t.output.frame_submitted() {
-                tracing::warn!("frame_submitted: {e:?}");
+            if let Some(sc) = t.screens.iter_mut().find(|s| s.output.crtc() == crtc) {
+                if let Err(e) = sc.output.frame_submitted() {
+                    tracing::warn!("frame_submitted: {e:?}");
+                }
+                sc.frame_pending = false;
             }
-            t.frame_pending = false;
             crate::health::flip_done();
             render::send_frames(state, state.start_time.elapsed().as_millis() as u32);
         }
@@ -285,7 +325,11 @@ pub fn run(event_loop: &mut EventLoop<'static, State>, state: &mut State) -> Res
                     tracing::error!("drm activate: {e}");
                 }
                 t.active = true;
-                t.frame_pending = false;
+                for sc in &mut t.screens {
+                    sc.frame_pending = false;
+                }
+                // Monitors may have been swapped while we were away.
+                scan_connectors(&mut t, state);
                 state.needs_redraw = true;
             }
         }
@@ -303,8 +347,8 @@ pub fn run(event_loop: &mut EventLoop<'static, State>, state: &mut State) -> Res
         }
 
         let mut t = tty.borrow_mut();
-        // Wait for any page flip in flight: a modeset mid-flip would stall the output.
-        if state.display_dirty && t.active && !t.frame_pending {
+        // Wait for page flips in flight: a modeset mid-flip would stall the output.
+        if state.display_dirty && t.active && t.screens.iter().all(|s| !s.frame_pending) {
             state.display_dirty = false;
             crate::supervisor::guard("display change", || apply_display(&mut t, state));
         }
@@ -319,26 +363,36 @@ pub fn run(event_loop: &mut EventLoop<'static, State>, state: &mut State) -> Res
             }
         }
 
-        if state.needs_redraw && t.active && !t.frame_pending {
-            state.needs_redraw = false;
-            let t = &mut *t;
-            let elements = render::elements(&mut t.renderer, state);
-            // Composite everything by default: hardware cursor/overlay planes are flaky on
-            // NVIDIA. "Ultra Performance Mode" lets a fullscreen app's buffer be scanned out
-            // directly; the explicit-sync blocker already held its commit until the GPU
-            // finished, so the frame is complete by the time it can be picked.
-            let flags = if state.config.direct_scanout { FrameFlags::ALLOW_PRIMARY_PLANE_SCANOUT } else { FrameFlags::empty() };
-            match t.output.render_frame(&mut t.renderer, &elements, render::CLEAR, flags) {
-                Ok(res) if !res.is_empty => match t.output.queue_frame(()) {
-                    Ok(()) => {
-                        t.frame_pending = true;
-                        crate::health::flip_queued();
-                        crate::screenshot::screencast_tick(&mut t.renderer, state);
-                    }
-                    Err(e) => tracing::warn!("queue_frame: {e:?}"),
-                },
-                Ok(_) => render::send_frames(state, state.start_time.elapsed().as_millis() as u32),
-                Err(e) => tracing::warn!("render_frame: {e:?}"),
+        if std::mem::take(&mut state.needs_redraw) {
+            for sc in &mut t.screens {
+                sc.dirty = true;
+            }
+        }
+        if t.active {
+            let Tty { screens, renderer, .. } = &mut *t;
+            for (i, sc) in screens.iter_mut().enumerate().filter(|(_, s)| s.dirty && !s.frame_pending) {
+                sc.dirty = false;
+                let Some(view) = state.monitors.iter().find(|m| m.output == sc.wl_output).map(|m| m.geo) else { continue };
+                let elements = render::elements(renderer, state, view);
+                // Composite everything by default: hardware cursor/overlay planes are flaky on
+                // NVIDIA. "Ultra Performance Mode" lets a fullscreen app's buffer be scanned out
+                // directly; the explicit-sync blocker already held its commit until the GPU
+                // finished, so the frame is complete by the time it can be picked.
+                let flags = if state.config.direct_scanout { FrameFlags::ALLOW_PRIMARY_PLANE_SCANOUT } else { FrameFlags::empty() };
+                match sc.output.render_frame(renderer, &elements, render::CLEAR, flags) {
+                    Ok(res) if !res.is_empty => match sc.output.queue_frame(()) {
+                        Ok(()) => {
+                            sc.frame_pending = true;
+                            crate::health::flip_queued();
+                            if i == 0 {
+                                crate::screenshot::screencast_tick(renderer, state);
+                            }
+                        }
+                        Err(e) => tracing::warn!("queue_frame: {e:?}"),
+                    },
+                    Ok(_) => render::send_frames(state, state.start_time.elapsed().as_millis() as u32),
+                    Err(e) => tracing::warn!("render_frame: {e:?}"),
+                }
             }
         }
         drop(t);

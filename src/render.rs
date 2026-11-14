@@ -42,8 +42,89 @@ render_elements! {
     Solid=SolidColorRenderElement,
     /// CPU-painted pictures: cursor, taskbar, start menu, titlebars, wallpaper.
     Image=MemoryRenderBufferRenderElement<GlesRenderer>,
-    /// A window drawn shrunk (Alt+Tab thumbnails).
+    /// A window drawn shrunk (Alt+Tab thumbnails, and windows zooming open or minimizing).
     Thumb=RescaleRenderElement<WaylandSurfaceRenderElement<GlesRenderer>>,
+    /// A titlebar or border zooming along with its window.
+    ScaledImage=RescaleRenderElement<MemoryRenderBufferRenderElement<GlesRenderer>>,
+    ScaledSolid=RescaleRenderElement<SolidColorRenderElement>,
+}
+
+/// How something mid-animation is drawn: faded, scaled about `origin`, and shifted.
+#[derive(Clone, Copy)]
+struct Fx {
+    alpha: f32,
+    scale: f64,
+    origin: Point<i32, Logical>,
+    offset: Point<i32, Logical>,
+}
+
+impl Fx {
+    fn fade(alpha: f32) -> Fx {
+        Fx::slide(alpha, 0.0, 0.0)
+    }
+
+    fn slide(alpha: f32, dx: f32, dy: f32) -> Fx {
+        Fx { alpha, scale: 1.0, origin: (0, 0).into(), offset: (dx.round() as i32, dy.round() as i32).into() }
+    }
+
+    fn scaled(&self) -> bool {
+        (self.scale - 1.0).abs() > 1e-3
+    }
+}
+
+fn surface_tree_fx(renderer: &mut GlesRenderer, v: &View, s: &WlSurface, at: Point<i32, Logical>, fx: &Fx) -> Vec<Elem> {
+    let els: Vec<WaylandSurfaceRenderElement<GlesRenderer>> =
+        render_elements_from_surface_tree(renderer, s, v.px(at + fx.offset), v.scale, fx.alpha, Kind::Unspecified);
+    if fx.scaled() {
+        let origin = v.px(fx.origin + fx.offset);
+        els.into_iter().map(|e| Elem::Thumb(RescaleRenderElement::from_element(e, origin, fx.scale))).collect()
+    } else {
+        els.into_iter().map(Elem::Surface).collect()
+    }
+}
+
+fn image_fx(renderer: &mut GlesRenderer, v: &View, buf: &MemoryRenderBuffer, at: Point<i32, Logical>, fx: &Fx) -> Option<Elem> {
+    let loc = (at + fx.offset - v.loc).to_f64().to_physical(v.scale);
+    let e = MemoryRenderBufferRenderElement::from_buffer(renderer, loc, buf, Some(fx.alpha), None, None, Kind::Unspecified).ok()?;
+    Some(if fx.scaled() { Elem::ScaledImage(RescaleRenderElement::from_element(e, v.px(fx.origin + fx.offset), fx.scale)) } else { Elem::Image(e) })
+}
+
+fn solid_fx(v: &View, buf: &SolidColorBuffer, at: Point<i32, Logical>, fx: &Fx) -> Elem {
+    let e = SolidColorRenderElement::from_buffer(buf, v.px(at + fx.offset), v.scale, fx.alpha, Kind::Unspecified);
+    if fx.scaled() { Elem::ScaledSolid(RescaleRenderElement::from_element(e, v.px(fx.origin + fx.offset), fx.scale)) } else { Elem::Solid(e) }
+}
+
+/// A window's open, restore or minimize animation, if one is running; clears finished ones.
+fn window_fx(w: &mut crate::wm::Window, on: bool, animating: &mut bool) -> Option<Fx> {
+    use crate::anim::{ease_out, progress, WINDOW_MINIMIZE, WINDOW_OPEN};
+    if !on {
+        w.appear = None;
+        w.vanish = None;
+        return None;
+    }
+    let f = w.frame();
+    if let Some(t0) = w.vanish {
+        let p = progress(t0, WINDOW_MINIMIZE);
+        if p >= 1.0 {
+            w.vanish = None;
+            return None;
+        }
+        *animating = true;
+        // Shrink toward the bottom, where the taskbar is.
+        let e = ease_out(p);
+        let origin = f.loc + Point::from((f.size.w / 2, f.size.h));
+        return Some(Fx { alpha: 1.0 - e, scale: 1.0 - 0.2 * e as f64, origin, offset: (0, (30.0 * e) as i32).into() });
+    }
+    let t0 = w.appear?;
+    let p = progress(t0, WINDOW_OPEN);
+    if p >= 1.0 {
+        w.appear = None;
+        return None;
+    }
+    *animating = true;
+    let e = ease_out(p);
+    let origin = f.loc + Point::from((f.size.w / 2, f.size.h / 2));
+    Some(Fx { alpha: e, scale: 0.9 + 0.1 * e as f64, origin, offset: (0, 0).into() })
 }
 
 pub type BorderPiece<'a> = (&'a SolidColorBuffer, Point<i32, Logical>);
@@ -76,7 +157,7 @@ fn surface_tree(renderer: &mut GlesRenderer, v: &View, s: &WlSurface, at: Point<
 }
 
 /// A window drawn live, shrunk to fit `area` (never enlarged) and centred in it.
-fn live_thumbnail(renderer: &mut GlesRenderer, v: &View, state: &State, s: &WlSurface, area: Rectangle<i32, Logical>) -> Vec<Elem> {
+fn live_thumbnail(renderer: &mut GlesRenderer, v: &View, state: &State, s: &WlSurface, area: Rectangle<i32, Logical>, alpha: f32) -> Vec<Elem> {
     let Some(w) = state.wm.find(s) else { return Vec::new() };
     let g = w.geometry();
     if g.size.w <= 0 || g.size.h <= 0 {
@@ -89,7 +170,7 @@ fn live_thumbnail(renderer: &mut GlesRenderer, v: &View, state: &State, s: &WlSu
     let at = area.loc + Point::from(((area.size.w - tw) / 2, (area.size.h - th) / 2));
     // Draw at full size anchored at `at`, then shrink everything around that point.
     let origin_px = v.px(at);
-    render_elements_from_surface_tree(renderer, s, v.px(at + off), v.scale, 1.0, Kind::Unspecified)
+    render_elements_from_surface_tree(renderer, s, v.px(at + off), v.scale, alpha, Kind::Unspecified)
         .into_iter()
         .map(|e| Elem::Thumb(RescaleRenderElement::from_element(e, origin_px, scale)))
         .collect()
@@ -107,6 +188,19 @@ pub fn elements_with(renderer: &mut GlesRenderer, state: &mut State, view: Recta
     let (ow, oh) = (state.output_size.w, state.output_size.h);
     let v = View { loc: view.loc, scale: state.output_scale };
     let scale = v.scale;
+    // Panels animate in when they open; while anything is moving, ask for the next frame.
+    let anim_on = state.config.animations;
+    let mut animating = false;
+    let mut opening = |edge: &mut crate::anim::Edge, open: bool, ms: u64| {
+        let e = if anim_on { edge.update(open, ms) } else { 1.0 };
+        animating |= e < 1.0;
+        e
+    };
+    let start_e = opening(&mut state.anims.start, state.start.open, crate::anim::START);
+    let ac_e = opening(&mut state.anims.action_center, state.action_center.open, crate::anim::ACTION_CENTER);
+    let flyout_e = opening(&mut state.anims.flyout, state.tray.flyout.is_some(), crate::anim::FLYOUT);
+    let tv_e = opening(&mut state.anims.task_view, state.desktops.open, crate::anim::TASK_VIEW);
+    let menu_e = opening(&mut state.anims.menu, state.menu.is_some(), crate::anim::MENU);
     let focused = state.focused();
 
     // An app being dragged out of Start, just under the cursor.
@@ -142,7 +236,7 @@ pub fn elements_with(renderer: &mut GlesRenderer, state: &mut State, view: Recta
                     origin + tile.loc + Point::from(((tile.size.w - (crate::switcher::TILE_W - 20)) / 2, 30)),
                     (crate::switcher::TILE_W - 20, crate::switcher::THUMB_H).into(),
                 );
-                out.extend(live_thumbnail(renderer, &v, state, s, area));
+                out.extend(live_thumbnail(renderer, &v, state, s, area, 1.0));
             }
             out.extend(image(renderer, &v, &panel, origin, Kind::Unspecified));
         }
@@ -172,9 +266,9 @@ pub fn elements_with(renderer: &mut GlesRenderer, state: &mut State, view: Recta
         let desktops_at = state.desktops_rect().loc;
         if let Some(buf) = state.desktops_picture() {
             for (s, area) in state.task_view_thumbs() {
-                out.extend(live_thumbnail(renderer, &v, state, &s, area));
+                out.extend(live_thumbnail(renderer, &v, state, &s, area, tv_e));
             }
-            out.extend(image(renderer, &v, &buf, desktops_at, Kind::Unspecified));
+            out.extend(image_fx(renderer, &v, &buf, desktops_at, &Fx::fade(tv_e)));
         }
     });
 
@@ -182,7 +276,9 @@ pub fn elements_with(renderer: &mut GlesRenderer, state: &mut State, view: Recta
     crate::supervisor::guard("action center", || {
         let action_center_at = state.action_center_rect().loc;
         if let Some(buf) = state.action_center_picture() {
-            out.extend(image(renderer, &v, &buf, action_center_at, Kind::Unspecified));
+            // Slides in from the right edge.
+            let w = state.action_center_rect().size.w as f32;
+            out.extend(image_fx(renderer, &v, &buf, action_center_at, &Fx::slide(1.0, w * (1.0 - ac_e), 0.0)));
         }
     });
 
@@ -190,7 +286,7 @@ pub fn elements_with(renderer: &mut GlesRenderer, state: &mut State, view: Recta
     crate::supervisor::guard("tray flyout", || {
         let flyout_at = state.flyout_rect().loc;
         if let Some(buf) = state.flyout_picture().cloned() {
-            out.extend(image(renderer, &v, &buf, flyout_at, Kind::Unspecified));
+            out.extend(image_fx(renderer, &v, &buf, flyout_at, &Fx::slide(flyout_e, 0.0, 16.0 * (1.0 - flyout_e))));
         }
     });
 
@@ -208,7 +304,7 @@ pub fn elements_with(renderer: &mut GlesRenderer, state: &mut State, view: Recta
         if let Some(m) = state.menu.as_mut() {
             let pos = m.pos;
             let buf = m.picture(state.font.as_ref()).clone();
-            out.extend(image(renderer, &v, &buf, pos, Kind::Unspecified));
+            out.extend(image_fx(renderer, &v, &buf, pos, &Fx::fade(menu_e)));
         }
     });
 
@@ -254,7 +350,9 @@ pub fn elements_with(renderer: &mut GlesRenderer, state: &mut State, view: Recta
                 state.start.menu = Some(ui::draw_start_menu(state.font.as_ref(), &mut state.icons, key));
             }
             let menu = state.start.menu.as_ref().unwrap();
-            out.extend(image(renderer, &v, &menu.buffer, (0, oh - TASKBAR_H - height).into(), Kind::Unspecified));
+            // Rises out of the taskbar.
+            let fx = Fx::slide(start_e, 0.0, 40.0 * (1.0 - start_e));
+            out.extend(image_fx(renderer, &v, &menu.buffer, (0, oh - TASKBAR_H - height).into(), &fx));
             let _ = MENU_W;
         }
     });
@@ -306,22 +404,27 @@ pub fn elements_with(renderer: &mut GlesRenderer, state: &mut State, view: Recta
     let font = state.font.as_ref();
     let icons = &mut state.icons;
     let apps = &state.apps;
-    for w in state.wm.windows.iter_mut().rev().filter(|w| !w.minimized && w.mapped && w.workspace == state.wm.current_workspace) {
+    // A window being minimized is still drawn (shrinking away) until its animation ends.
+    for w in state.wm.windows.iter_mut().rev().filter(|w| (!w.minimized || w.vanish.is_some()) && w.mapped && w.workspace == state.wm.current_workspace) {
+        let fx = window_fx(w, anim_on, &mut animating).unwrap_or(Fx::fade(1.0));
+        if w.minimized && w.vanish.is_none() {
+            continue;
+        }
         let active = Some(w.surface()) == focused.as_ref();
         let sloc = w.surface_loc();
         for (popup, offset) in PopupManager::popups_for_surface(w.surface()) {
             // Relative to the parent's window geometry (`pos`), not its surface (`sloc`).
             let ploc = w.pos + offset - popup.geometry().loc;
-            out.extend(surface_tree(renderer, &v, popup.wl_surface(), ploc, Kind::Unspecified));
+            out.extend(surface_tree_fx(renderer, &v, popup.wl_surface(), ploc, &fx));
         }
-        out.extend(surface_tree(renderer, &v, w.surface(), sloc, Kind::Unspecified));
+        out.extend(surface_tree_fx(renderer, &v, w.surface(), sloc, &fx));
 
         let hover = match &state.hover {
             Hover::Title(s, b) if s == w.surface() => Some(*b),
             _ => None,
         };
         if let Some((buf, at)) = w.titlebar(font, icons, apps, active, hover) {
-            out.extend(image(renderer, &v, buf, at, Kind::Unspecified));
+            out.extend(image_fx(renderer, &v, buf, at, &fx));
         }
         // Pinned on top: a yellow outline, so it's clear why it won't go behind things.
         let border = if w.on_top {
@@ -333,7 +436,7 @@ pub fn elements_with(renderer: &mut GlesRenderer, state: &mut State, view: Recta
         };
         if let Some(color) = border {
             for (buf, at) in w.border(color) {
-                out.push(Elem::Solid(SolidColorRenderElement::from_buffer(buf, v.px(at), scale, 1.0, Kind::Unspecified)));
+                out.push(solid_fx(&v, buf, at, &fx));
             }
         }
     }
@@ -362,6 +465,9 @@ pub fn elements_with(renderer: &mut GlesRenderer, state: &mut State, view: Recta
         out.push(Elem::Solid(SolidColorRenderElement::from_buffer(&state.night, v.px(view.loc), scale, 1.0, Kind::Unspecified)));
     }
 
+    if animating {
+        state.needs_redraw = true;
+    }
     out
 }
 

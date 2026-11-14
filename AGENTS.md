@@ -29,6 +29,9 @@ the WM in `src/wm.rs` is deliberately our own.
   move/resize grabs, maximize/minimize/fullscreen, hit-testing.
 - `input.rs`: keybinds, start-menu typing, pointer routing to chrome vs clients.
 - `render.rs`: builds the front-to-back element list for a frame.
+- `anim.rs`: animation timing. No timers: `render` works out progress from start times
+  (`Window::appear`/`vanish`, `State::anims`) and sets `needs_redraw` while anything moves.
+  Keep them short and never make input wait; `config.animations` turns them off.
 - `ui.rs` + `canvas.rs`: all chrome is painted on the CPU into
   `MemoryRenderBuffer`s, cached by a key and repainted only when the key changes.
 - `xwayland.rs`, `focus.rs`: X11 support and the keyboard focus enum.

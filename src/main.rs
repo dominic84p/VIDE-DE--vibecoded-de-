@@ -1,3 +1,4 @@
+mod anim;
 mod apps;
 mod canvas;
 mod clipboard;

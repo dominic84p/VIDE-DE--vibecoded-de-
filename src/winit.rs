@@ -65,7 +65,9 @@ pub fn run(event_loop: &mut EventLoop<'static, State>, state: &mut State) -> Res
 
     while state.running {
         crate::health::enter(crate::health::Phase::Dispatch);
-        event_loop.dispatch(None, state)?;
+        // Mid-animation there's already a frame to draw: don't wait for an event first.
+        let wait = if state.needs_redraw { Some(std::time::Duration::ZERO) } else { None };
+        event_loop.dispatch(wait, state)?;
         crate::health::enter(crate::health::Phase::Render);
 
         // Settings → Display scale, so it can be tried nested too.

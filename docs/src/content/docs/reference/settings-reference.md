@@ -25,6 +25,7 @@ Complete reference for `~/.config/vide-de/settings.conf` as defined in `config/s
 | `hide_kde_apps` | bool | `false` | Hide KDE's own apps from the Start menu list and search |
 | `toasts` | bool | `true` | Show a popup for new notifications (notifications always land in Action Center) |
 | `toast_seconds` | int | `5` | How long a notification popup stays (seconds), unless the app requests its own timeout |
+| `animations` | bool | `true` | Windoze's "Show animations": windows zoom open and shrink when minimized; Start, the Action Center, flyouts, Task View and menus slide or fade in. All short (70–150 ms), and input never waits for them. Applies live |
 | `clock_24h` | bool | `false` | Display the taskbar clock in 24-hour time (`14:30` instead of `2:30 PM`) |
 | `light_mode` | bool | `false` | Windoze 10's "default Windoze mode": light taskbar, Start, Action Center, flyouts and menus instead of dark. Applies live |
 | `notification_sound` | string | `ding` | Sound for a new notification: `ding`, `chime`, `pop`, `bell`, `glass` or `none`. Quiet in Focus assist; an app's own `sound-file` hint wins, `suppress-sound` silences it |

@@ -1343,6 +1343,8 @@ impl Settings {
             c
         });
         changed |= setting_block(ui, "Night light", "Reduce blue light strain.", |ui| doze_toggle(ui, &mut self.config.night_light));
+        section_title(ui, "Simplify and personalize");
+        changed |= setting_block(ui, "Show animations", "Windows zoom open and closed; Start, the Action Center and flyouts slide in.", |ui| doze_toggle(ui, &mut self.config.animations));
         changed
     }
 

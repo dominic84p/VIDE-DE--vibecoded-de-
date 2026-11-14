@@ -86,6 +86,10 @@ pub struct Window {
     pub unresponsive: bool,
     /// Pinned on top (Win+Shift+P): stays above every other window, fullscreen ones too.
     pub on_top: bool,
+    /// When it opened or came back from the taskbar, for the zoom-in (see anim.rs).
+    pub appear: Option<std::time::Instant>,
+    /// When it was minimized: it's drawn shrinking away until the animation ends.
+    pub vanish: Option<std::time::Instant>,
 }
 
 impl Window {
@@ -338,6 +342,8 @@ impl Wm {
             titlebar: None,
             unresponsive: false,
             on_top: false,
+            appear: None,
+            vanish: None,
         });
         self.restack();
     }
@@ -489,6 +495,9 @@ impl Wm {
             None
         };
         let Some(w) = self.find_mut(surface) else { return };
+        if first_map {
+            w.appear = Some(std::time::Instant::now());
+        }
         w.mapped = true;
         if let Some((ws, pgeom)) = parent_info {
             w.workspace = ws;

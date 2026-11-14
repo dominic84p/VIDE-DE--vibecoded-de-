@@ -337,7 +337,11 @@ pub fn run(event_loop: &mut EventLoop<'static, State>, state: &mut State) -> Res
 
     while state.running {
         crate::health::enter(crate::health::Phase::Dispatch);
-        event_loop.dispatch(None, state)?;
+        // Mid-animation with a monitor free to draw: don't wait for an event. A monitor
+        // with a flip in flight wakes us with its vblank anyway.
+        let ready = { let t = tty.borrow(); t.active && t.screens.iter().any(|s| !s.frame_pending) };
+        let wait = if state.needs_redraw && ready { Some(std::time::Duration::ZERO) } else { None };
+        event_loop.dispatch(wait, state)?;
         crate::health::enter(crate::health::Phase::Render);
 
         if std::mem::take(&mut state.mouse_config_dirty) {

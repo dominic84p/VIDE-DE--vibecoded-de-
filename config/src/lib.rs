@@ -55,6 +55,8 @@ pub struct Config {
     pub light_mode: bool,
     /// The sound a new notification plays: one of `SOUNDS` by id, or "none".
     pub notification_sound: String,
+    /// Windoze's "Show animations": windows zoom in and out, Start and panels slide in.
+    pub animations: bool,
 }
 
 impl Default for Config {
@@ -85,6 +87,7 @@ impl Default for Config {
             clock_24h: false,
             light_mode: false,
             notification_sound: "ding".into(),
+            animations: true,
         }
     }
 }
@@ -127,6 +130,7 @@ impl Config {
                 "clock_24h" => c.clock_24h = v == "true",
                 "light_mode" => c.light_mode = v == "true",
                 "notification_sound" if !v.is_empty() => c.notification_sound = v.to_string(),
+                "animations" => c.animations = v == "true",
                 _ => {}
             }
         }
@@ -144,7 +148,7 @@ impl Config {
              display_mode={}\ndisplay_scale={:.2}\nnight_light={}\nnight_light_strength={:.2}\nidle_lock_minutes={}\n\
              tap_to_click={}\nnatural_scroll={}\ndisable_while_typing={}\n\
              xkb_layout={}\nxkb_variant={}\nxkb_options={}\nkey_repeat_delay={}\nkey_repeat_rate={}\n\
-             toasts={}\ntoast_seconds={}\nclock_24h={}\nlight_mode={}\nnotification_sound={}\n",
+             toasts={}\ntoast_seconds={}\nclock_24h={}\nlight_mode={}\nnotification_sound={}\nanimations={}\n",
             self.hide_kde_apps,
             self.mouse_flat,
             self.mouse_speed,
@@ -167,7 +171,8 @@ impl Config {
             self.toast_seconds,
             self.clock_24h,
             self.light_mode,
-            self.notification_sound
+            self.notification_sound,
+            self.animations
         );
         // Write-then-rename so the compositor never reads a half-written file.
         let tmp = path.with_extension("conf.tmp");

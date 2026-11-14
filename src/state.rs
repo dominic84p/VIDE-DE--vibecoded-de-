@@ -221,6 +221,8 @@ pub struct State {
     pub snip: Option<crate::screenshot::Snip>,
     /// Our own wallpaper, painted once per monitor size.
     pub wallpapers: Vec<(Size<i32, Logical>, MemoryRenderBuffer)>,
+    /// When Start, the Action Center and other panels opened, for their slide-in.
+    pub anims: crate::anim::Anims,
     pub hover: Hover,
     pub clock: (String, String),
     pub action_center: ActionCenter,
@@ -363,6 +365,7 @@ impl State {
             last_screencast: None,
             snip: None,
             wallpapers: Vec::new(),
+            anims: Default::default(),
             hover: Hover::None,
             clock,
             action_center: ActionCenter::default(),
@@ -483,6 +486,10 @@ impl State {
             self.wm.raise(s);
             if let Some(w) = self.wm.find_mut(s) {
                 restored = w.minimized;
+                if restored {
+                    w.appear = Some(Instant::now());
+                    w.vanish = None;
+                }
                 w.minimized = false;
                 // Focusing a window on another workspace takes you there, so focus is never invisible.
                 let ws = w.workspace;
@@ -527,6 +534,7 @@ impl State {
     pub fn minimize(&mut self, surface: &WlSurface) {
         if let Some(w) = self.wm.find_mut(surface) {
             w.minimized = true;
+            w.vanish = Some(Instant::now());
         }
         if self.focused().as_ref() == Some(surface) {
             self.focus_top();
@@ -546,8 +554,9 @@ impl State {
 
     pub fn show_desktop(&mut self) {
         let ws = self.wm.current_workspace;
-        for w in self.wm.windows.iter_mut().filter(|w| w.workspace == ws) {
+        for w in self.wm.windows.iter_mut().filter(|w| w.workspace == ws && !w.minimized) {
             w.minimized = true;
+            w.vanish = Some(Instant::now());
         }
         self.focus(None, SERIAL_COUNTER.next_serial());
     }
@@ -1172,6 +1181,10 @@ impl XdgActivationHandler for State {
     ) {
         if let Some(w) = self.wm.find_mut(&surface) {
             let ws = w.workspace;
+            if w.minimized {
+                w.appear = Some(Instant::now());
+                w.vanish = None;
+            }
             w.minimized = false;
             if ws != self.wm.current_workspace {
                 self.switch_desktop(ws);

@@ -146,7 +146,10 @@ pub struct State {
     pub popups: PopupManager,
     pub layer_shell_state: smithay::wayland::shell::wlr_layer::WlrLayerShellState,
     /// The (single) output; layer surfaces are laid out on it.
+    /// The primary monitor's output.
     pub output: Option<smithay::output::Output>,
+    /// Every monitor, primary first. See `monitors.rs`.
+    pub monitors: Vec<crate::monitors::Monitor>,
     pub dmabuf_state: DmabufState,
     /// Explicit sync (linux-drm-syncobj). NVIDIA needs it: without it we can show a
     /// client's frame before its GPU finished drawing it (flicker, stale frames, black boxes).
@@ -216,7 +219,8 @@ pub struct State {
     pub last_screencast: Option<Instant>,
     /// Win+Shift+S region selection in progress.
     pub snip: Option<crate::screenshot::Snip>,
-    pub wallpaper: Option<(Size<i32, Logical>, MemoryRenderBuffer)>,
+    /// Our own wallpaper, painted once per monitor size.
+    pub wallpapers: Vec<(Size<i32, Logical>, MemoryRenderBuffer)>,
     pub hover: Hover,
     pub clock: (String, String),
     pub action_center: ActionCenter,
@@ -309,6 +313,7 @@ impl State {
             popups: PopupManager::default(),
             layer_shell_state: smithay::wayland::shell::wlr_layer::WlrLayerShellState::new::<Self>(&dh),
             output: None,
+            monitors: Vec::new(),
             dmabuf_state: DmabufState::new(),
             syncobj_state: None,
             loop_handle,
@@ -357,7 +362,7 @@ impl State {
             screencast_clients: 0,
             last_screencast: None,
             snip: None,
-            wallpaper: None,
+            wallpapers: Vec::new(),
             hover: Hover::None,
             clock,
             action_center: ActionCenter::default(),
@@ -570,7 +575,7 @@ impl State {
         let kind = PopupKind::Xdg(popup.clone());
         let Ok(root) = find_popup_root_surface(&kind) else { return };
         let Some(w) = self.wm.find(&root) else { return };
-        let mut target = self.work_area();
+        let mut target = self.work_area_of(&root);
         // The popup's geometry is relative to its parent's window geometry, so is the area it must fit.
         target.loc -= w.pos;
         target.loc -= get_popup_toplevel_coords(&kind);
@@ -954,7 +959,7 @@ impl XdgShellHandler for State {
     }
 
     fn maximize_request(&mut self, surface: ToplevelSurface) {
-        let area = self.work_area();
+        let area = self.work_area_of(surface.wl_surface());
         self.wm.maximize(surface.wl_surface(), area);
         if !surface.is_initial_configure_sent() {
             return;
@@ -967,8 +972,10 @@ impl XdgShellHandler for State {
         self.needs_redraw = true;
     }
 
-    fn fullscreen_request(&mut self, surface: ToplevelSurface, _output: Option<wl_output::WlOutput>) {
-        let rect = self.output_rect();
+    fn fullscreen_request(&mut self, surface: ToplevelSurface, output: Option<wl_output::WlOutput>) {
+        // The monitor the app asked for, else the one it's on.
+        let asked = output.and_then(|o| self.monitors.iter().find(|m| m.output.owns(&o)).map(|m| m.geo));
+        let rect = asked.unwrap_or_else(|| self.screen_of(surface.wl_surface()));
         self.wm.fullscreen(surface.wl_surface(), rect);
         self.needs_redraw = true;
     }
@@ -1288,12 +1295,18 @@ impl smithay::wayland::fractional_scale::FractionalScaleHandler for State {
 
 impl State {
     /// Tell a surface (and its subsurfaces) the output's scale: the fractional one for apps
-    /// that speak wp-fractional-scale, the rounded-up whole one for the rest, and that it is
-    /// on our output at all, which is what older GTK and Qt read the scale from.
+    /// that speak wp-fractional-scale, the rounded-up whole one for the rest, and which
+    /// monitor it is on, which is what older GTK and Qt read the scale from.
     pub fn send_scale(&self, surface: &WlSurface) {
         let scale = self.output_scale;
-        if let Some(output) = &self.output {
-            output.enter(surface);
+        // On the monitor its window is on (layer surfaces and the like: the primary).
+        let screen = if self.wm.find(surface).is_some() { self.screen_of(surface) } else { self.output_rect() };
+        for m in &self.monitors {
+            if m.geo == screen {
+                m.output.enter(surface);
+            } else {
+                m.output.leave(surface);
+            }
         }
         use smithay::wayland::compositor::{with_surface_tree_downward, TraversalAction};
         with_surface_tree_downward(
@@ -1311,36 +1324,6 @@ impl State {
     /// The display scale from Settings, in the 1/120 steps wp-fractional-scale speaks.
     pub fn display_scale(&self) -> f64 {
         (self.config.display_scale.clamp(1.0, 3.0) * 120.0).round() / 120.0
-    }
-
-    /// Put the output in `mode` at the Settings scale: tell clients, re-fit the windows to the
-    /// new logical size and drop chrome painted for the old one.
-    pub fn set_output_mode(&mut self, output: &smithay::output::Output, mode: smithay::output::Mode) {
-        let scale = self.display_scale();
-        output.change_current_state(Some(mode), None, Some(smithay::output::Scale::Fractional(scale)), None);
-        output.set_preferred(mode);
-        let changed = scale != self.output_scale;
-        self.output_scale = scale;
-        self.output_size = mode.size.to_f64().to_logical(scale).to_i32_round();
-        self.pointer_loc.x = self.pointer_loc.x.clamp(0.0, self.output_size.w as f64 - 1.0);
-        self.pointer_loc.y = self.pointer_loc.y.clamp(0.0, self.output_size.h as f64 - 1.0);
-        self.arrange_layers();
-        let (work, full) = (self.work_area(), self.output_rect());
-        self.wm.refit(work, full);
-        // Cached chrome was painted for the old size.
-        self.taskbar = None;
-        self.start.menu = None;
-        self.wallpaper = None;
-        if changed {
-            tracing::info!("display scale: {:.0}%", scale * 100.0);
-            crate::canvas::set_scale(scale);
-            self.repaint_shell();
-            for w in &mut self.wm.windows {
-                w.titlebar = None;
-            }
-            self.rescale_surfaces();
-        }
-        self.needs_redraw = true;
     }
 
     /// The output's scale changed: re-tell every client surface.

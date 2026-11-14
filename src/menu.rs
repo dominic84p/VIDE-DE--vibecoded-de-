@@ -357,12 +357,12 @@ impl State {
                 self.focus(Some(s), serial);
             }
             Action::Maximize(s) => {
-                let area = self.work_area();
+                let area = self.work_area_of(&s);
                 self.wm.maximize(&s, area);
                 self.focus(Some(s), serial);
             }
             Action::Fullscreen(s) => {
-                let rect = self.output_rect();
+                let rect = self.screen_of(&s);
                 self.wm.fullscreen(&s, rect);
                 self.focus(Some(s), serial);
             }

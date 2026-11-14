@@ -222,7 +222,9 @@ impl State {
             InputEvent::Keyboard { event } => self.on_key(event.key_code(), event.state(), event.time_msec()),
 
             InputEvent::PointerMotionAbsolute { event } => {
-                let pos = event.position_transformed(self.output_size);
+                // Nested, the window shows every monitor side by side.
+                let all = self.layout_rect();
+                let pos = event.position_transformed(all.size) + all.loc.to_f64();
                 self.pointer_to(pos, event.time_msec());
             }
 
@@ -260,10 +262,7 @@ impl State {
                         })
                     })
                 };
-                let size = self.output_size.to_f64();
-                let mut pos = self.pointer_loc + delta;
-                pos.x = pos.x.clamp(0.0, size.w - 1.0);
-                pos.y = pos.y.clamp(0.0, size.h - 1.0);
+                let mut pos = self.clamp_to_monitors(self.pointer_loc, self.pointer_loc + delta);
                 match constraint {
                     Some(None) => {
                         ptr.frame(self);
@@ -443,7 +442,7 @@ impl State {
             Action::TaskView => self.toggle_desktops(),
             Action::Snap { right } => {
                 if let Some(s) = focused {
-                    let a = self.work_area();
+                    let a = self.work_area_of(&s);
                     let half = a.size.w / 2;
                     let x = if right { a.loc.x + a.size.w - half } else { a.loc.x };
                     let zone = Rectangle::new((x, a.loc.y).into(), (half, a.size.h).into());
@@ -452,7 +451,7 @@ impl State {
             }
             Action::Maximize => {
                 if let Some(s) = focused {
-                    let area = self.work_area();
+                    let area = self.work_area_of(&s);
                     self.wm.toggle_maximize(&s, area);
                 }
             }
@@ -472,7 +471,7 @@ impl State {
                     if self.wm.find(&s).is_some_and(|w| w.fullscreen.is_some()) {
                         self.wm.unfullscreen(&s);
                     } else {
-                        let rect = self.output_rect();
+                        let rect = self.screen_of(&s);
                         self.wm.fullscreen(&s, rect);
                     }
                 }
@@ -831,6 +830,7 @@ impl State {
 
     pub(crate) fn pointer_to(&mut self, pos: Point<f64, Logical>, time: u32) {
         self.pointer_loc = pos;
+        self.wm.spawn_at = self.monitor_at(pos).loc;
         self.needs_redraw = true;
 
         // Snipping: the screen is ours until a region is picked.
@@ -850,7 +850,7 @@ impl State {
 
         let mut focus = None;
         if self.wm.grab.is_some() {
-            let area = self.work_area();
+            let area = self.work_area_on(self.monitor_at(pos));
             self.wm.update_grab(pos, 0, area);
         } else {
             let mut cursor = CursorIcon::Default;
@@ -979,7 +979,7 @@ impl State {
 
         if state == ButtonState::Released {
             if self.wm.grab.is_some() && button == BTN_LEFT {
-                let area = self.work_area();
+                let area = self.work_area_on(self.monitor_at(self.pointer_loc));
                 self.wm.end_grab(area);
             }
             return forward(self);
@@ -1150,7 +1150,7 @@ impl State {
                     match b {
                         TitleButton::Minimize => self.minimize(&s),
                         TitleButton::Maximize => {
-                            let area = self.work_area();
+                            let area = self.work_area_of(&s);
                             self.wm.toggle_maximize(&s, area);
                             self.focus(Some(s), serial);
                         }
@@ -1171,7 +1171,7 @@ impl State {
                     let double = matches!(&self.last_title_click, Some((ls, t)) if *ls == s && now - *t < DOUBLE_CLICK);
                     if double {
                         self.last_title_click = None;
-                        let area = self.work_area();
+                        let area = self.work_area_of(&s);
                         self.wm.toggle_maximize(&s, area);
                     } else {
                         self.last_title_click = Some((s.clone(), now));

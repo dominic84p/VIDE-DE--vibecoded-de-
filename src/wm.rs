@@ -305,6 +305,8 @@ pub struct Wm {
     next_id: u64,
     /// Current workspace (0-9).
     pub current_workspace: usize,
+    /// Top-left of the monitor the pointer is on: new windows open there.
+    pub spawn_at: Point<i32, Logical>,
 }
 
 impl Wm {
@@ -313,7 +315,7 @@ impl Wm {
         // Cascade new windows so they never perfectly overlap.
         let step = (self.next_id % 8) as i32;
         self.next_id += 1;
-        let mut pos = pos.unwrap_or_else(|| Point::from((90 + step * 30, 50 + step * 30)));
+        let mut pos = pos.unwrap_or_else(|| self.spawn_at + Point::from((90 + step * 30, 50 + step * 30)));
         if ssd {
             pos.y = pos.y.max(TITLE_H);
         }
@@ -628,8 +630,14 @@ impl Wm {
 
     /// The output changed size (Settings → Display): bring maximized and fullscreen windows
     /// to the new size and pull any window left off-screen back into view.
-    pub fn refit(&mut self, work: Rectangle<i32, Logical>, output: Rectangle<i32, Logical>) {
+    /// Fit every window to its monitor after the monitors changed. `screens` is (work area,
+    /// whole monitor) for each, primary first; a window on none of them (its monitor went
+    /// away) is pulled onto the primary.
+    pub fn refit(&mut self, screens: &[(Rectangle<i32, Logical>, Rectangle<i32, Logical>)]) {
         for w in &mut self.windows {
+            let g = w.geometry();
+            let centre = g.loc + Point::from((g.size.w / 2, g.size.h / 2));
+            let (work, output) = screens.iter().find(|(_, o)| o.contains(centre)).copied().unwrap_or(screens[0]);
             if w.fullscreen.is_some() {
                 w.pos = output.loc;
                 w.configure(Some(output.size), &[]);
@@ -642,9 +650,9 @@ impl Wm {
                 w.pos = pos;
                 w.configure(Some(size), &[]);
             } else {
-                let g = w.geometry();
-                w.pos.x = w.pos.x.clamp(80 - g.size.w, (output.size.w - 80).max(80 - g.size.w));
-                w.pos.y = w.pos.y.clamp(TITLE_H, (work.size.h - TITLE_H).max(TITLE_H));
+                let (x0, y0) = (output.loc.x, work.loc.y);
+                w.pos.x = w.pos.x.clamp(x0 + 80 - g.size.w, (x0 + output.size.w - 80).max(x0 + 80 - g.size.w));
+                w.pos.y = w.pos.y.clamp(y0 + TITLE_H, (y0 + work.size.h - TITLE_H).max(y0 + TITLE_H));
             }
         }
     }

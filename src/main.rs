@@ -10,6 +10,7 @@ mod input;
 mod ipc;
 mod layers;
 mod menu;
+mod monitors;
 mod notifications;
 mod pins;
 mod render;

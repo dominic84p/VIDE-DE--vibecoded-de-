@@ -188,7 +188,7 @@ const SOUNDS: &[(&str, &[u8])] = &[
     ("zen.wav", include_bytes!("../assets/sounds/zen.wav")),
     ("droplet.wav", include_bytes!("../assets/sounds/droplet.wav")),
     ("orbit.wav", include_bytes!("../assets/sounds/orbit.wav")),
-    ("fart.wav", include_bytes!("../assets/sounds/fart.wav")),
+    ("misery.wav", include_bytes!("../assets/sounds/misery.wav")),
 ];
 
 /// Install the built-ins that exist next to our binary. Marked OnlyShowIn=VIDE-DE so

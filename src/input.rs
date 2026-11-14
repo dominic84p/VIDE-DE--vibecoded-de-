@@ -5,7 +5,7 @@
 //!
 //! Mod+Enter terminal · Mod+Q close · Mod+Tab cycle · Mod+Up maximize ·
 //! Mod+Down minimize · Mod+F fullscreen · Mod+Space or Super tap: start menu ·
-//! Mod+Shift+E quit · Mod+drag move.
+//! Mod+Shift+E quit · Mod+Shift+P pin a window on top · Mod+drag move.
 
 use std::time::{Duration, Instant};
 
@@ -58,6 +58,10 @@ enum Action {
     SwitcherStep { back: bool },
     SwitcherCommit,
     SwitcherCancel,
+    /// Win+Shift+P: pick a window to keep on top.
+    PinPicker,
+    /// Pin or unpin the picker's highlighted window.
+    PinPick,
     TaskView,
     Snap { right: bool },
     Maximize,
@@ -157,6 +161,7 @@ fn bind(super_mod: bool, mods: &ModifiersState, sym: Keysym) -> Option<Action> {
         Keysym::space => Some(Action::StartMenu),
         Keysym::a | Keysym::n => Some(Action::ToggleActionCenter),
         Keysym::e if mods.shift => Some(Action::Quit),
+        Keysym::p | Keysym::P if mods.shift => Some(Action::PinPicker),
         // Workspace switching: Mod+1-9,0 (0 = workspace 10)
         // Mod+Shift+1-9,0 to move focused window to workspace (must come first)
         Keysym::_1 if mods.shift => Some(Action::MoveToWorkspace(0)),
@@ -371,7 +376,21 @@ impl State {
 
             // Super tap (press + release with nothing in between) toggles the start menu.
             // Alt+Tab in progress: letting go of Alt picks, Esc backs out.
-            if state.switcher.is_some() {
+            // The pin picker stays up until something is picked: arrows and Tab move,
+            // Enter or Space picks, Esc closes.
+            if state.switcher.as_ref().is_some_and(|s| s.mode == crate::switcher::Mode::Pin) {
+                let pick = match modified {
+                    Keysym::Escape => Some(Action::SwitcherCancel),
+                    Keysym::Return | Keysym::KP_Enter | Keysym::space => Some(Action::PinPick),
+                    Keysym::Left | Keysym::Up | Keysym::ISO_Left_Tab => Some(Action::SwitcherStep { back: true }),
+                    Keysym::Right | Keysym::Down | Keysym::Tab => Some(Action::SwitcherStep { back: false }),
+                    _ => None,
+                };
+                if let Some(a) = pick {
+                    return if pressed { FilterResult::Intercept(a) } else { FilterResult::Intercept(Action::Menu(MenuKey::Ignore)) };
+                }
+            }
+            if state.switcher.as_ref().is_some_and(|s| s.mode == crate::switcher::Mode::Switch) {
                 if !pressed && matches!(raw, Keysym::Alt_L | Keysym::Alt_R) {
                     return FilterResult::Intercept(Action::SwitcherCommit);
                 }
@@ -439,6 +458,12 @@ impl State {
             Action::SwitcherStep { back } => self.switcher_step(back),
             Action::SwitcherCommit => self.switcher_commit(),
             Action::SwitcherCancel => self.switcher_cancel(),
+            Action::PinPicker => self.pin_picker(),
+            Action::PinPick => {
+                if let Some(i) = self.switcher.as_ref().map(|s| s.index) {
+                    self.pin_pick(i);
+                }
+            }
             Action::TaskView => self.toggle_desktops(),
             Action::Snap { right } => {
                 if let Some(s) = focused {
@@ -753,7 +778,7 @@ impl State {
     fn shell_over_fullscreen(&self) -> bool {
         let focused = self.focused();
         (self.shell_overlay_open() || self.action_center.open)
-            && self.wm.top().is_some_and(|w| w.fullscreen.is_some() && Some(w.surface()) == focused.as_ref())
+            && self.wm.fullscreen_in_front(focused.as_ref())
     }
 
     fn taskbar_visible(&self) -> bool {
@@ -957,6 +982,18 @@ impl State {
                 _ => {}
             }
             self.needs_redraw = true;
+            return;
+        }
+
+        // Pin picker: a click on a tile pins or unpins that window, anywhere else closes it.
+        if self.switcher.as_ref().is_some_and(|s| s.mode == crate::switcher::Mode::Pin) {
+            if state == ButtonState::Pressed {
+                let hit = self.switcher_origin().and_then(|o| self.switcher.as_ref()?.tile_at(self.pointer_loc.to_i32_round() - o));
+                match hit {
+                    Some(i) if button == BTN_LEFT => self.pin_pick(i),
+                    _ => self.switcher_cancel(),
+                }
+            }
             return;
         }
 

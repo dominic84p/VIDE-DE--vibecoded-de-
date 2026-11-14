@@ -81,6 +81,18 @@ impl State {
 }
 ```
 
+### Always on top
+
+`Window::on_top` pins a window above all others. `Wm::restack` (run after every
+`add` and `raise`) sorts pinned windows, and their dialogs, to the end of the list while
+keeping each group's order, so rendering and hit-testing need no special case.
+`Wm::fullscreen_in_front` ignores pinned windows when deciding whether a focused fullscreen
+app hides the taskbar. A pinned window floating over a game doesn't bring the taskbar back.
+
+Ways to pin: `Super+Shift+P` opens the Alt+Tab panel in pin mode (`switcher::Mode::Pin`),
+which works for apps that draw their own titlebar. **Always on top** is also in our titlebar's
+right-click menu and in the taskbar button's jump list. Pinned windows get a yellow outline.
+
 ## Move/Resize Grabs
 
 ```rust

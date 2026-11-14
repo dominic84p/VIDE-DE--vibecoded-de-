@@ -84,6 +84,8 @@ pub struct Window {
     pub titlebar: Option<(TitleKey, MemoryRenderBuffer)>,
     /// The app stopped answering pings (see health.rs); the titlebar says so.
     pub unresponsive: bool,
+    /// Pinned on top (Win+Shift+P): stays above every other window, fullscreen ones too.
+    pub on_top: bool,
 }
 
 impl Window {
@@ -335,7 +337,9 @@ impl Wm {
             border: Default::default(),
             titlebar: None,
             unresponsive: false,
+            on_top: false,
         });
+        self.restack();
     }
 
     pub fn remove(&mut self, surface: &WlSurface) {
@@ -396,6 +400,49 @@ impl Wm {
             }
             idx += 1;
         }
+        self.restack();
+    }
+
+    /// Move pinned windows (and their dialogs) above all others, keeping each group's order.
+    fn restack(&mut self) {
+        let pinned: Vec<bool> = self
+            .windows
+            .iter()
+            .map(|w| {
+                let mut w = w;
+                // A pinned window's dialogs ride on top with it.
+                for _ in 0..8 {
+                    if w.on_top {
+                        return true;
+                    }
+                    let Some(p) = self.parent_surface(w).and_then(|p| self.find(&p)) else { break };
+                    w = p;
+                }
+                false
+            })
+            .collect();
+        let mut keyed: Vec<(bool, Window)> = pinned.into_iter().zip(self.windows.drain(..)).collect();
+        keyed.sort_by_key(|(p, _)| *p);
+        self.windows = keyed.into_iter().map(|(_, w)| w).collect();
+    }
+
+    /// Pin a window on top, or let it go back among the others.
+    pub fn set_on_top(&mut self, surface: &WlSurface, on: bool) {
+        let Some(w) = self.find_mut(surface) else { return };
+        w.on_top = on;
+        if on {
+            self.raise(surface);
+        } else {
+            self.restack();
+        }
+    }
+
+    /// Is the focused window fullscreen and in front? Pinned windows floating over it don't
+    /// count, and a pinned window can be the fullscreen one itself.
+    pub fn fullscreen_in_front(&self, focused: Option<&WlSurface>) -> bool {
+        let Some(w) = focused.and_then(|f| self.find(f)) else { return false };
+        let top = self.windows.iter().rev().find(|w| !w.on_top && !w.minimized && w.mapped && w.workspace == self.current_workspace);
+        w.fullscreen.is_some() && (w.on_top || top.is_some_and(|t| t.surface() == w.surface()))
     }
 
     /// Switch to workspace `ws` (0-9). Returns the new workspace index.

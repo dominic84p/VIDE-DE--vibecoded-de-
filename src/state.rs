@@ -433,7 +433,7 @@ impl State {
     /// Start and took the taskbar away along with it.
     pub fn taskbar_shown(&self) -> bool {
         let focused = self.focused();
-        let fullscreen_top = self.wm.top().is_some_and(|w| w.fullscreen.is_some() && Some(w.surface()) == focused.as_ref());
+        let fullscreen_top = self.wm.fullscreen_in_front(focused.as_ref());
         !fullscreen_top
             || self.start.open
             || self.menu.is_some()

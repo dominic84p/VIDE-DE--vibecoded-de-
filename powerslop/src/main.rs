@@ -37,7 +37,26 @@ const BASE_FONT_SIZE: f32 = 15.0;
 const LINE_PX: f32 = 12.0;
 const NOTCH_PX: f32 = 36.0;
 
+/// Tell programs what kind of terminal this is. Nothing above us sets TERM (the session
+/// starts from a display manager), and without it zsh, fish and vim can't move the cursor:
+/// backspace left junk and the arrow keys did nothing. egui_term runs alacritty's terminal,
+/// so its terminfo is the exact match when installed; xterm-256color is close enough otherwise.
+fn set_term_env() {
+    let home = std::env::var("HOME").unwrap_or_default();
+    let alacritty = ["/usr/share/terminfo/a/alacritty", "/usr/lib/terminfo/a/alacritty", "/lib/terminfo/a/alacritty"]
+        .iter()
+        .map(std::path::PathBuf::from)
+        .chain([std::path::Path::new(&home).join(".terminfo/a/alacritty")])
+        .any(|p| p.exists());
+    // SAFETY: called first thing in main, before any thread exists.
+    unsafe {
+        std::env::set_var("TERM", if alacritty { "alacritty" } else { "xterm-256color" });
+        std::env::set_var("COLORTERM", "truecolor");
+    }
+}
+
 fn main() -> eframe::Result {
+    set_term_env();
     let args: Vec<String> = std::env::args().skip(1).collect();
     let run = match args.first().map(String::as_str) {
         Some("-e") if args.len() > 1 => Some(args[1..].to_vec()),
@@ -256,6 +275,12 @@ impl App {
         }
     }
 
+    fn write(&mut self, bytes: Vec<u8>) {
+        if let Some(b) = self.backend.as_mut() {
+            b.process_command(BackendCommand::Write(bytes));
+        }
+    }
+
     /// Selection text, one line per screen row, trailing blanks trimmed.
     fn selection(&self) -> String {
         let Some(b) = &self.backend else { return String::new() };
@@ -458,6 +483,22 @@ impl eframe::App for App {
                 PtyEvent::Title(t) => {
                     let title = if t.is_empty() { "Windoze PowerSlop 2.0".into() } else { format!("Windoze PowerSlop 2.0 - {t}") };
                     ctx.send_viewport_cmd(egui::ViewportCommand::Title(title));
+                }
+                // The terminal answering a program's question (what are you, where's the
+                // cursor). These used to be dropped, so anything that asked (fish asks on
+                // every start) waited for a reply that never came.
+                PtyEvent::PtyWrite(text) => self.write(text.into_bytes()),
+                // "What colour is the background?" (vim, fish and others pick light or dark
+                // themes from it); the default text and background colours are the ones asked.
+                PtyEvent::ColorRequest(index, reply) => {
+                    let rgb = match index {
+                        256 => Some((0xee, 0xed, 0xf0)),
+                        257 => Some((0x01, 0x24, 0x56)),
+                        _ => None,
+                    };
+                    if let Some((r, g, b)) = rgb {
+                        self.write(reply(alacritty_terminal::vte::ansi::Rgb { r, g, b }).into_bytes());
+                    }
                 }
                 _ => {}
             }

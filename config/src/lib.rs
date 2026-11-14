@@ -187,15 +187,61 @@ impl Config {
 }
 
 /// Our notification sounds, (id, name in Settings). Installed to `sounds_dir()` as `<id>.wav`.
-pub const SOUNDS: &[(&str, &str)] = &[("ding", "Ding"), ("chime", "Chime"), ("pop", "Pop"), ("bell", "Bell"), ("glass", "Glass")];
+pub const SOUNDS: &[(&str, &str)] = &[
+    ("ding", "Ding"),
+    ("chime", "Chime"),
+    ("pop", "Pop"),
+    ("bell", "Bell"),
+    ("glass", "Glass"),
+    ("aurora", "Aurora"),
+    ("marimba", "Marimba"),
+    ("crystal", "Crystal"),
+    ("kalimba", "Kalimba"),
+    ("harp", "Harp"),
+    ("zen", "Zen"),
+    ("droplet", "Droplet"),
+    ("orbit", "Orbit"),
+];
 
 /// Where VIDE-DE installs its notification sounds.
 pub fn sounds_dir() -> PathBuf {
     wallpapers_dir().with_file_name("sounds")
 }
 
-/// The file for a sound id, if it's one of ours ("none" and unknown ids have none).
+/// Where your own notification sounds go: anything playable dropped here shows up in Settings.
+pub fn custom_sounds_dir() -> PathBuf {
+    sounds_dir().join("custom")
+}
+
+/// File types offered from `custom_sounds_dir()`; PipeWire's player reads all of them.
+pub const CUSTOM_SOUND_TYPES: [&str; 6] = ["wav", "ogg", "oga", "flac", "mp3", "opus"];
+
+/// Your own sounds, as (id, name in Settings): `custom:<file name>`, named after the file.
+pub fn custom_sounds() -> Vec<(String, String)> {
+    let mut out: Vec<(String, String)> = std::fs::read_dir(custom_sounds_dir())
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.extension().and_then(|e| e.to_str()).is_some_and(|e| CUSTOM_SOUND_TYPES.contains(&e.to_ascii_lowercase().as_str())))
+        .filter_map(|p| {
+            let file = p.file_name()?.to_str()?.to_string();
+            let stem = p.file_stem()?.to_string_lossy().replace(['_', '-'], " ");
+            Some((format!("custom:{file}"), stem))
+        })
+        .collect();
+    out.sort_by_key(|(_, n)| n.to_lowercase());
+    out
+}
+
+/// The file for a sound id: one of ours, or one of yours (`custom:<file name>`).
+/// "none" and unknown ids have none.
 pub fn sound_file(id: &str) -> Option<PathBuf> {
+    if let Some(file) = id.strip_prefix("custom:") {
+        // A bare file name only: the id comes from a settings file anyone can edit.
+        let p = custom_sounds_dir().join(file);
+        return (!file.contains('/') && p.is_file()).then_some(p);
+    }
     SOUNDS.iter().any(|(s, _)| *s == id).then(|| sounds_dir().join(format!("{id}.wav")))
 }
 
@@ -221,4 +267,30 @@ fn kde_mouse() -> Option<(bool, f64)> {
         }
     }
     Some((flat.unwrap_or(true), speed.unwrap_or(0.0)))
+}
+
+#[cfg(test)]
+mod sound_tests {
+    use super::*;
+
+    #[test]
+    fn custom_sounds_are_listed_and_found() {
+        let data = std::env::temp_dir().join(format!("vide-sounds-test-{}", std::process::id()));
+        // SAFETY: this test is the only one in this crate that touches XDG_DATA_HOME.
+        unsafe { std::env::set_var("XDG_DATA_HOME", &data) };
+        let dir = custom_sounds_dir();
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("my_cool-sound.ogg"), b"x").unwrap();
+        std::fs::write(dir.join("notes.txt"), b"x").unwrap();
+
+        let list = custom_sounds();
+        assert_eq!(list, vec![("custom:my_cool-sound.ogg".to_string(), "my cool sound".to_string())]);
+        assert_eq!(sound_file("custom:my_cool-sound.ogg"), Some(dir.join("my_cool-sound.ogg")));
+        assert_eq!(sound_file("custom:gone.wav"), None);
+        // An edited settings file can't point outside the folder.
+        assert_eq!(sound_file("custom:../../../etc/passwd"), None);
+        assert_eq!(sound_file("custom:.."), None);
+        assert_eq!(sound_file("zen"), Some(sounds_dir().join("zen.wav")));
+        std::fs::remove_dir_all(&data).unwrap();
+    }
 }

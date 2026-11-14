@@ -28,7 +28,7 @@ Complete reference for `~/.config/vide-de/settings.conf` as defined in `config/s
 | `animations` | bool | `true` | Windoze's "Show animations": windows zoom open and shrink when minimized; Start, the Action Center, flyouts, Task View and menus slide or fade in. All short (70–150 ms), and input never waits for them. Applies live |
 | `clock_24h` | bool | `false` | Display the taskbar clock in 24-hour time (`14:30` instead of `2:30 PM`) |
 | `light_mode` | bool | `false` | Windoze 10's "default Windoze mode": light taskbar, Start, Action Center, flyouts and menus instead of dark. Applies live |
-| `notification_sound` | string | `ding` | Sound for a new notification: `ding`, `chime`, `pop`, `bell`, `glass` or `none`. Quiet in Focus assist; an app's own `sound-file` hint wins, `suppress-sound` silences it |
+| `notification_sound` | string | `ding` | Sound for a new notification: `ding`, `chime`, `pop`, `bell`, `glass`, `aurora`, `marimba`, `crystal`, `kalimba`, `harp`, `zen`, `droplet`, `orbit`, one of your own as `custom:<file name>` (a file in `~/.local/share/vide-de/sounds/custom/`), or `none`. Quiet in Focus assist; an app's own `sound-file` hint wins, `suppress-sound` silences it |
 
 ## Mouse & Touchpad
 

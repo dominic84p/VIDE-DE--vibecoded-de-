@@ -1,4 +1,5 @@
 mod system;
+mod sounds;
 mod ui;
 
 use std::path::PathBuf;
@@ -294,6 +295,9 @@ pub struct Settings {
     pub app_filter: String,
     pub kbd_test: String,
     pub error: Option<String>,
+    /// A file chooser open for "Add your own…" sound, and what came of the last one.
+    pub sound_pick: Option<std::sync::mpsc::Receiver<Option<Result<String, String>>>>,
+    pub sound_note: Option<String>,
 }
 
 impl Settings {
@@ -580,6 +584,8 @@ fn main() -> eframe::Result<()> {
                 app_filter: String::new(),
                 kbd_test: String::new(),
                 error: None,
+                sound_pick: None,
+                sound_note: None,
             }))
         }),
     )

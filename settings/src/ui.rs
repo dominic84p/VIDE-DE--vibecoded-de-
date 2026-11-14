@@ -545,14 +545,35 @@ impl Settings {
             });
             c
         });
-        changed |= setting_block(ui, "Notification sound", "Plays when a notification arrives, except in Focus assist.", |ui| {
+        // A sound picked with "Add your own…" becomes the notification sound.
+        if let Some(answer) = self.sound_pick.as_ref().and_then(|rx| rx.try_recv().ok()) {
+            self.sound_pick = None;
+            match answer {
+                Some(Ok(id)) => {
+                    preview_sound(&id);
+                    self.config.notification_sound = id;
+                    self.sound_note = None;
+                    changed = true;
+                }
+                Some(Err(e)) => self.sound_note = Some(e),
+                None => {}
+            }
+        }
+        if self.sound_pick.is_some() {
+            ui.ctx().request_repaint_after(std::time::Duration::from_millis(200));
+        }
+        changed |= setting_block(ui, "Notification sound", "Plays when a notification arrives, except in Focus assist. Add your own (wav, ogg, flac, mp3, opus) and they're listed here too.", |ui| {
             let mut c = false;
-            let name = |id: &str| vide_config::SOUNDS.iter().find(|(s, _)| *s == id).map_or("None", |(_, n)| *n);
+            // Ours, then yours, then None.
+            let mut choices: Vec<(String, String)> = vide_config::SOUNDS.iter().map(|(i, n)| (i.to_string(), n.to_string())).collect();
+            choices.extend(vide_config::custom_sounds());
+            choices.push(("none".into(), "None".into()));
+            let current = choices.iter().find(|(i, _)| *i == self.config.notification_sound).map_or("None".to_string(), |(_, n)| n.clone());
             ui.horizontal(|ui| {
-                egui::ComboBox::from_id_salt("notif_sound").selected_text(name(&self.config.notification_sound)).width(150.0).show_ui(ui, |ui| {
-                    for (id, label) in vide_config::SOUNDS.iter().copied().chain([("none", "None")]) {
-                        if ui.selectable_label(self.config.notification_sound == id, label).clicked() {
-                            self.config.notification_sound = id.to_string();
+                egui::ComboBox::from_id_salt("notif_sound").selected_text(current).width(170.0).show_ui(ui, |ui| {
+                    for (id, label) in &choices {
+                        if ui.selectable_label(self.config.notification_sound == *id, label).clicked() {
+                            self.config.notification_sound = id.clone();
                             preview_sound(id);
                             c = true;
                         }
@@ -563,6 +584,20 @@ impl Settings {
                     preview_sound(&self.config.notification_sound);
                 }
             });
+            ui.horizontal(|ui| {
+                let picking = self.sound_pick.is_some();
+                if ui.add_enabled(!picking, egui::Button::new(if picking { "Choosing…" } else { "Add your own…" })).clicked() {
+                    self.sound_pick = Some(crate::sounds::pick());
+                }
+                if ui.button("Open sounds folder").clicked() {
+                    let dir = vide_config::custom_sounds_dir();
+                    let _ = std::fs::create_dir_all(&dir);
+                    spawn("file-exploder", &[&dir.to_string_lossy()]);
+                }
+            });
+            if let Some(note) = &self.sound_note {
+                ui.label(RichText::new(note).color(DIM).size(12.0));
+            }
             c
         });
         ui.add_space(12.0);

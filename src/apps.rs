@@ -180,6 +180,14 @@ const SOUNDS: &[(&str, &[u8])] = &[
     ("pop.wav", include_bytes!("../assets/sounds/pop.wav")),
     ("bell.wav", include_bytes!("../assets/sounds/bell.wav")),
     ("glass.wav", include_bytes!("../assets/sounds/glass.wav")),
+    ("aurora.wav", include_bytes!("../assets/sounds/aurora.wav")),
+    ("marimba.wav", include_bytes!("../assets/sounds/marimba.wav")),
+    ("crystal.wav", include_bytes!("../assets/sounds/crystal.wav")),
+    ("kalimba.wav", include_bytes!("../assets/sounds/kalimba.wav")),
+    ("harp.wav", include_bytes!("../assets/sounds/harp.wav")),
+    ("zen.wav", include_bytes!("../assets/sounds/zen.wav")),
+    ("droplet.wav", include_bytes!("../assets/sounds/droplet.wav")),
+    ("orbit.wav", include_bytes!("../assets/sounds/orbit.wav")),
 ];
 
 /// Install the built-ins that exist next to our binary. Marked OnlyShowIn=VIDE-DE so

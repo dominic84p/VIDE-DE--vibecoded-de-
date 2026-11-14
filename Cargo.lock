@@ -5099,6 +5099,7 @@ dependencies = [
  "serde_json",
  "vide-config",
  "vide-fonts",
+ "zbus",
 ]
 
 [[package]]

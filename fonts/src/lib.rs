@@ -242,6 +242,24 @@ macro_rules! install_egui {
     }};
 }
 
+/// Where distros keep fonts: Arch's folders, then Debian, Ubuntu and Mint's `truetype/` ones.
+const FONT_DIRS: [&str; 9] = [
+    "/usr/share/fonts/noto",
+    "/usr/share/fonts/truetype/noto",
+    "/usr/share/fonts/opentype/noto",
+    "/usr/share/fonts/TTF",
+    "/usr/share/fonts/dejavu",
+    "/usr/share/fonts/truetype/dejavu",
+    "/usr/share/fonts/liberation",
+    "/usr/share/fonts/truetype/liberation",
+    "/usr/share/fonts/truetype/liberation2",
+];
+
+/// The first of `files` (e.g. `NotoSans-Regular.ttf`) found in any distro's font folders.
+pub fn read_system_font(files: &[&str]) -> Option<Vec<u8>> {
+    files.iter().find_map(|f| FONT_DIRS.iter().find_map(|d| std::fs::read(std::path::Path::new(d).join(f)).ok()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

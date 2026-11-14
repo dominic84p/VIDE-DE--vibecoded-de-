@@ -258,19 +258,13 @@ pub fn ellipsize(font: &Font, size: f32, text: &str, max: i32) -> String {
     format!("{s}…")
 }
 
-/// Find a sans font on the system. We don't ship one (yet).
+/// Find a sans font on the system, on Arch or Debian/Ubuntu/Mint. We don't ship one (yet).
 pub fn load_font() -> Option<Font> {
-    const CANDIDATES: &[&str] = &[
-        "/usr/share/fonts/noto/NotoSans-Medium.ttf",
-        "/usr/share/fonts/noto/NotoSans-Regular.ttf",
-        "/usr/share/fonts/TTF/DejaVuSans.ttf",
-        "/usr/share/fonts/dejavu/DejaVuSans.ttf",
-        "/usr/share/fonts/liberation/LiberationSans-Regular.ttf",
-    ];
-    for path in CANDIDATES {
-        if let Ok(bytes) = std::fs::read(path) {
+    const CANDIDATES: &[&str] = &["NotoSans-Medium.ttf", "NotoSans-Regular.ttf", "DejaVuSans.ttf", "LiberationSans-Regular.ttf"];
+    for name in CANDIDATES {
+        if let Some(bytes) = vide_fonts::read_system_font(&[name]) {
             if let Ok(font) = Font::from_bytes(bytes, fontdue::FontSettings::default()) {
-                tracing::info!("ui font: {path}");
+                tracing::info!("ui font: {name}");
                 return Some(font);
             }
         }

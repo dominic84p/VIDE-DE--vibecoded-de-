@@ -5,6 +5,30 @@ description: 'Build and run VIDE-DE on your system'
 
 # Installation Guide
 
+## Prebuilt (Linux Mint, Ubuntu): no compiling
+
+Building needs a lot of RAM, so low-memory machines (4 GB) are better off with the prebuilt
+bundle. It runs on Linux Mint 22, Ubuntu 24.04 and newer (x86_64).
+
+1. Unpack `vide-de-x86_64.tar.gz` anywhere.
+2. Double-click **Install VIDE-DE** in the folder. If the file manager asks, mark it as trusted.
+   A terminal opens, installs the few packages VIDE-DE needs with `apt`, and asks for your
+   password to copy VIDE-DE into `/usr/local`.
+3. Log out, pick **VIDE-DE** from the session menu on the login screen, and log in.
+
+`./uninstall.sh` in the same folder removes it again.
+
+To make the bundle (on any Linux with `podman`):
+
+```bash
+scripts/make-bundle.sh
+```
+
+It builds inside an Ubuntu 24.04 container, because binaries built on Arch need a newer
+glibc than Mint and Ubuntu have, and writes `target/bundle/vide-de-x86_64.tar.gz`.
+
+## Building from source
+
 ## System Requirements
 
 ### Base Dependencies (Arch Linux package names)

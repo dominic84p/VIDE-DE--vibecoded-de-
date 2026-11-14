@@ -645,7 +645,8 @@ impl State {
         // drives) or anything else needs admin rights.
         self.spawn(
             "for a in /usr/lib/polkit-kde-authentication-agent-1 /usr/libexec/polkit-kde-authentication-agent-1 \
-             /usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1; do [ -x \"$a\" ] && exec \"$a\"; done",
+             /usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1 \
+             /usr/lib/policykit-1-gnome/polkit-gnome-authentication-agent-1; do [ -x \"$a\" ] && exec \"$a\"; done",
         );
         // Start our screenshare / screenshot portal backend and reload xdg-desktop-portal
         // so it picks up vide-portals.conf on the current D-Bus/Wayland environment.
@@ -668,7 +669,8 @@ impl State {
         self.pins.launched(&app.id);
         if app.terminal {
             // Konsole-style `-e`; PowerSlop runs whatever $SHELL it's given, so pass the app as one.
-            self.spawn(&format!("konsole -e {}", app.exec));
+            // Debian/Ubuntu/Mint have no Konsole but always have their chosen terminal there.
+            self.spawn(&format!("if command -v konsole >/dev/null; then exec konsole -e {0}; else exec x-terminal-emulator -e {0}; fi", app.exec));
         } else {
             self.spawn(&app.exec);
         }

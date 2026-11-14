@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Install VIDE-DE
+Comment=Install the vibecoded desktop on this PC (asks for your password)
+Icon=system-software-install
+Terminal=true
+Exec=bash -c 'cd "$(dirname "$0")" && ./install.sh; echo; read -rp "Press Enter to close..."' %k

@@ -181,9 +181,7 @@ pub fn wrap(font: &fontdue::Font, s: &str, max: f32, lines: usize) -> Vec<String
 }
 
 pub fn load_font() -> Option<fontdue::Font> {
-    ["/usr/share/fonts/noto/NotoSans-Regular.ttf", "/usr/share/fonts/TTF/DejaVuSans.ttf", "/usr/share/fonts/dejavu/DejaVuSans.ttf"]
-        .iter()
-        .find_map(|p| std::fs::read(p).ok())
+    vide_fonts::read_system_font(&["NotoSans-Regular.ttf", "DejaVuSans.ttf"])
         .and_then(|b| fontdue::Font::from_bytes(b, fontdue::FontSettings::default()).ok())
 }
 

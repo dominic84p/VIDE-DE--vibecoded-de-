@@ -1,5 +1,6 @@
 # Win+Shift+P (Alt+Shift+P nested) pins a window on top: it stays above a fullscreen app,
-# and the fullscreen app still hides the taskbar. Check the last shot by eye.
+# and the fullscreen app still hides the taskbar, even after clicking into the pinned window.
+# Check the shots by eye.
 wait 3
 run exec ./target/release/vide-about
 expect-window vide-about 20
@@ -16,6 +17,9 @@ wait 1
 key alt+f
 wait 2
 shot pinned-over-fullscreen
+click 640 400
+wait 1
+shot pinned-focused-over-fullscreen
 expect-log "pinned on top: dominic84p" 5
 key alt+shift+p
 wait 1

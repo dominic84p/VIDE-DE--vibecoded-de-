@@ -437,12 +437,16 @@ impl Wm {
         }
     }
 
-    /// Is the focused window fullscreen and in front? Pinned windows floating over it don't
-    /// count, and a pinned window can be the fullscreen one itself.
+    /// Is a fullscreen app in front, so the taskbar stays away? Pinned windows floating over
+    /// it don't count, and clicking into one of them doesn't bring the taskbar back either;
+    /// a pinned window can also be the fullscreen one itself.
     pub fn fullscreen_in_front(&self, focused: Option<&WlSurface>) -> bool {
         let Some(w) = focused.and_then(|f| self.find(f)) else { return false };
+        if w.on_top && w.fullscreen.is_some() {
+            return true;
+        }
         let top = self.windows.iter().rev().find(|w| !w.on_top && !w.minimized && w.mapped && w.workspace == self.current_workspace);
-        w.fullscreen.is_some() && (w.on_top || top.is_some_and(|t| t.surface() == w.surface()))
+        top.is_some_and(|t| t.fullscreen.is_some() && (t.surface() == w.surface() || w.on_top))
     }
 
     /// Switch to workspace `ws` (0-9). Returns the new workspace index.

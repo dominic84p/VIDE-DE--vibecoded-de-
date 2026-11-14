@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Install VIDE-DE (latest)
+Comment=Download the newest prebuilt VIDE-DE from GitHub and install it (asks for your password)
+Icon=system-software-install
+Terminal=true
+Exec=bash -c "curl -fsSL https://github.com/dominic84p/vide-de/releases/latest/download/get-vide.sh | bash; echo; read -rp 'Press Enter to close...'"

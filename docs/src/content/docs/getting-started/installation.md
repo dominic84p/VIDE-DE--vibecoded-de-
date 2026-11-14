@@ -10,6 +10,16 @@ description: 'Build and run VIDE-DE on your system'
 Building needs a lot of RAM, so low-memory machines (4 GB) are better off with the prebuilt
 bundle. It runs on Linux Mint 22, Ubuntu 24.04 and newer (x86_64).
 
+The quickest way is the online installer, which always fetches the newest build from
+[GitHub Releases](https://github.com/dominic84p/vide-de/releases/latest). Download
+`install-vide-de.desktop` from there and double-click it, or run:
+
+```bash
+curl -fsSL https://github.com/dominic84p/vide-de/releases/latest/download/get-vide.sh | bash
+```
+
+Running it again later updates to the newest build. To install from a downloaded bundle instead:
+
 1. Unpack `vide-de-x86_64.tar.gz` anywhere.
 2. Double-click **Install VIDE-DE** in the folder. If the file manager asks, mark it as trusted.
    A terminal opens, installs the few packages VIDE-DE needs with `apt`, and asks for your
@@ -26,6 +36,16 @@ scripts/make-bundle.sh
 
 It builds inside an Ubuntu 24.04 container, because binaries built on Arch need a newer
 glibc than Mint and Ubuntu have, and writes `target/bundle/vide-de-x86_64.tar.gz`.
+
+To build it and publish it as the latest release (needs `gh` logged in, and `HEAD` pushed to
+`main`):
+
+```bash
+scripts/release.sh
+```
+
+That tags the commit `build-YYYYMMDD-<commit>` and uploads the tarball, the zip, `get-vide.sh`
+and `install-vide-de.desktop`, which is what the online installer downloads.
 
 ## Building from source
 

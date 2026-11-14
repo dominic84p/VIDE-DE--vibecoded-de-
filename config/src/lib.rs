@@ -201,6 +201,7 @@ pub const SOUNDS: &[(&str, &str)] = &[
     ("zen", "Zen"),
     ("droplet", "Droplet"),
     ("orbit", "Orbit"),
+    ("fart", "Fart"),
 ];
 
 /// Where VIDE-DE installs its notification sounds.

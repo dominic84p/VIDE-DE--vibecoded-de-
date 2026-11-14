@@ -304,5 +304,31 @@ def studio():
     finish("orbit", L, R, 0.8)
 
 
+def fart():
+    """The important one. A buzzy pulse wave (the lips) whose pitch wanders and sags, flapping
+    open and shut a few dozen times a second, with breath noise, all muffled."""
+    length = 1.1
+    t = t_axis(length)
+    # Pitch: starts around 95 Hz, wobbles, sags at the end; a little random jitter keeps it organic.
+    jitter = lowpass(rng.standard_normal(len(t)), 12) * 40
+    f0 = 95 + 18 * np.sin(2 * np.pi * 3.1 * t) + jitter - 45 * np.clip((t - 0.65) / 0.4, 0, 1) ** 2
+    phase = 2 * np.pi * np.cumsum(np.maximum(f0, 35)) / SR
+    pulse = np.tanh(6 * np.sin(phase)) + 0.4 * np.sin(2 * phase)  # squared-off, reedy
+    # Lip flutter: amplitude chopping at ~27 Hz, a bit uneven.
+    flutter = 0.55 + 0.45 * np.sin(2 * np.pi * (27 * t + 0.6 * np.sin(2 * np.pi * 1.7 * t))) ** 2
+    breath = lowpass(rng.standard_normal(len(t)), 900) * 0.35
+    # Envelope: a quick start, a sustained rasp, a sputtering tail.
+    env = np.minimum(1.0, t / 0.02) * np.clip(1.15 - t / length, 0, 1) ** 0.6
+    # Rounded off, so the sputters are wet little gaps rather than digital clicks.
+    sputter = lowpass(1 - 0.8 * (t > 0.82) * (np.sin(2 * np.pi * 11 * t) < -0.2), 45)
+    voice = lowpass((pulse * flutter + breath) * env * sputter, 700)
+    voice = release(voice, 80)
+    L, R = mix(1.3, [(0.0, 0.0, 1.0, [voice, voice * 0.97])], verb=dict(size=0.35, wet=0.12, tone=2500))
+    finish("fart", L, R, 1.3)
+
+
+if not ONLY or "fart" in ONLY:
+    fart()
+
 if not ONLY or ONLY & {"aurora", "marimba", "crystal", "kalimba", "harp", "zen", "droplet", "orbit"}:
     studio()

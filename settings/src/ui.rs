@@ -600,6 +600,39 @@ impl Settings {
             }
             c
         });
+        changed |= setting_block(
+            ui,
+            "Sounds for each app",
+            "Apps that have sent you notifications. Some (like Claude) ask for silence every time; set those to Always to hear them anyway.",
+            |ui| {
+                let mut c = false;
+                let apps = vide_config::notifying_apps();
+                if apps.is_empty() {
+                    ui.label(RichText::new("No app has sent a notification yet.").color(DIM).size(12.5));
+                }
+                egui::Grid::new("app_sounds").num_columns(2).spacing([24.0, 6.0]).show(ui, |ui| {
+                    for (id, name) in &apps {
+                        ui.label(app_display_name(id, name));
+                        let current = self.config.app_sound(id);
+                        let label = |s: vide_config::AppSound| match s {
+                            vide_config::AppSound::AppsChoice => "App's choice",
+                            vide_config::AppSound::Always => "Always",
+                            vide_config::AppSound::Never => "Never",
+                        };
+                        egui::ComboBox::from_id_salt(("app_sound", id)).selected_text(label(current)).width(130.0).show_ui(ui, |ui| {
+                            for s in [vide_config::AppSound::AppsChoice, vide_config::AppSound::Always, vide_config::AppSound::Never] {
+                                if ui.selectable_label(current == s, label(s)).clicked() {
+                                    self.config.set_app_sound(id, s);
+                                    c = true;
+                                }
+                            }
+                        });
+                        ui.end_row();
+                    }
+                });
+                c
+            },
+        );
         ui.add_space(12.0);
         section_title(ui, "Tray");
         card_frame().show(ui, |ui| {
@@ -1598,6 +1631,17 @@ mod xkb_option_tests {
 }
 
 /// Play a notification sound once, for choosing one.
+/// An app's name from its .desktop file when its id is a desktop entry, else the name it sent.
+fn app_display_name(id: &str, sent: &str) -> String {
+    let home = std::env::var("HOME").unwrap_or_default();
+    let dirs = [format!("{home}/.local/share/applications"), "/usr/share/applications".into(), "/var/lib/flatpak/exports/share/applications".into()];
+    let from_entry = dirs.iter().find_map(|d| {
+        let text = std::fs::read_to_string(format!("{d}/{id}.desktop")).ok()?;
+        text.lines().find_map(|l| l.strip_prefix("Name=").map(str::to_string))
+    });
+    from_entry.unwrap_or_else(|| if sent.is_empty() || sent == "Notification" { id.to_string() } else { sent.to_string() })
+}
+
 fn preview_sound(id: &str) {
     if let Some(file) = vide_config::sound_file(id) {
         std::thread::spawn(move || {

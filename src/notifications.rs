@@ -83,6 +83,8 @@ pub struct Notification {
     /// The app asked for silence (`suppress-sound`), or for its own sound (`sound-file`).
     pub silent: bool,
     pub sound_file: Option<String>,
+    /// The `desktop-entry` hint: which app this is, for per-app sound settings.
+    pub desktop_entry: Option<String>,
 }
 
 #[derive(Clone, PartialEq, Debug, Default)]
@@ -258,6 +260,7 @@ impl Server {
             timeout_ms: expire_timeout,
             silent: hints.get("suppress-sound").and_then(|v| v.downcast_ref::<bool>().ok()).unwrap_or(false),
             sound_file: hints.get("sound-file").and_then(|v| v.downcast_ref::<String>().ok()),
+            desktop_entry: hints.get("desktop-entry").and_then(|v| v.downcast_ref::<String>().ok()),
         };
 
         let _ = self.events.send(NotifEvent::Added(notif));
@@ -715,9 +718,17 @@ fn toast_card_h(n: &Notification) -> i32 {
 
 impl State {
     /// Windoze-style sound for a new notification: the one picked in Settings, or the app's own
-    /// `sound-file`. Quiet in Focus assist and when the app asks for silence.
+    /// `sound-file`. Quiet in Focus assist, and when the app asks for silence unless Settings says
+    /// to play it for that app anyway (the Claude app asks for silence on every notification).
     fn play_notification_sound(&mut self, notif: &Notification) {
-        if notif.silent || self.action_center.focus_assist {
+        let app = vide_config::notifying_app_id(notif.desktop_entry.as_deref(), &notif.app_name);
+        vide_config::remember_notifying_app(&app, &notif.app_name);
+        let play = match self.config.app_sound(&app) {
+            vide_config::AppSound::Always => true,
+            vide_config::AppSound::Never => false,
+            vide_config::AppSound::AppsChoice => !notif.silent,
+        };
+        if !play || self.action_center.focus_assist {
             return;
         }
         let file = notif
@@ -947,6 +958,7 @@ mod tests {
             timeout_ms: -1,
             silent: false,
             sound_file: None,
+            desktop_entry: None,
         };
 
         // Add

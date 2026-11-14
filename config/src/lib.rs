@@ -57,6 +57,18 @@ pub struct Config {
     pub notification_sound: String,
     /// Windoze's "Show animations": windows zoom in and out, Start and panels slide in.
     pub animations: bool,
+    /// Per-app notification sound, as `app=always;other=never`: see `app_sound`.
+    pub notification_sound_apps: String,
+}
+
+/// Whether an app's notifications make a sound.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum AppSound {
+    /// Play our sound unless the app asks for silence (`suppress-sound`).
+    AppsChoice,
+    /// Play it even when the app asks for silence. The Claude app always does.
+    Always,
+    Never,
 }
 
 impl Default for Config {
@@ -88,6 +100,7 @@ impl Default for Config {
             light_mode: false,
             notification_sound: "ding".into(),
             animations: true,
+            notification_sound_apps: String::new(),
         }
     }
 }
@@ -131,6 +144,7 @@ impl Config {
                 "light_mode" => c.light_mode = v == "true",
                 "notification_sound" if !v.is_empty() => c.notification_sound = v.to_string(),
                 "animations" => c.animations = v == "true",
+                "notification_sound_apps" => c.notification_sound_apps = v.to_string(),
                 _ => {}
             }
         }
@@ -148,7 +162,7 @@ impl Config {
              display_mode={}\ndisplay_scale={:.2}\nnight_light={}\nnight_light_strength={:.2}\nidle_lock_minutes={}\n\
              tap_to_click={}\nnatural_scroll={}\ndisable_while_typing={}\n\
              xkb_layout={}\nxkb_variant={}\nxkb_options={}\nkey_repeat_delay={}\nkey_repeat_rate={}\n\
-             toasts={}\ntoast_seconds={}\nclock_24h={}\nlight_mode={}\nnotification_sound={}\nanimations={}\n",
+             toasts={}\ntoast_seconds={}\nclock_24h={}\nlight_mode={}\nnotification_sound={}\nanimations={}\nnotification_sound_apps={}\n",
             self.hide_kde_apps,
             self.mouse_flat,
             self.mouse_speed,
@@ -172,7 +186,8 @@ impl Config {
             self.clock_24h,
             self.light_mode,
             self.notification_sound,
-            self.animations
+            self.animations,
+            self.notification_sound_apps
         );
         // Write-then-rename so the compositor never reads a half-written file.
         let tmp = path.with_extension("conf.tmp");
@@ -207,6 +222,66 @@ pub const SOUNDS: &[(&str, &str)] = &[
 /// Where VIDE-DE installs its notification sounds.
 pub fn sounds_dir() -> PathBuf {
     wallpapers_dir().with_file_name("sounds")
+}
+
+impl Config {
+    /// An app's notification sound setting, by the id `notifying_app_id` gives it.
+    pub fn app_sound(&self, app: &str) -> AppSound {
+        let entry = self.notification_sound_apps.split(';').filter_map(|e| e.split_once('=')).find(|(a, _)| *a == app);
+        match entry.map(|(_, s)| s) {
+            Some("always") => AppSound::Always,
+            Some("never") => AppSound::Never,
+            _ => AppSound::AppsChoice,
+        }
+    }
+
+    pub fn set_app_sound(&mut self, app: &str, sound: AppSound) {
+        let mut entries: Vec<String> =
+            self.notification_sound_apps.split(';').filter(|e| !e.is_empty() && e.split_once('=').is_none_or(|(a, _)| a != app)).map(str::to_string).collect();
+        match sound {
+            AppSound::Always => entries.push(format!("{app}=always")),
+            AppSound::Never => entries.push(format!("{app}=never")),
+            AppSound::AppsChoice => {}
+        }
+        self.notification_sound_apps = entries.join(";");
+    }
+}
+
+/// How notifications from one app are told apart: its desktop entry when it says (the Claude
+/// app sends `com.anthropic.Claude`), else its app name. `;` and `=` are separators in the
+/// settings file, so they're dropped.
+pub fn notifying_app_id(desktop_entry: Option<&str>, app_name: &str) -> String {
+    desktop_entry.filter(|d| !d.is_empty()).unwrap_or(app_name).replace([';', '=', '\n'], "")
+}
+
+/// The apps that have sent notifications, (id, name), for Settings to list. The compositor
+/// adds to it as notifications arrive.
+pub fn notifying_apps_file() -> PathBuf {
+    wallpapers_dir().with_file_name("notification-apps")
+}
+
+pub fn notifying_apps() -> Vec<(String, String)> {
+    let text = std::fs::read_to_string(notifying_apps_file()).unwrap_or_default();
+    let mut apps: Vec<(String, String)> =
+        text.lines().filter_map(|l| l.split_once('\t')).map(|(id, name)| (id.to_string(), name.to_string())).collect();
+    apps.sort_by_key(|(_, n)| n.to_lowercase());
+    apps
+}
+
+/// Note an app that sent a notification; a no-op when it's already listed.
+pub fn remember_notifying_app(id: &str, name: &str) {
+    if id.is_empty() || notifying_apps().iter().any(|(i, _)| i == id) {
+        return;
+    }
+    let path = notifying_apps_file();
+    if let Some(dir) = path.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    let name = name.replace(['\t', '\n'], " ");
+    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+        use std::io::Write;
+        let _ = writeln!(f, "{id}\t{name}");
+    }
 }
 
 /// Where your own notification sounds go: anything playable dropped here shows up in Settings.
@@ -293,5 +368,20 @@ mod sound_tests {
         assert_eq!(sound_file("custom:.."), None);
         assert_eq!(sound_file("zen"), Some(sounds_dir().join("zen.wav")));
         std::fs::remove_dir_all(&data).unwrap();
+    }
+
+    #[test]
+    fn per_app_sounds() {
+        let mut c = Config::default();
+        assert_eq!(c.app_sound("com.anthropic.Claude"), AppSound::AppsChoice);
+        c.set_app_sound("com.anthropic.Claude", AppSound::Always);
+        c.set_app_sound("dev.vencord.Vesktop", AppSound::Never);
+        assert_eq!(c.app_sound("com.anthropic.Claude"), AppSound::Always);
+        assert_eq!(c.app_sound("dev.vencord.Vesktop"), AppSound::Never);
+        c.set_app_sound("com.anthropic.Claude", AppSound::AppsChoice);
+        assert_eq!(c.notification_sound_apps, "dev.vencord.Vesktop=never");
+        assert_eq!(notifying_app_id(Some("com.anthropic.Claude"), "Claude"), "com.anthropic.Claude");
+        assert_eq!(notifying_app_id(None, "notify-send"), "notify-send");
+        assert_eq!(notifying_app_id(Some(""), "a=b;c"), "abc");
     }
 }
